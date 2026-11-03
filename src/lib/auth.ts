@@ -64,11 +64,15 @@ export async function hasAnyUsers(): Promise<boolean> {
 }
 
 export function setSessionCookie(response: NextResponse, token: string) {
+  // Allow HTTP access (e.g. sslip.io or direct IP without SSL)
+  // Only enforce secure cookies if COOKIE_SECURE is explicitly 'true'
+  const isSecure = process.env.COOKIE_SECURE === 'true';
+
   response.cookies.set({
     name: COOKIE_NAME,
     value: token,
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: isSecure,
     sameSite: 'lax',
     path: '/',
     maxAge: 60 * 60 * 24 * 7, // 7 days
@@ -76,11 +80,13 @@ export function setSessionCookie(response: NextResponse, token: string) {
 }
 
 export function clearSessionCookie(response: NextResponse) {
+  const isSecure = process.env.COOKIE_SECURE === 'true';
+
   response.cookies.set({
     name: COOKIE_NAME,
     value: '',
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: isSecure,
     sameSite: 'lax',
     path: '/',
     maxAge: 0,
