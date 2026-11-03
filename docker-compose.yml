@@ -7,8 +7,11 @@ services:
       dockerfile: Dockerfile
     container_name: whatsapp_campaign_app
     restart: unless-stopped
+    expose:
+      - "3000"
     ports:
-      - "3000:3000"
+      # Defaults to 3005 on host to prevent port 3000 collision on Dokploy/VPS hosts
+      - "${HOST_PORT:-3005}:3000"
     environment:
       - NODE_ENV=production
       - DATABASE_URL=file:/app/prisma/prod.db
@@ -45,8 +48,8 @@ services:
     image: redis:7-alpine
     container_name: whatsapp_campaign_redis
     restart: unless-stopped
-    ports:
-      - "6379:6379"
+    expose:
+      - "6379"
     volumes:
       - redis_data:/data
 
