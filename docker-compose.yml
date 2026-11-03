@@ -61,6 +61,21 @@ services:
     networks:
       - default
 
+  postgres:
+    image: postgres:15-alpine
+    container_name: whatsapp_evolution_postgres
+    restart: unless-stopped
+    expose:
+      - "5432"
+    environment:
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: evolution_pass
+      POSTGRES_DB: evolution
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - default
+
   evolution:
     image: evoapicloud/evolution-api:latest
     container_name: whatsapp_evolution_api
@@ -74,7 +89,13 @@ services:
       - SERVER_URL=${EVOLUTION_PUBLIC_URL:-http://evolution:8080}
       - AUTHENTICATION_API_KEY=${GLOBAL_API_KEY:-429683C4C97741}
       - AUTHENTICATION_TYPE=apikey
-      - DATABASE_ENABLED=false
+      - DATABASE_ENABLED=true
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://evolution:evolution_pass@postgres:5432/evolution
+      - CACHE_REDIS_ENABLED=true
+      - CACHE_REDIS_URI=redis://redis:6379/1
+      - CACHE_REDIS_PREFIX_KEY=evolution
+      - CACHE_REDIS_SAVE_INSTANCES=true
       - CONFIG_SESSION_PHONE_CLIENT=BulkFlow WhatsApp
       - CONFIG_SESSION_PHONE_NAME=Chrome
       - QRCODE_LIMIT=30
@@ -83,10 +104,14 @@ services:
     networks:
       - default
       - dokploy-network
+    depends_on:
+      - postgres
+      - redis
 
 volumes:
   app_data:
   redis_data:
+  postgres_data:
   evolution_instances:
 
 networks:
