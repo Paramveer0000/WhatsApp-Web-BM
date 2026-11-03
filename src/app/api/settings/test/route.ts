@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { EvolutionClient } from '@/lib/evolution';
 import { getSessionUser } from '@/lib/auth';

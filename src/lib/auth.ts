@@ -45,7 +45,7 @@ export function verifyToken(token: string): UserSession | null {
 
 export async function getSessionUser(): Promise<UserSession | null> {
   try {
-    const cookieStore = await cookies();
+    const cookieStore = cookies();
     const token = cookieStore.get(COOKIE_NAME)?.value;
     if (!token) return null;
     return verifyToken(token);
@@ -55,8 +55,12 @@ export async function getSessionUser(): Promise<UserSession | null> {
 }
 
 export async function hasAnyUsers(): Promise<boolean> {
-  const count = await db.user.count();
-  return count > 0;
+  try {
+    const count = await db.user.count();
+    return count > 0;
+  } catch {
+    return false;
+  }
 }
 
 export function setSessionCookie(response: NextResponse, token: string) {
@@ -82,4 +86,3 @@ export function clearSessionCookie(response: NextResponse) {
     maxAge: 0,
   });
 }
-

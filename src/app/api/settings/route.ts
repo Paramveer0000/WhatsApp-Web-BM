@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSessionUser } from '@/lib/auth';
@@ -16,7 +17,7 @@ export async function GET() {
 
     for (const s of settingsRows) {
       if (s.isEncrypted && s.value) {
-        settings[s.key] = user.role === 'ADMIN' ? decrypt(s.value) : '••••••••';
+        settings[s.key] = user.role === 'ADMIN' ? decrypt(s.value) : 'â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢';
       } else {
         settings[s.key] = s.value;
       }
