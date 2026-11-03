@@ -36,7 +36,8 @@ ENV DATABASE_URL="file:/app/prisma/prod.db"
 ENV APP_SECRET="default-fallback-app-secret-32-chars-long!"
 ENV JWT_SECRET="default-fallback-jwt-secret-secure-random!"
 ENV REDIS_URL="redis://127.0.0.1:6379"
-ENV EVOLUTION_API_URL="http://localhost:8080"
+ENV EVOLUTION_API_URL="http://evolution:8080"
+ENV GLOBAL_API_KEY="429683C4C97741"
 
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs

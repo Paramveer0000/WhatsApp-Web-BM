@@ -17,10 +17,17 @@ export async function GET() {
 
     for (const s of settingsRows) {
       if (s.isEncrypted && s.value) {
-        settings[s.key] = user.role === 'ADMIN' ? decrypt(s.value) : 'â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢';
+        settings[s.key] = user.role === 'ADMIN' ? decrypt(s.value) : 'ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢';
       } else {
         settings[s.key] = s.value;
       }
+    }
+
+    if (!settings.EVOLUTION_API_URL || settings.EVOLUTION_API_URL === 'http://localhost:8080') {
+      settings.EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'http://evolution:8080';
+    }
+    if (!settings.GLOBAL_API_KEY) {
+      settings.GLOBAL_API_KEY = process.env.GLOBAL_API_KEY || '429683C4C97741';
     }
 
     return NextResponse.json({ success: true, settings });

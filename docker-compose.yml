@@ -19,6 +19,7 @@ services:
       - JWT_SECRET=${JWT_SECRET:-production-jwt-secret-secure-random!}
       - REDIS_URL=redis://redis:6379
       - EVOLUTION_API_URL=${EVOLUTION_API_URL:-http://evolution:8080}
+      - GLOBAL_API_KEY=${GLOBAL_API_KEY:-429683C4C97741}
       - WEBHOOK_SECRET=${WEBHOOK_SECRET:-whsec-evolution-shared-secret}
     volumes:
       - app_data:/app/prisma
@@ -27,6 +28,7 @@ services:
       - dokploy-network
     depends_on:
       - redis
+      - evolution
 
   worker:
     build:
@@ -41,6 +43,7 @@ services:
       - APP_SECRET=${APP_SECRET:-production-secret-must-be-32-chars-long!}
       - REDIS_URL=redis://redis:6379
       - EVOLUTION_API_URL=${EVOLUTION_API_URL:-http://evolution:8080}
+      - GLOBAL_API_KEY=${GLOBAL_API_KEY:-429683C4C97741}
     volumes:
       - app_data:/app/prisma
     networks:
@@ -60,9 +63,33 @@ services:
     networks:
       - default
 
+  evolution:
+    image: atendai/evolution-api:v2.2.3
+    container_name: whatsapp_evolution_api
+    restart: unless-stopped
+    expose:
+      - "8080"
+    ports:
+      # Direct host access on 8081 if desired (avoids host 8080 conflict)
+      - "${EVOLUTION_PORT:-8081}:8080"
+    environment:
+      - SERVER_URL=${EVOLUTION_PUBLIC_URL:-http://evolution:8080}
+      - AUTHENTICATION_API_KEY=${GLOBAL_API_KEY:-429683C4C97741}
+      - AUTHENTICATION_TYPE=apikey
+      - DATABASE_ENABLED=false
+      - CONFIG_SESSION_PHONE_CLIENT=BulkFlow WhatsApp
+      - CONFIG_SESSION_PHONE_NAME=Chrome
+      - QRCODE_LIMIT=30
+    volumes:
+      - evolution_instances:/evolution/instances
+    networks:
+      - default
+      - dokploy-network
+
 volumes:
   app_data:
   redis_data:
+  evolution_instances:
 
 networks:
   dokploy-network:
