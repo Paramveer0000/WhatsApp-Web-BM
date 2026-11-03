@@ -12,11 +12,11 @@ services:
     environment:
       - NODE_ENV=production
       - DATABASE_URL=file:/app/prisma/prod.db
-      - APP_SECRET=production-secret-must-be-32-chars-long!
-      - JWT_SECRET=production-jwt-secret-secure-random!
+      - APP_SECRET=${APP_SECRET:-production-secret-must-be-32-chars-long!}
+      - JWT_SECRET=${JWT_SECRET:-production-jwt-secret-secure-random!}
       - REDIS_URL=redis://redis:6379
-      - EVOLUTION_API_URL=http://evolution:8080
-      - WEBHOOK_SECRET=whsec-evolution-shared-secret
+      - EVOLUTION_API_URL=${EVOLUTION_API_URL:-http://evolution:8080}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET:-whsec-evolution-shared-secret}
     volumes:
       - app_data:/app/prisma
     depends_on:
@@ -32,13 +32,14 @@ services:
     environment:
       - NODE_ENV=production
       - DATABASE_URL=file:/app/prisma/prod.db
-      - APP_SECRET=production-secret-must-be-32-chars-long!
+      - APP_SECRET=${APP_SECRET:-production-secret-must-be-32-chars-long!}
       - REDIS_URL=redis://redis:6379
-      - EVOLUTION_API_URL=http://evolution:8080
+      - EVOLUTION_API_URL=${EVOLUTION_API_URL:-http://evolution:8080}
     volumes:
       - app_data:/app/prisma
     depends_on:
       - redis
+      - app
 
   redis:
     image: redis:7-alpine
@@ -49,22 +50,6 @@ services:
     volumes:
       - redis_data:/data
 
-  # Optional: Uncomment if running Evolution API inside this compose cluster
-  # evolution:
-  #   image: atendai/evolution-api:v2.1.1
-  #   container_name: evolution_api
-  #   restart: unless-stopped
-  #   ports:
-  #     - "8080:8080"
-  #   environment:
-  #     - SERVER_URL=http://evolution:8080
-  #     - AUTHENTICATION_API_KEY=429683C4C97741
-  #     - DATABASE_ENABLED=false
-  #   volumes:
-  #     - evolution_instances:/evolution/instances
-
 volumes:
   app_data:
   redis_data:
-  # evolution_instances:
-

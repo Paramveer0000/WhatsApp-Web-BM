@@ -141,7 +141,33 @@ The app comes with a built-in mock Evolution API server (`npm run mock:evolution
 
 ---
 
-## 🐳 Docker Compose Deployment
+## 🐳 Docker & Dokploy Deployment
+
+### Deploying via Dokploy (Recommended)
+
+Dokploy makes self-hosting this app seamless:
+
+#### Method 1: Dokploy Compose (Full Stack)
+1. In Dokploy, click **Create Application** &rarr; select **Compose**.
+2. Connect your Git repository: `https://github.com/Paramveer0000/WhatsApp-Web-BM`.
+3. Choose branch `main` (or `feature/whatsapp-web-bulk`).
+4. In the **Environment** tab, set:
+   ```env
+   APP_SECRET=your-32-char-random-aes-secret!
+   JWT_SECRET=your-secure-jwt-signing-key!
+   EVOLUTION_API_URL=https://your-evolution-api.example.com
+   ```
+5. In **Domains**, map your domain to service `app` on port `3000`.
+6. Click **Deploy**. Dokploy will start the web dashboard (`app`), BullMQ worker (`worker`), and `redis`. Database tables and the default admin user are auto-seeded on first boot via `docker-entrypoint.sh`.
+
+#### Method 2: Dokploy Application (Single Container)
+1. In Dokploy, create an **Application** pointing to this repository with **Dockerfile**.
+2. Create a Dokploy **Redis** service and copy its connection string to `REDIS_URL`.
+3. Deploy!
+
+---
+
+## 🐳 Docker Compose Deployment (Local / VPS)
 
 Run the complete stack (App, Background Worker, Redis, and optionally Evolution API):
 

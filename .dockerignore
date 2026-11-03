@@ -1,0 +1,16 @@
+node_modules
+.next
+dist
+build
+.git
+.gitignore
+*.db
+*.db-journal
+/data/*.db
+/prisma/*.db
+.env
+.env.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
