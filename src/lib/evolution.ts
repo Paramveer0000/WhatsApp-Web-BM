@@ -27,19 +27,30 @@ export class EvolutionClient {
   private apiKey: string;
 
   constructor(apiUrl: string, apiKey: string) {
-    this.apiUrl = (apiUrl || 'http://localhost:8080').replace(/\/+$/, '');
+    this.apiUrl = (apiUrl || 'http://evolution:8080').replace(/\/+$/, '');
     this.apiKey = apiKey || '';
+  }
+
+  getApiUrl(): string {
+    return this.apiUrl;
   }
 
   static async fromDatabase(): Promise<EvolutionClient> {
     const urlSetting = await db.setting.findUnique({ where: { key: 'EVOLUTION_API_URL' } });
     const keySetting = await db.setting.findUnique({ where: { key: 'GLOBAL_API_KEY' } });
 
-    const apiUrl = urlSetting?.value || process.env.EVOLUTION_API_URL || 'http://localhost:8080';
-    let apiKey = keySetting?.value || process.env.GLOBAL_API_KEY || '';
+    let apiUrl = urlSetting?.value;
+    // In Docker, localhost:8080 or 127.0.0.1 is unreachable - fall back to evolution container
+    if (!apiUrl || apiUrl.includes('localhost') || apiUrl.includes('127.0.0.1')) {
+      apiUrl = process.env.EVOLUTION_API_URL || 'http://evolution:8080';
+    }
 
+    let apiKey = keySetting?.value;
     if (keySetting?.isEncrypted && apiKey) {
       apiKey = decrypt(apiKey);
+    }
+    if (!apiKey) {
+      apiKey = process.env.GLOBAL_API_KEY || '429683C4C97741';
     }
 
     return new EvolutionClient(apiUrl, apiKey);
@@ -264,4 +275,3 @@ export class EvolutionClient {
     );
   }
 }
-

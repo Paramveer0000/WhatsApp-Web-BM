@@ -108,6 +108,9 @@ export default function AppDashboard() {
   );
   const [wizMediaType, setWizMediaType] = useState('text');
   const [wizMediaUrl, setWizMediaUrl] = useState('');
+  const [wizFileName, setWizFileName] = useState('');
+  const [replyInstance, setReplyInstance] = useState('');
+  const [sendingReply, setSendingReply] = useState(false);
   const [wizMinDelay, setWizMinDelay] = useState(12);
   const [wizMaxDelay, setWizMaxDelay] = useState(25);
   const [wizSimulateTyping, setWizSimulateTyping] = useState(true);
@@ -249,6 +252,73 @@ export default function AppDashboard() {
     router.push('/login');
   };
 
+  const downloadSampleCSV = () => {
+    const csv = 'phone,name,company,city,tags\n919876543210,Rahul Sharma,Acme Corp,Mumbai,VIP;Lead\n919876543211,Priya Patel,Innovate Ltd,Delhi,Customer\n919876543212,Amit Verma,Alpha Labs,Bangalore,Enterprise\n919876543213,Neha Singh,Logistics Pro,Hyderabad,Partner\n919876543214,Vikram Mehta,Apex Tech,Chennai,Active';
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'sample_contacts_template.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  const downloadSampleXLSX = () => {
+    const data = [
+      { phone: '919876543210', name: 'Rahul Sharma', company: 'Acme Corp', city: 'Mumbai', tags: 'VIP;Lead' },
+      { phone: '919876543211', name: 'Priya Patel', company: 'Innovate Ltd', city: 'Delhi', tags: 'Customer' },
+      { phone: '919876543212', name: 'Amit Verma', company: 'Alpha Labs', city: 'Bangalore', tags: 'Enterprise' },
+      { phone: '919876543213', name: 'Neha Singh', company: 'Logistics Pro', city: 'Hyderabad', tags: 'Partner' },
+      { phone: '919876543214', name: 'Vikram Mehta', company: 'Apex Tech', city: 'Chennai', tags: 'Active' },
+    ];
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Contacts');
+    XLSX.writeFile(wb, 'sample_contacts_template.xlsx');
+  };
+
+  const handleSendReply = async () => {
+    if (!replyInputText.trim() || !selectedConversation) return;
+    const instName = replyInstance || instances[0]?.name;
+    if (!instName) {
+      alert('Please connect at least one WhatsApp instance to send replies.');
+      return;
+    }
+
+    setSendingReply(true);
+    try {
+      const res = await fetch('/api/replies', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: selectedConversation,
+          text: replyInputText.trim(),
+          instanceName: instName,
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'Failed to send reply');
+
+      setConversationMessages((prev) => [
+        ...prev,
+        {
+          id: 'REPLY_' + Date.now(),
+          type: 'outgoing',
+          text: replyInputText.trim(),
+          time: new Date(),
+          status: 'SENT',
+          instance: instName,
+        },
+      ]);
+      setReplyInputText('');
+    } catch (err: any) {
+      alert('Send reply failed: ' + err.message);
+    } finally {
+      setSendingReply(false);
+    }
+  };
+
   // Campaign Control
   const handleCampaignControl = async (campId: string, action: string) => {
     try {
@@ -283,7 +353,7 @@ export default function AppDashboard() {
           name: wizName.trim(),
           instanceIds: wizInstances,
           listIds: wizListIds,
-          variants: [{ content: wizTemplate, mediaType: wizMediaType, mediaUrl: wizMediaUrl }],
+          variants: [{ content: wizTemplate, mediaType: wizMediaType, mediaUrl: wizMediaUrl, fileName: wizFileName || (wizMediaType === 'document' ? 'document.pdf' : undefined) }],
           minDelay: Number(wizMinDelay),
           maxDelay: Number(wizMaxDelay),
           simulateTyping: wizSimulateTyping,

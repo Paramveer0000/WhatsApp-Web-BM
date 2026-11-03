@@ -17,7 +17,7 @@ export async function GET() {
     try {
       externalInstances = await client.fetchInstances();
     } catch (e: any) {
-      logger.warn({ err: e.message }, 'Could not fetch instances from Evolution API');
+      logger.warn({ err: e.message, apiUrl: client.getApiUrl() }, 'Could not fetch instances from Evolution API');
     }
 
     // Sync external instances to DB
@@ -75,7 +75,15 @@ export async function POST(req: NextRequest) {
     }
 
     const client = await EvolutionClient.fromDatabase();
-    const result = await client.createInstance(instanceName, true);
+    let result: any;
+    try {
+      result = await client.createInstance(instanceName, true);
+    } catch (err: any) {
+      logger.error({ err, apiUrl: client.getApiUrl() }, 'Evolution API createInstance failed');
+      return NextResponse.json({
+        error: `Could not connect to Evolution API (${client.getApiUrl()}): ${err.message}. If the container was just started, please wait 10 seconds for it to finish booting.`,
+      }, { status: 502 });
+    }
 
     // Save instance to DB
     const created = await db.instance.upsert({
@@ -111,4 +119,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
-
