@@ -10,7 +10,7 @@ services:
     expose:
       - "3000"
     ports:
-      # Defaults to 3005 on host to prevent port 3000 collision on Dokploy/VPS hosts
+      # Direct host access: http://<server-ip>:3005
       - "${HOST_PORT:-3005}:3000"
     environment:
       - NODE_ENV=production
@@ -22,6 +22,9 @@ services:
       - WEBHOOK_SECRET=${WEBHOOK_SECRET:-whsec-evolution-shared-secret}
     volumes:
       - app_data:/app/prisma
+    networks:
+      - default
+      - dokploy-network
     depends_on:
       - redis
 
@@ -40,6 +43,8 @@ services:
       - EVOLUTION_API_URL=${EVOLUTION_API_URL:-http://evolution:8080}
     volumes:
       - app_data:/app/prisma
+    networks:
+      - default
     depends_on:
       - redis
       - app
@@ -52,7 +57,14 @@ services:
       - "6379"
     volumes:
       - redis_data:/data
+    networks:
+      - default
 
 volumes:
   app_data:
   redis_data:
+
+networks:
+  dokploy-network:
+    external: true
+  default:
