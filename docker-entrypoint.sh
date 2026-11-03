@@ -12,3 +12,4 @@ fi
 
 echo "==> Executing command: $@"
 exec "$@"
+
