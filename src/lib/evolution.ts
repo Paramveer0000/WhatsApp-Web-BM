@@ -64,53 +64,66 @@ export class EvolutionClient {
   }
 
   async request<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    const url = `${this.apiUrl}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
+    const ep = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
 
-    try {
-      logger.debug({ endpoint, method: options.method || 'GET' }, 'Evolution API request');
-
-      const response = await fetch(url, {
-        ...options,
-        headers: {
-          ...this.getHeaders(),
-          ...(options.headers as Record<string, string> || {}),
-        },
-        signal: controller.signal,
-      });
-
-      const contentType = response.headers.get('content-type') || '';
-      let data: any;
-
-      if (contentType.includes('application/json')) {
-        data = await response.json();
-      } else {
-        const text = await response.text();
-        try {
-          data = JSON.parse(text);
-        } catch {
-          data = { text };
-        }
-      }
-
-      if (!response.ok) {
-        const msg = (data && (data.message || data.error || JSON.stringify(data))) || `HTTP ${response.status}: ${response.statusText}`;
-        const err: any = new Error(msg);
-        err.status = response.status;
-        err.data = data;
-        throw err;
-      }
-
-      return data as T;
-    } catch (err: any) {
-      if (err.name === 'AbortError') {
-        throw new Error(`Evolution API timeout (30s) calling ${endpoint}`);
-      }
-      throw err;
-    } finally {
-      clearTimeout(timeout);
+    const candidateHosts = [this.apiUrl];
+    if (this.apiUrl.includes('evolution-api:8080')) {
+      candidateHosts.push(this.apiUrl.replace('evolution-api:8080', 'evolution:8080'));
+    } else if (this.apiUrl.includes('evolution:8080')) {
+      candidateHosts.push(this.apiUrl.replace('evolution:8080', 'evolution-api:8080'));
     }
+
+    let lastError: any;
+    for (const host of candidateHosts) {
+      const url = `${host}${ep}`;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
+
+      try {
+        logger.debug({ url, method: options.method || 'GET' }, 'Evolution API request');
+
+        const response = await fetch(url, {
+          ...options,
+          headers: {
+            ...this.getHeaders(),
+            ...(options.headers as Record<string, string> || {}),
+          },
+          signal: controller.signal,
+        });
+
+        const contentType = response.headers.get('content-type') || '';
+        let data: any;
+
+        if (contentType.includes('application/json')) {
+          data = await response.json();
+        } else {
+          const text = await response.text();
+          try {
+            data = JSON.parse(text);
+          } catch {
+            data = { text };
+          }
+        }
+
+        if (!response.ok) {
+          const msg = (data && (data.message || data.error || JSON.stringify(data))) || `HTTP ${response.status}: ${response.statusText}`;
+          const err: any = new Error(msg);
+          err.status = response.status;
+          err.data = data;
+          throw err;
+        }
+
+        this.apiUrl = host;
+        return data as T;
+      } catch (err: any) {
+        lastError = err;
+        if (err.status) throw err;
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+
+    throw lastError || new Error(`Failed to connect to Evolution API at ${this.apiUrl}`);
   }
 
   // 1. Instance Operations
