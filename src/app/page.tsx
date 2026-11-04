@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { 
   Send, 
   BarChart3, 
@@ -750,6 +751,23 @@ export default function AppDashboard() {
               </span>
             )}
           </button>
+
+          {/* Guardrails (Between Instances and Reports) */}
+          <Link
+            href="/guardrails"
+            className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition cursor-pointer text-slate-400 hover:text-white hover:bg-slate-850"
+            title="Anti-Ban Guardrails Settings"
+          >
+            <div className="flex items-center gap-3">
+              <Shield className="w-4 h-4 shrink-0 text-emerald-400" />
+              {!sidebarCollapsed && <span>Guardrails</span>}
+            </div>
+            {!sidebarCollapsed && (
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+                Safe
+              </span>
+            )}
+          </Link>
 
           {/* Reports */}
           <button
@@ -2418,6 +2436,14 @@ export default function AppDashboard() {
                 <Smartphone className="w-4 h-4 text-sky-400" />
                 <span>Add / Pair New WhatsApp Number</span>
               </button>
+              <Link
+                href="/guardrails"
+                onClick={() => setCommandPaletteOpen(false)}
+                className="w-full text-left px-3 py-2 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white flex items-center gap-2"
+              >
+                <Shield className="w-4 h-4 text-emerald-400" />
+                <span>Configure Anti-Ban Guardrails (Pacing, Caps, Breakers)</span>
+              </Link>
             </div>
           </div>
         </div>

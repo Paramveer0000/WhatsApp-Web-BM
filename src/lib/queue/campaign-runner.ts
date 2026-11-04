@@ -11,6 +11,14 @@ import {
 import { transitionMessage } from '../state-machine';
 import { messagesCounter, sendDurationHistogram, queueDepthGauge } from '../metrics';
 import { logger } from '../logger';
+import {
+  getEffectiveGuardrails,
+  evaluateWindowRule,
+  evaluateRecipientFilterRule,
+  evaluateContentSafetyRule,
+  calculatePacingDecision,
+  logGuardrailEvent,
+} from '../guardrails';
 
 export class CampaignRunner {
   private activeCampaigns = new Set<string>();
@@ -145,20 +153,39 @@ export class CampaignRunner {
       let messagesInCurrentBatch = 0;
 
       while (!this.cancelFlags.get(campaignId) && !this.pauseFlags.get(campaignId)) {
-        // 1. Check Sending Window with Luxon
-        const windowCheck = isWithinSendingWindow(
-          campaign.sendWindowStart,
-          campaign.sendWindowEnd,
-          campaign.timezone
-        );
+        // Fetch active guardrail configuration (resolved: campaign > instance > global > safe preset)
+        const guardrailsData = await getEffectiveGuardrails({
+          campaignId,
+          instanceName: availableInstances[0]?.name,
+        });
+        const guardrails = guardrailsData.effective;
 
-        if (!windowCheck.isInsideWindow) {
+        // 1. Check Sending Window with Guardrails
+        const dummyCtx = {
+          recipient: { id: '', phone: '' },
+          campaign,
+          instance: availableInstances[0] || { id: '', name: 'default', dailyCap: 200, sentToday: 0, status: 'OPEN' },
+          config: guardrails,
+          consecutiveFailures,
+          messagesInBatch: messagesInCurrentBatch,
+          totalSentInCampaign: 0,
+          todaySentInstance: 0,
+        };
+
+        const windowCheck = evaluateWindowRule(dummyCtx as any);
+        if (!windowCheck.allowed) {
           eventBus.emitLog(campaignId, {
             type: 'warning',
             status: 'SEND_WINDOW_SLEEP',
-            message: `Current local time (${windowCheck.currentHourStr}) is outside allowed window (${campaign.sendWindowStart} - ${campaign.sendWindowEnd}). Sleeping until window opens...`,
+            message: windowCheck.reason || 'Outside allowed window',
           });
-          const sleepMs = Math.min(windowCheck.msUntilWindowStart || 60000, 60000);
+          await logGuardrailEvent({
+            campaignId,
+            type: 'WINDOW_BLOCKED',
+            severity: 'info',
+            detail: { reason: windowCheck.reason },
+          });
+          const sleepMs = Math.min(windowCheck.sleepMs || 60000, 60000);
           await new Promise((r) => setTimeout(r, sleepMs));
           continue;
         }
@@ -236,6 +263,39 @@ export class CampaignRunner {
           continue;
         }
 
+        // 4b. Guardrail Recipient Filtering Check
+        const recipientRuleCtx = {
+          recipient: {
+            id: recipient.id,
+            phone: recipient.phone,
+            name: recipient.name,
+            customVariables: recipient.customVariables,
+          },
+          campaign,
+          instance: activeInstance,
+          config: guardrails,
+          consecutiveFailures,
+          messagesInBatch: messagesInCurrentBatch,
+          totalSentInCampaign: 0,
+          todaySentInstance: activeInstance.sentToday,
+        };
+
+        const filterCheck = await evaluateRecipientFilterRule(recipientRuleCtx as any);
+        if (!filterCheck.allowed) {
+          await transitionMessage(recipient.id, ['PENDING', 'QUEUED'], 'FAILED', {
+            lastError: filterCheck.reason || 'Blocked by Guardrail Recipient Filter',
+            failedAt: new Date(),
+          });
+          await logGuardrailEvent({
+            campaignId,
+            instanceId: activeInstance.id,
+            type: 'RECIPIENT_FILTERED',
+            severity: 'warning',
+            detail: { phone: recipient.phone, reason: filterCheck.reason },
+          });
+          continue;
+        }
+
         // 5. Atomic State Transition: PENDING/QUEUED -> SENDING
         const transitionToSending = await transitionMessage(
           recipient.id,
@@ -269,6 +329,28 @@ export class CampaignRunner {
           },
           { seedKey }
         );
+
+        // Guardrail Content Safety Check
+        const contentCheck = evaluateContentSafetyRule(recipientRuleCtx as any, finalMessage);
+        if (!contentCheck.allowed) {
+          if (guardrails.contentSafety.blockingMode === 'block_launch') {
+            await this.triggerCircuitBreaker(campaignId, `Content Guardrail Triggered: ${contentCheck.reason}`);
+            await logGuardrailEvent({
+              campaignId,
+              instanceId: activeInstance.id,
+              type: 'CONTENT_BLOCKED',
+              severity: 'critical',
+              detail: { reason: contentCheck.reason, phone: recipient.phone },
+            });
+            break;
+          } else {
+            eventBus.emitLog(campaignId, {
+              type: 'warning',
+              status: 'CONTENT_WARNING',
+              message: `Guardrail Content Warning: ${contentCheck.reason}`,
+            });
+          }
+        }
 
         // 7. Human Presence Simulation
         if (campaign.simulateTyping) {
@@ -389,22 +471,28 @@ export class CampaignRunner {
           }
         }
 
-        // 10. Anti-Ban Pacing & Human Pause Jitter
+        // 10. Anti-Ban Guardrails Pacing, Cooldown & Human Pause
         messagesInCurrentBatch++;
-        if (messagesInCurrentBatch >= campaign.batchBreakSize) {
+        const pacingDecision = calculatePacingDecision(recipientRuleCtx as any);
+
+        if (pacingDecision.isBatchCooldown) {
           messagesInCurrentBatch = 0;
-          const breakSecs = campaign.batchBreakDuration * 60;
           eventBus.emitLog(campaignId, {
             type: 'info',
             status: 'BATCH_BREAK',
-            message: `Batch break reached (${campaign.batchBreakSize} messages). Taking a ${campaign.batchBreakDuration} min cooldown...`,
+            message: `Guardrail batch cooldown triggered. Pausing for ${(pacingDecision.delayMs / 1000).toFixed(0)}s...`,
           });
-          await new Promise((r) => setTimeout(r, breakSecs * 1000));
-        } else {
-          const delaySecs = calculateJitterDelay(campaign.minDelay, campaign.maxDelay, true, 0.04);
-          eventBus.emitJitter(campaignId, delaySecs, delaySecs);
-          await new Promise((r) => setTimeout(r, delaySecs * 1000));
+        } else if (pacingDecision.isHumanPause) {
+          eventBus.emitLog(campaignId, {
+            type: 'info',
+            status: 'HUMAN_PAUSE',
+            message: `Guardrail human jitter pause: ${(pacingDecision.delayMs / 1000).toFixed(0)}s pause...`,
+          });
         }
+
+        const delaySecs = Math.max(1, Math.round(pacingDecision.delayMs / 1000));
+        eventBus.emitJitter(campaignId, delaySecs, delaySecs);
+        await new Promise((r) => setTimeout(r, pacingDecision.delayMs));
 
         // Update queue depth gauge
         const remainingQueued = await db.campaignRecipient.count({

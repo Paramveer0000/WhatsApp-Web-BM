@@ -276,3 +276,57 @@ model AuditLog {
   createdAt DateTime @default(now())
   user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 }
+
+model GuardrailProfile {
+  id         String   @id @default(cuid())
+  scope      String   // "global", "instance", "campaign"
+  scopeId    String   @default("") // "" for global, instanceName or campaignId
+  presetKey  String?  // "ultra-safe", "safe", "balanced", "aggressive", "custom"
+  config     String   // JSON of GuardrailConfig
+  strictMode Boolean  @default(false)
+  version    Int      @default(1)
+  updatedBy  String?
+  updatedAt  DateTime @updatedAt
+  createdAt  DateTime @default(now())
+
+  @@unique([scope, scopeId])
+  @@index([scope, scopeId])
+}
+
+model GuardrailPreset {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  name        String
+  description String?
+  config      String   // JSON
+  isBuiltin   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model GuardrailVersion {
+  id          String   @id @default(cuid())
+  profileId   String
+  version     Int
+  config      String   // JSON
+  diffSummary String?
+  savedBy     String?
+  savedAt     DateTime @default(now())
+
+  @@index([profileId, version])
+}
+
+model GuardrailEvent {
+  id          String   @id @default(cuid())
+  instanceId  String?
+  campaignId  String?
+  type        String   // "BREAKER_OPEN", "CAP_REACHED", "HEALTH_TRIGGER", "OVERRIDE_USED", "BLOCKED_LAUNCH", "PACING_DELAY"
+  severity    String   // "info", "warning", "critical"
+  detail      String   // JSON
+  createdAt   DateTime @default(now())
+
+  @@index([type, severity])
+  @@index([instanceId])
+  @@index([campaignId])
+}
+
