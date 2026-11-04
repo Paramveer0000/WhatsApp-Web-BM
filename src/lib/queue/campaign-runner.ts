@@ -10,7 +10,7 @@ import {
 } from './pacing';
 import { transitionMessage } from '../state-machine';
 import { messagesCounter, sendDurationHistogram, queueDepthGauge } from '../metrics';
-import { logger } from '../logger';
+import { logger, recordSystemLog } from '../logger';
 import {
   getEffectiveGuardrails,
   evaluateWindowRule,
@@ -29,6 +29,10 @@ export class CampaignRunner {
 
   isCampaignActive(id: string): boolean {
     return this.activeCampaigns.has(id);
+  }
+
+  getActiveCampaignIds(): string[] {
+    return Array.from(this.activeCampaigns);
   }
 
   requestPause(campaignId: string) {
@@ -89,11 +93,13 @@ export class CampaignRunner {
       }
     } catch (err: any) {
       logger.error({ err: err.message }, 'Startup reconciler encountered error');
+      recordSystemLog('error', 'worker', `Startup reconciler error: ${err.message}`, { stack: err.stack }).catch(() => {});
     }
   }
 
   async triggerCircuitBreaker(campaignId: string, reason: string) {
     logger.warn({ campaignId, reason }, 'Circuit breaker triggered');
+    recordSystemLog('warn', 'guardrail', `Circuit breaker triggered for campaign ${campaignId}: ${reason}`).catch(() => {});
     this.requestPause(campaignId);
 
     await db.campaign.update({

@@ -80,6 +80,7 @@ import MultiMessageRotationEditor from '@/components/MultiMessageRotationEditor'
 import CampaignVariantsLiveTab from '@/components/CampaignVariantsLiveTab';
 import { DistributionMode, RotationScope, VariantInput } from '@/lib/rotation';
 import { GuardrailsConsoleTab } from '@/components/GuardrailsConsoleTab';
+import { SystemLogsConsole } from '@/components/SystemLogsConsole';
 
 type TabType = 'overview' | 'campaigns' | 'live' | 'wizard' | 'contacts' | 'templates' | 'replies' | 'instances' | 'guardrails' | 'reports' | 'system' | 'settings';
 
@@ -2665,74 +2666,10 @@ export default function AppDashboard() {
           )}
 
           {/* ========================================================= */}
-          {/* 12. VIEW: SYSTEM HEALTH & ENGINE METRICS                  */}
+          {/* 12. VIEW: SYSTEM HEALTH & ENGINE METRICS & LIVE LOGS       */}
           {/* ========================================================= */}
           {currentTab === 'system' && (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-bold text-white">System Health & Engine Metrics</h2>
-                  <p className="text-xs text-slate-400">Queue workers, database status, and Prometheus metrics</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <a
-                    href="/api/metrics"
-                    target="_blank"
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded-xl text-xs font-mono transition"
-                  >
-                    <span>/api/metrics</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                  <a
-                    href="/api/docs"
-                    target="_blank"
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-sky-400 rounded-xl text-xs font-mono transition"
-                  >
-                    <span>Swagger API Docs</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                </div>
-              </div>
-
-              {/* Status Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg space-y-2">
-                  <div className="flex items-center justify-between text-xs text-slate-400">
-                    <span>Web Application</span>
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  </div>
-                  <p className="text-lg font-bold text-white font-mono">Next.js 14 App</p>
-                  <p className="text-[11px] text-emerald-400 font-mono">Healthy & Ready</p>
-                </div>
-
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg space-y-2">
-                  <div className="flex items-center justify-between text-xs text-slate-400">
-                    <span>Evolution Engine</span>
-                    <Smartphone className="w-4 h-4 text-emerald-400" />
-                  </div>
-                  <p className="text-lg font-bold text-white font-mono">Evolution v2 API</p>
-                  <p className="text-[11px] text-emerald-400 font-mono">{connectedCount} Connected</p>
-                </div>
-
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg space-y-2">
-                  <div className="flex items-center justify-between text-xs text-slate-400">
-                    <span>Queue Backend</span>
-                    <Zap className="w-4 h-4 text-teal-400" />
-                  </div>
-                  <p className="text-lg font-bold text-white font-mono">Redis Queue</p>
-                  <p className="text-[11px] text-teal-400 font-mono">Pacing Active</p>
-                </div>
-
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg space-y-2">
-                  <div className="flex items-center justify-between text-xs text-slate-400">
-                    <span>State Machine</span>
-                    <ShieldCheck className="w-4 h-4 text-sky-400" />
-                  </div>
-                  <p className="text-lg font-bold text-white font-mono">Monotonic v2</p>
-                  <p className="text-[11px] text-sky-400 font-mono">Strict Transitions</p>
-                </div>
-              </div>
-            </div>
+            <SystemLogsConsole connectedInstancesCount={connectedCount} />
           )}
 
           {/* ========================================================= */}

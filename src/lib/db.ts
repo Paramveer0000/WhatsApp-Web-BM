@@ -23,6 +23,11 @@ export async function ensureDbSchema(): Promise<void> {
 
   schemaSyncPromise = (async () => {
     const statements = [
+      // System & Diagnostics tables for live container/worker logs
+      "CREATE TABLE IF NOT EXISTS SystemLog (id TEXT PRIMARY KEY, level TEXT DEFAULT 'info', source TEXT DEFAULT 'worker', message TEXT NOT NULL, details TEXT, createdAt DATETIME DEFAULT CURRENT_TIMESTAMP)",
+      "CREATE INDEX IF NOT EXISTS idx_system_log_level_created ON SystemLog(level, createdAt)",
+      "CREATE INDEX IF NOT EXISTS idx_system_log_source_created ON SystemLog(source, createdAt)",
+      "CREATE TABLE IF NOT EXISTS WorkerHeartbeat (id TEXT PRIMARY KEY, status TEXT DEFAULT 'ACTIVE', lastSeen DATETIME DEFAULT CURRENT_TIMESTAMP, metadata TEXT)",
       // Campaign rotation & distribution columns
       "ALTER TABLE Campaign ADD COLUMN distributionMode TEXT DEFAULT 'SINGLE'",
       "ALTER TABLE Campaign ADD COLUMN rotationMode TEXT DEFAULT 'ROUND_ROBIN'",

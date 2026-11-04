@@ -429,3 +429,23 @@ model AdvisorExperiment {
   @@index([runId])
 }
 
+model SystemLog {
+  id        String   @id @default(cuid())
+  level     String   @default("info") // "info", "warn", "error"
+  source    String   @default("worker") // "worker", "app", "evolution"
+  message   String
+  details   String?  // JSON string or stack trace
+  createdAt DateTime @default(now())
+
+  @@index([level, createdAt])
+  @@index([source, createdAt])
+}
+
+model WorkerHeartbeat {
+  id        String   @id @default("default")
+  status    String   @default("ACTIVE")
+  lastSeen  DateTime @default(now())
+  metadata  String?  // JSON
+}
+
+
