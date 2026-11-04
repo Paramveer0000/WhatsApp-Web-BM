@@ -213,8 +213,18 @@ export function generateSmartFallbackVariations(baseMessage: string, count: numb
       body = body.slice(0, closingMatch.index).trim();
     }
 
+    // Check if body ends with a prominent CTA line (e.g. **DM "DIWALI" to RSVP!**)
+    const ctaMatch = body.match(/\n+(\*{1,2}(?:DM|RSVP|Click|Reply|Visit|Call|Order|Book)[^\n]+\*{1,2}\s*)$/i);
+    let trailingCta = '';
+    if (ctaMatch) {
+      trailingCta = ctaMatch[1]!;
+      body = body.slice(0, ctaMatch.index).trim();
+    }
+
     // Assemble warm, polite variation with exact core content preserved
-    let finalContent = `${style.greeting}\n\n${body}\n\n${style.signoff}`;
+    let finalContent = trailingCta
+      ? `${style.greeting}\n\n${body}\n\n${style.signoff}\n\n${trailingCta}`
+      : `${style.greeting}\n\n${body}\n\n${style.signoff}`;
 
     // Restore protected tokens
     finalContent = finalContent.replace(/__TOKEN_(\d+)__/g, (_, num) => tokenList[Number(num)] || '');

@@ -42,8 +42,22 @@ const contacts = Array.from({ length: 60 }, (_, i) => {
   };
 });
 
-// 2. Base message provided by user
-const baseMessage = `{Hi|Hello|Dear} {name|Valued Customer},\n\nWe are pleased to share our newest updates with your team at *{company|your company}*!\n\nUse code \`SPECIAL20\` for _20% off_ your order.\n\n{Best regards|Warm wishes},\nFalcon Marketing Team`;
+// 2. Base message provided by user (Dhanteras / Diwali DJ Night Invitation)
+const baseMessage = `Hey {name|friend}! 😊
+
+We would love to invite you to celebrate **Dhanteras with us at Dhanteras Drive-In – A Diwali DJ Night Under the Stars!** ✨
+
+Join us for a beautiful evening filled with music, festive vibes, delicious food, traditional décor, and lots of fun.
+
+📅 **6th November (Friday)**
+⏰ 7 PM – 1 AM
+📍 Farmhouse, near IT Park, Chandigarh
+
+Come along with your friends and family and make this Diwali season memorable! ❤️
+
+We'd be delighted to have you with us.
+
+**DM "DIWALI" to RSVP!**`;
 
 // 3. Generate 13 warm, polite variations (Message 1 = Base, Messages 2-13 = Warm & Polite Variations)
 const aiVariations = generateSmartFallbackVariations(baseMessage);
