@@ -70,3 +70,4 @@ export default function ClientSafetyProvider({ children }: { children: React.Rea
     </>
   );
 }
+

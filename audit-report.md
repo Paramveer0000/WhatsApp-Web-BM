@@ -48,3 +48,4 @@
 4. **React Error Boundary (`src/app/error.tsx` & `src/app/global-error.tsx`)**: Graceful crash recovery with copyable Error ID and "Try again" buttons.
 5. **Telemetry & Client Error Route (`src/app/api/client-errors/route.ts`)**: Automatic client error reporting.
 6. **Click Doctor HUD (`src/components/ClickDoctor.tsx`)**: Development inspector accessible via `?debug=1`.
+

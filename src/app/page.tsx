@@ -130,6 +130,7 @@ export default function AppDashboard() {
   const [blacklist, setBlacklist] = useState<any[]>([]);
   const [contactSubTab, setContactSubTab] = useState<'all' | 'lists' | 'blacklist'>('all');
   const [contactSearch, setContactSearch] = useState('');
+  const [contactListFilter, setContactListFilter] = useState<string>('ALL');
   const [showImportWizard, setShowImportWizard] = useState(false);
   const [importingFile, setImportingFile] = useState(false);
   const [importStats, setImportStats] = useState<any>(null);
@@ -167,6 +168,7 @@ export default function AppDashboard() {
   const [replyInstance, setReplyInstance] = useState('');
   const [sendingReply, setSendingReply] = useState(false);
   const [syncingReplies, setSyncingReplies] = useState(false);
+  const [clearingOldChats, setClearingOldChats] = useState(false);
   const [uploadingChat, setUploadingChat] = useState(false);
 
   // Templates State
@@ -363,8 +365,9 @@ export default function AppDashboard() {
         setInstances(data.instances);
         if (data.instances.length > 0 && !replyInstance) {
           const connected = data.instances.find((i: any) => (i.status?.toUpperCase() === 'OPEN' || i.connectionStatus === 'open'));
-          if (connected) setReplyInstance(connected.name);
-          else setReplyInstance(data.instances[0].name);
+          const selected = connected ? connected.name : data.instances[0].name;
+          setReplyInstance(selected);
+          loadConversations(selected);
         }
       }
     } catch (err) {
@@ -393,7 +396,7 @@ export default function AppDashboard() {
   const loadContacts = async () => {
     try {
       const [cRes, lRes, bRes] = await Promise.all([
-        fetch('/api/contacts?limit=200'),
+        fetch('/api/contacts?limit=2000'),
         fetch('/api/contacts/lists'),
         fetch('/api/contacts/blacklist')
       ]);
@@ -442,16 +445,20 @@ export default function AppDashboard() {
     }
   };
 
-  const loadConversations = async () => {
+  const loadConversations = async (inst = replyInstance) => {
     try {
-      const res = await fetch('/api/replies');
+      const q = inst && inst !== 'ALL' ? `?instanceName=${encodeURIComponent(inst)}` : '';
+      const res = await fetch(`/api/replies${q}`);
       const data = await res.json();
       if (res.ok && data.conversations) {
         setConversations(data.conversations);
-        if (data.conversations.length > 0 && !selectedConversation) {
+        if (data.conversations.length > 0) {
           const firstId = data.conversations[0].id || data.conversations[0].phone;
           setSelectedConversation(firstId);
-          loadConversationMessages(firstId);
+          loadConversationMessages(firstId, inst);
+        } else {
+          setSelectedConversation('');
+          setConversationMessages([]);
         }
       }
     } catch (err) {
@@ -459,10 +466,11 @@ export default function AppDashboard() {
     }
   };
 
-  const loadConversationMessages = async (convId: string) => {
+  const loadConversationMessages = async (convId: string, inst = replyInstance) => {
     if (!convId) return;
     try {
-      const res = await fetch(`/api/replies/${encodeURIComponent(convId)}`);
+      const q = inst && inst !== 'ALL' ? `?instanceName=${encodeURIComponent(inst)}` : '';
+      const res = await fetch(`/api/replies/${encodeURIComponent(convId)}${q}`);
       const data = await res.json();
       if (res.ok && data.messages) {
         setConversationMessages(data.messages);
@@ -739,7 +747,7 @@ export default function AppDashboard() {
 
       setReplyInputText('');
       toast.success('Reply sent successfully!', 'WhatsApp Message Sent');
-      loadConversationMessages(selectedConversation);
+      loadConversationMessages(selectedConversation, replyInstance);
     } catch (err: any) {
       toast.error(err.message, 'Reply Failed');
     } finally {
@@ -755,14 +763,30 @@ export default function AppDashboard() {
     }
     setSyncingReplies(true);
     try {
-      const d = await api.post('/api/replies', { instanceName: replyInstance }, { silent: true });
+      const d = await api.post('/api/replies', { instanceName: replyInstance, sync: true }, { silent: true });
       if (!d.success && d.error) throw new Error(typeof d.error === 'string' ? d.error : d.error.message || 'Failed to sync chats');
-      toast.success(`Sync completed! ${d.syncedChats || 0} chats synced.`, 'Chats Synced');
-      loadConversations();
+      toast.success(`Sync completed! ${d.syncedChats || 0} chats synced from WhatsApp.`, 'Chats Synced');
+      loadConversations(replyInstance);
     } catch (err: any) {
       toast.error(err.message, 'Sync Failed');
     } finally {
       setSyncingReplies(false);
+    }
+  };
+
+  // Clear lingering old chats from previous instances
+  const handleClearOldChats = async () => {
+    if (!confirm('Clear all chats from previous or disconnected instances? Chats belonging to the active instance will be kept.')) return;
+    setClearingOldChats(true);
+    try {
+      const d = await api.post('/api/replies', { clearOld: true, instanceName: replyInstance }, { silent: true });
+      if (!d.success && d.error) throw new Error(typeof d.error === 'string' ? d.error : d.error.message || 'Failed to clear chats');
+      toast.success(d.message || 'Old chats cleared successfully!', 'Chats Cleared');
+      loadConversations(replyInstance);
+    } catch (err: any) {
+      toast.error(err.message, 'Clear Failed');
+    } finally {
+      setClearingOldChats(false);
     }
   };
 
@@ -778,7 +802,7 @@ export default function AppDashboard() {
       const d = await api.upload('/api/replies/upload-chat', formData, { silent: true });
       if (!d.success && d.error) throw new Error(typeof d.error === 'string' ? d.error : d.error.message || 'Failed to upload chat file');
       toast.success(`Chat history parsed successfully! Imported ${d.importedMessages || 0} messages.`, 'Chat Imported');
-      loadConversations();
+      loadConversations(replyInstance);
     } catch (err: any) {
       toast.error(err.message, 'Upload Failed');
     } finally {
@@ -2365,34 +2389,54 @@ export default function AppDashboard() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs">
                   <button
-                    onClick={() => setContactSubTab('all')}
-                    className={`px-3 py-1.5 rounded-lg ${contactSubTab === 'all' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400'}`}
+                    onClick={() => {
+                      setContactSubTab('all');
+                      setContactListFilter('ALL');
+                    }}
+                    className={`px-3 py-1.5 rounded-lg transition ${contactSubTab === 'all' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
                   >
                     All Contacts ({contacts.length})
                   </button>
                   <button
                     onClick={() => setContactSubTab('lists')}
-                    className={`px-3 py-1.5 rounded-lg ${contactSubTab === 'lists' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400'}`}
+                    className={`px-3 py-1.5 rounded-lg transition ${contactSubTab === 'lists' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
                   >
                     Lists ({contactLists.length})
                   </button>
                   <button
                     onClick={() => setContactSubTab('blacklist')}
-                    className={`px-3 py-1.5 rounded-lg ${contactSubTab === 'blacklist' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400'}`}
+                    className={`px-3 py-1.5 rounded-lg transition ${contactSubTab === 'blacklist' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
                   >
                     Blacklist ({blacklist.length})
                   </button>
                 </div>
 
-                <div className="relative">
-                  <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-500" />
-                  <input
-                    type="text"
-                    value={contactSearch}
-                    onChange={(e) => setContactSearch(e.target.value)}
-                    placeholder="Search name or phone..."
-                    className="bg-slate-900 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white"
-                  />
+                <div className="flex items-center gap-2">
+                  {contactSubTab === 'all' && (
+                    <select
+                      value={contactListFilter}
+                      onChange={(e) => setContactListFilter(e.target.value)}
+                      className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-300 font-medium focus:outline-none focus:border-emerald-500"
+                    >
+                      <option value="ALL">All Lists ({contacts.length} total)</option>
+                      {contactLists.map((l) => (
+                        <option key={l.id} value={l.id}>
+                          {l.name} ({l._count?.contacts ?? 0})
+                        </option>
+                      ))}
+                      <option value="UNASSIGNED">Unassigned to any list</option>
+                    </select>
+                  )}
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-500" />
+                    <input
+                      type="text"
+                      value={contactSearch}
+                      onChange={(e) => setContactSearch(e.target.value)}
+                      placeholder="Search name or phone..."
+                      className="bg-slate-900 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -2404,6 +2448,7 @@ export default function AppDashboard() {
                       <tr>
                         <th className="p-4">Name</th>
                         <th className="p-4">Phone Number</th>
+                        <th className="p-4">Lists / Segments</th>
                         <th className="p-4">Custom Variables</th>
                         <th className="p-4">Added Date</th>
                         <th className="p-4 text-right">Actions</th>
@@ -2412,70 +2457,108 @@ export default function AppDashboard() {
                     <tbody className="divide-y divide-slate-800/60 font-sans">
                       {contacts.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="p-8 text-center text-slate-500 text-xs">
+                          <td colSpan={6} className="p-8 text-center text-slate-500 text-xs">
                             No contacts available. Download the sample template above and import your contacts.
                           </td>
                         </tr>
-                      ) : (
-                        contacts
-                          .filter(
-                            (c) =>
-                              !contactSearch ||
-                              (c.name && c.name.toLowerCase().includes(contactSearch.toLowerCase())) ||
-                              (c.phone && c.phone.includes(contactSearch))
-                          )
-                          .slice(0, 50)
-                          .map((c) => (
-                            <tr key={c.id} className="hover:bg-slate-850/60 transition">
-                              <td className="p-4 font-bold text-white">{c.name || 'Unnamed'}</td>
-                              <td className="p-4 font-mono tabular-nums text-emerald-400">+{c.phone}</td>
-                              <td className="p-4 font-mono text-[11px] text-slate-400">
-                                {(() => {
-                                  const raw = c.customFields || c.customVariables;
-                                  if (!raw) return '-';
-                                  try {
-                                    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-                                    return Object.entries(parsed)
-                                      .map(([k, v]) => `${k}: ${v}`)
-                                      .join(', ') || '-';
-                                  } catch {
-                                    return String(raw);
-                                  }
-                                })()}
-                              </td>
-                              <td className="p-4 font-mono text-[11px] text-slate-400">
-                                {new Date(c.createdAt).toLocaleDateString()}
-                              </td>
-                              <td className="p-4 text-right">
-                                <div className="flex items-center justify-end gap-1.5">
-                                  <button
-                                    onClick={() => {
-                                      setEditingContact(c);
-                                      setShowEditContactModal(true);
-                                    }}
-                                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-emerald-400 transition"
-                                    title="Edit contact"
-                                  >
-                                    <Pencil className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button
-                                    onClick={async () => {
-                                      if (!confirm(`Delete contact ${c.name || c.phone}?`)) return;
-                                      await fetch(`/api/contacts/${c.id}`, { method: 'DELETE' });
-                                      loadContacts();
-                                      setContactSuccessMsg(`Contact deleted`);
-                                      setTimeout(() => setContactSuccessMsg(''), 3000);
-                                    }}
-                                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-950/60 text-slate-400 hover:text-rose-400 transition"
-                                    title="Delete contact"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
+                      ) : (() => {
+                        const filtered = contacts.filter((c) => {
+                          if (contactListFilter === 'UNASSIGNED') {
+                            if (c.listIds && c.listIds.length > 0) return false;
+                          } else if (contactListFilter !== 'ALL') {
+                            const matchId = c.listIds && c.listIds.includes(contactListFilter);
+                            const targetList = contactLists.find((l) => l.id === contactListFilter);
+                            const matchName = targetList && c.listNames && c.listNames.includes(targetList.name);
+                            if (!matchId && !matchName) return false;
+                          }
+                          if (!contactSearch) return true;
+                          const s = contactSearch.toLowerCase();
+                          return (c.name && c.name.toLowerCase().includes(s)) || (c.phone && c.phone.includes(s));
+                        });
+
+                        if (filtered.length === 0) {
+                          return (
+                            <tr>
+                              <td colSpan={6} className="p-8 text-center text-slate-500 text-xs">
+                                No contacts found matching the selected filter.
                               </td>
                             </tr>
-                          ))
-                      )}
+                          );
+                        }
+
+                        return filtered.map((c) => (
+                          <tr key={c.id} className="hover:bg-slate-850/60 transition">
+                            <td className="p-4 font-bold text-white">{c.name || 'Unnamed'}</td>
+                            <td className="p-4 font-mono tabular-nums text-emerald-400">+{c.phone}</td>
+                            <td className="p-4">
+                              <div className="flex flex-wrap gap-1 max-w-[220px]">
+                                {c.listNames && c.listNames.length > 0 ? (
+                                  c.listNames.map((ln: string, idx: number) => (
+                                    <button
+                                      key={idx}
+                                      type="button"
+                                      onClick={() => {
+                                        const found = contactLists.find((l) => l.name === ln);
+                                        if (found) setContactListFilter(found.id);
+                                      }}
+                                      className="px-2 py-0.5 rounded-md bg-emerald-950/60 border border-emerald-500/30 text-emerald-300 font-medium text-[10px] hover:bg-emerald-900/60 transition cursor-pointer"
+                                      title={`Filter by ${ln}`}
+                                    >
+                                      {ln}
+                                    </button>
+                                  ))
+                                ) : (
+                                  <span className="text-[10px] text-slate-500 italic">Unassigned</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="p-4 font-mono text-[11px] text-slate-400">
+                              {(() => {
+                                const raw = c.customFields || c.customVariables;
+                                if (!raw) return '-';
+                                try {
+                                  const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+                                  return Object.entries(parsed)
+                                    .map(([k, v]) => `${k}: ${v}`)
+                                    .join(', ') || '-';
+                                } catch {
+                                  return String(raw);
+                                }
+                              })()}
+                            </td>
+                            <td className="p-4 font-mono text-[11px] text-slate-400">
+                              {new Date(c.createdAt).toLocaleDateString()}
+                            </td>
+                            <td className="p-4 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  onClick={() => {
+                                    setEditingContact(c);
+                                    setShowEditContactModal(true);
+                                  }}
+                                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-emerald-400 transition"
+                                  title="Edit contact"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    if (!confirm(`Delete contact ${c.name || c.phone}?`)) return;
+                                    await fetch(`/api/contacts/${c.id}`, { method: 'DELETE' });
+                                    loadContacts();
+                                    setContactSuccessMsg(`Contact deleted`);
+                                    setTimeout(() => setContactSuccessMsg(''), 3000);
+                                  }}
+                                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-950/60 text-slate-400 hover:text-rose-400 transition"
+                                  title="Delete contact"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ));
+                      })()}
                     </tbody>
                   </table>
                 </div>
@@ -2525,9 +2608,18 @@ export default function AppDashboard() {
                               </td>
                               <td className="p-4 text-slate-400">{l.description || '-'}</td>
                               <td className="p-4 font-mono">
-                                <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold">
-                                  {l._count?.contacts || 0} contacts
-                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setContactListFilter(l.id);
+                                    setContactSubTab('all');
+                                  }}
+                                  className="px-2.5 py-1 rounded-full bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 font-bold transition flex items-center gap-1.5 cursor-pointer"
+                                  title={`View all contacts in ${l.name}`}
+                                >
+                                  <span>{l._count?.contacts || 0} contacts</span>
+                                  <span className="text-[10px] text-slate-400">→</span>
+                                </button>
                               </td>
                               <td className="p-4 font-mono text-[11px] text-slate-400">
                                 {new Date(l.createdAt).toLocaleDateString()}
@@ -2954,8 +3046,12 @@ export default function AppDashboard() {
                   <span className="text-xs font-semibold text-slate-300">Reply Instance:</span>
                   <select
                     value={replyInstance}
-                    onChange={(e) => setReplyInstance(e.target.value)}
-                    className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white font-mono"
+                    onChange={(e) => {
+                      const newInst = e.target.value;
+                      setReplyInstance(newInst);
+                      loadConversations(newInst);
+                    }}
+                    className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-emerald-500"
                   >
                     {instances.map((i) => {
                       const isConn = i.status?.toUpperCase() === 'OPEN' || i.connectionStatus === 'open';
@@ -2969,6 +3065,17 @@ export default function AppDashboard() {
                 </div>
 
                 <div className="flex items-center gap-2">
+                  {/* Clear Old Chats Button */}
+                  <button
+                    onClick={handleClearOldChats}
+                    disabled={clearingOldChats}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-rose-950/50 text-slate-300 hover:text-rose-400 border border-slate-700/60 rounded-xl text-xs font-medium transition cursor-pointer"
+                    title="Clear old chats from disconnected or previous instances"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>{clearingOldChats ? 'Clearing...' : 'Clear Old Chats'}</span>
+                  </button>
+
                   {/* Upload Previous Chat Button */}
                   <label className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-medium transition cursor-pointer">
                     <FileText className="w-3.5 h-3.5 text-emerald-400" />
@@ -3015,7 +3122,7 @@ export default function AppDashboard() {
                             key={convKey}
                             onClick={() => {
                               setSelectedConversation(convKey);
-                              loadConversationMessages(convKey);
+                              loadConversationMessages(convKey, replyInstance);
                             }}
                             className={`w-full text-left p-3.5 transition cursor-pointer flex items-start justify-between ${
                               isSel ? 'bg-slate-800 border-l-4 border-emerald-500' : 'hover:bg-slate-850/40'
