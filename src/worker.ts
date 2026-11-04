@@ -2,8 +2,18 @@ import { db } from './lib/db';
 import { campaignRunner } from './lib/queue/campaign-runner';
 import { logger } from './lib/logger';
 
-console.log('=== WhatsApp Campaign Background Worker Started ===');
-logger.info('Background worker polling loop initialized.');
+console.log('=== WhatsApp Campaign Background Worker v2 Started ===');
+logger.info('Background worker polling loop and reconciler initialized.');
+
+// Run startup reconciliation once on worker boot
+campaignRunner
+  .reconcileStartup()
+  .then(() => {
+    logger.info('Startup reconciliation completed successfully.');
+  })
+  .catch((err) => {
+    logger.error({ err: err.message }, 'Failed during startup reconciliation');
+  });
 
 let isChecking = false;
 
@@ -30,7 +40,6 @@ async function checkAndRunScheduledCampaigns() {
     for (const camp of activeOrScheduled) {
       if (!campaignRunner.isCampaignActive(camp.id)) {
         logger.info({ campaignId: camp.id, name: camp.name }, 'Worker picking up campaign');
-        // Run in background without blocking polling loop
         campaignRunner.runCampaign(camp.id).catch((err) => {
           logger.error({ err, campaignId: camp.id }, 'Error running campaign from worker');
         });
@@ -46,4 +55,3 @@ async function checkAndRunScheduledCampaigns() {
 // Poll every 5 seconds
 setInterval(checkAndRunScheduledCampaigns, 5000);
 checkAndRunScheduledCampaigns();
-

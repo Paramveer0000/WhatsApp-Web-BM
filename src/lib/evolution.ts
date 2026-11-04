@@ -1,6 +1,7 @@
 import { db } from './db';
 import { decrypt } from './crypto';
 import { logger } from './logger';
+import { evolutionErrorsCounter, circuitStateGauge } from './metrics';
 
 export interface EvolutionConfig {
   apiUrl: string;
@@ -22,9 +23,116 @@ export interface SendMediaOptions {
   delay?: number;
 }
 
+// -------------------------------------------------------------
+// Error Taxonomy (Section 5)
+// -------------------------------------------------------------
+export class EvolutionError extends Error {
+  public status?: number;
+  public data?: any;
+
+  constructor(message: string, status?: number, data?: any) {
+    super(message);
+    this.name = 'EvolutionError';
+    this.status = status;
+    this.data = data;
+  }
+}
+
+export class AuthError extends EvolutionError {
+  constructor(message: string, status = 401, data?: any) {
+    super(message, status, data);
+    this.name = 'AuthError';
+  }
+}
+
+export class SessionClosedError extends EvolutionError {
+  constructor(message: string, status = 400, data?: any) {
+    super(message, status, data);
+    this.name = 'SessionClosedError';
+  }
+}
+
+export class InvalidRecipientError extends EvolutionError {
+  constructor(message: string, status = 400, data?: any) {
+    super(message, status, data);
+    this.name = 'InvalidRecipientError';
+  }
+}
+
+export class RateLimitedError extends EvolutionError {
+  constructor(message: string, status = 429, data?: any) {
+    super(message, status, data);
+    this.name = 'RateLimitedError';
+  }
+}
+
+export class TransientError extends EvolutionError {
+  constructor(message: string, status = 500, data?: any) {
+    super(message, status, data);
+    this.name = 'TransientError';
+  }
+}
+
+export class UnknownError extends EvolutionError {
+  constructor(message: string, status = 500, data?: any) {
+    super(message, status, data);
+    this.name = 'UnknownError';
+  }
+}
+
+// -------------------------------------------------------------
+// Circuit Breaker State Machine per Instance
+// -------------------------------------------------------------
+export class CircuitBreaker {
+  private static states = new Map<
+    string,
+    { state: 'closed' | 'open' | 'half-open'; failures: number; lastProbe: number }
+  >();
+
+  static getState(instance: string): 'closed' | 'open' | 'half-open' {
+    const record = this.states.get(instance) || { state: 'closed', failures: 0, lastProbe: 0 };
+    // Half-open probe after 30 seconds
+    if (record.state === 'open' && Date.now() - record.lastProbe > 30000) {
+      record.state = 'half-open';
+      record.lastProbe = Date.now();
+      this.states.set(instance, record);
+    }
+
+    try {
+      circuitStateGauge.set(
+        { instance },
+        record.state === 'closed' ? 0 : record.state === 'half-open' ? 1 : 2
+      );
+    } catch {}
+
+    return record.state;
+  }
+
+  static recordSuccess(instance: string) {
+    this.states.set(instance, { state: 'closed', failures: 0, lastProbe: Date.now() });
+    try {
+      circuitStateGauge.set({ instance }, 0);
+    } catch {}
+  }
+
+  static recordFailure(instance: string, isSessionClosed = false) {
+    const record = this.states.get(instance) || { state: 'closed', failures: 0, lastProbe: 0 };
+    record.failures += 1;
+    record.lastProbe = Date.now();
+    if (isSessionClosed || record.failures >= 3) {
+      record.state = 'open';
+    }
+    this.states.set(instance, record);
+    try {
+      circuitStateGauge.set({ instance }, record.state === 'open' ? 2 : 1);
+    } catch {}
+  }
+}
+
 export class EvolutionClient {
   private apiUrl: string;
   private apiKey: string;
+  private serverVersion: string = 'v2';
 
   constructor(apiUrl: string, apiKey: string) {
     this.apiUrl = (apiUrl || 'http://evolution:8080').replace(/\/+$/, '');
@@ -40,7 +148,6 @@ export class EvolutionClient {
     const keySetting = await db.setting.findUnique({ where: { key: 'GLOBAL_API_KEY' } });
 
     let apiUrl = urlSetting?.value;
-    // In Docker, localhost:8080 or 127.0.0.1 is unreachable - fall back to evolution container
     if (!apiUrl || apiUrl.includes('localhost') || apiUrl.includes('127.0.0.1')) {
       apiUrl = process.env.EVOLUTION_API_URL || 'http://evolution:8080';
     }
@@ -60,7 +167,50 @@ export class EvolutionClient {
     return {
       apikey: this.apiKey,
       'Content-Type': 'application/json',
+      'User-Agent': 'BulkFlow-Manager/2.0',
     };
+  }
+
+  static classifyError(status?: number, data?: any, originalMessage?: string): EvolutionError {
+    const msg = (data?.message || data?.error || originalMessage || 'Evolution API request failed').toString();
+    const lower = msg.toLowerCase();
+    const dataStr = JSON.stringify(data || '').toLowerCase();
+    const combined = `${lower} ${dataStr}`;
+
+    if (status === 401 || status === 403) {
+      return new AuthError(msg, status, data);
+    }
+    if (status === 429 || combined.includes('rate limit')) {
+      return new RateLimitedError(msg, status, data);
+    }
+    if (
+      combined.includes('session closed') ||
+      combined.includes('connection closed') ||
+      combined.includes('not connected') ||
+      combined.includes('device disconnected') ||
+      combined.includes('bad session')
+    ) {
+      return new SessionClosedError(msg, status, data);
+    }
+    if (
+      combined.includes('exists:false') ||
+      combined.includes('is not on whatsapp') ||
+      combined.includes('invalid number') ||
+      combined.includes('not on whatsapp')
+    ) {
+      return new InvalidRecipientError(msg, status, data);
+    }
+    if (
+      !status ||
+      status >= 500 ||
+      combined.includes('timeout') ||
+      combined.includes('econnreset') ||
+      combined.includes('fetch failed')
+    ) {
+      return new TransientError(msg, status, data);
+    }
+
+    return new UnknownError(msg, status, data);
   }
 
   async request<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -86,7 +236,6 @@ export class EvolutionClient {
 
     let lastError: any;
 
-    // Try up to 2 passes with a brief pause between rounds if all hosts failed initially
     for (let round = 1; round <= 2; round++) {
       for (const host of candidateHosts) {
         const url = `${host}${ep}`;
@@ -120,31 +269,30 @@ export class EvolutionClient {
           }
 
           if (!response.ok) {
-            const msg = (data && (data.message || data.error || JSON.stringify(data))) || `HTTP ${response.status}: ${response.statusText}`;
-            const err: any = new Error(msg);
-            err.status = response.status;
-            err.data = data;
-            throw err;
+            const classified = EvolutionClient.classifyError(response.status, data);
+            try {
+              evolutionErrorsCounter.inc({ class: classified.name, instance: host });
+            } catch {}
+            throw classified;
           }
 
           this.apiUrl = host;
           return data as T;
         } catch (err: any) {
-          lastError = err;
-          // If server returned an HTTP error code (e.g. 400 Bad Request, 401 Unauthorized), don't retry other hosts
-          if (err.status) throw err;
+          lastError = err instanceof EvolutionError ? err : EvolutionClient.classifyError(undefined, undefined, err.message);
+          // If permanent client error, don't loop other hosts
+          if (err instanceof AuthError || err instanceof InvalidRecipientError) throw err;
         } finally {
           clearTimeout(timeout);
         }
       }
 
       if (round === 1) {
-        // Brief 1.5s pause before second attempt in case container is completing healthcheck or boot
         await new Promise((resolve) => setTimeout(resolve, 1500));
       }
     }
 
-    throw lastError || new Error(`Failed to connect to Evolution API at ${this.apiUrl}`);
+    throw lastError || new TransientError(`Failed to reach Evolution API at ${this.apiUrl}`);
   }
 
   // 1. Instance Operations
@@ -233,14 +381,15 @@ export class EvolutionClient {
     });
   }
 
-  // 3. Message Dispatch (supporting flat delay and options wrapper)
+  // 3. Message Dispatch (Supporting both flat and nested options adapters)
   async sendText(instanceName: string, number: string, text: string, options: SendTextOptions = {}): Promise<any> {
+    const delay = options.delay || 1200;
     const payload = {
       number,
       text,
-      delay: options.delay || 1200,
+      delay,
       options: {
-        delay: options.delay || 1200,
+        delay,
         presence: options.presence || 'composing',
       },
     };
@@ -288,7 +437,7 @@ export class EvolutionClient {
     return Array.isArray(res) ? res : (res?.numbers || []);
   }
 
-  // 5. Chat & History Retrieval
+  // 4. Chat & Message History Retrieval
   async findChats(instanceName: string): Promise<any[]> {
     try {
       const res = await this.request(`/chat/findChats/${encodeURIComponent(instanceName)}`, {
@@ -323,24 +472,8 @@ export class EvolutionClient {
     }
   }
 
-  // 6. Circuit Breaker Helper
+  // Helper for circuit breaker classification
   static isCircuitBreakerError(error: any): boolean {
-    if (!error) return false;
-    if (error.status === 401 || error.status === 403) return true;
-
-    const msg = (error.message || '').toLowerCase();
-    const dataMsg = typeof error.data === 'string' ? error.data.toLowerCase() : JSON.stringify(error.data || '').toLowerCase();
-    const combined = `${msg} ${dataMsg}`;
-
-    return (
-      combined.includes('session closed') ||
-      combined.includes('connection closed') ||
-      combined.includes('state: close') ||
-      combined.includes('not connected') ||
-      combined.includes('unauthorized') ||
-      combined.includes('bad session') ||
-      combined.includes('device disconnected') ||
-      combined.includes('instance not found')
-    );
+    return error instanceof AuthError || error instanceof SessionClosedError;
   }
 }

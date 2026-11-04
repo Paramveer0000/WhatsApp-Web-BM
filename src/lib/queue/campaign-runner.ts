@@ -1,8 +1,15 @@
+import { DateTime } from 'luxon';
 import { db } from '../db';
-import { EvolutionClient } from '../evolution';
+import { EvolutionClient, CircuitBreaker } from '../evolution';
 import { renderMessage } from '../spintax';
 import { eventBus } from './events';
-import { calculateJitterDelay, isWithinSendingWindow } from './pacing';
+import {
+  calculateJitterDelay,
+  isWithinSendingWindow,
+  getEffectiveWarmupCap,
+} from './pacing';
+import { transitionMessage } from '../state-machine';
+import { messagesCounter, sendDurationHistogram, queueDepthGauge } from '../metrics';
 import { logger } from '../logger';
 
 export class CampaignRunner {
@@ -22,6 +29,58 @@ export class CampaignRunner {
 
   requestAbort(campaignId: string) {
     this.cancelFlags.set(campaignId, true);
+  }
+
+  /**
+   * Startup Reconciler (Section 14)
+   * Resolves interrupted SENDING messages into UNCERTAIN on restart
+   * Recovers scheduled and running campaigns
+   */
+  async reconcileStartup() {
+    logger.info('Running startup campaign reconciler...');
+    try {
+      const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
+
+      // 1. Mark stale SENDING recipients as UNCERTAIN
+      const staleSending = await db.campaignRecipient.updateMany({
+        where: {
+          status: 'SENDING',
+          sendingAt: { lte: twoMinutesAgo },
+        },
+        data: {
+          status: 'UNCERTAIN',
+          lastError: 'Worker restarted while dispatch was in-flight (unverified downstream ACK)',
+        },
+      });
+
+      if (staleSending.count > 0) {
+        logger.warn(
+          { count: staleSending.count },
+          'Marked orphaned SENDING messages as UNCERTAIN to prevent duplicate sends'
+        );
+      }
+
+      // 2. Re-register webhooks for all connected instances
+      const connectedInstances = await db.instance.findMany({
+        where: { status: 'OPEN' },
+      });
+
+      const client = await EvolutionClient.fromDatabase();
+      const webhookBase = process.env.PUBLIC_BASE_URL || process.env.INTERNAL_BASE_URL || 'http://app:3000';
+      const webhookSecret = process.env.WEBHOOK_SECRET || 'whsec-evolution';
+
+      for (const inst of connectedInstances) {
+        try {
+          const webhookUrl = `${webhookBase}/api/webhooks/evolution/${encodeURIComponent(inst.name)}`;
+          await client.setWebhook(inst.name, webhookUrl, webhookSecret);
+          logger.info({ instance: inst.name }, 'Verified and refreshed instance webhook registration');
+        } catch (whErr: any) {
+          logger.warn({ instance: inst.name, err: whErr.message }, 'Failed to refresh webhook registration');
+        }
+      }
+    } catch (err: any) {
+      logger.error({ err: err.message }, 'Startup reconciler encountered error');
+    }
   }
 
   async triggerCircuitBreaker(campaignId: string, reason: string) {
@@ -80,15 +139,13 @@ export class CampaignRunner {
 
     try {
       const evolution = await EvolutionClient.fromDatabase();
-
-      // Check instances state
       const availableInstances = campaign.instances.map((ci) => ci.instance);
       let instanceIndex = 0;
       let consecutiveFailures = 0;
       let messagesInCurrentBatch = 0;
 
       while (!this.cancelFlags.get(campaignId) && !this.pauseFlags.get(campaignId)) {
-        // 1. Check Sending Window
+        // 1. Check Sending Window with Luxon
         const windowCheck = isWithinSendingWindow(
           campaign.sendWindowStart,
           campaign.sendWindowEnd,
@@ -99,58 +156,119 @@ export class CampaignRunner {
           eventBus.emitLog(campaignId, {
             type: 'warning',
             status: 'SEND_WINDOW_SLEEP',
-            message: `Current time (${windowCheck.currentHourStr}) is outside sending window (${campaign.sendWindowStart} - ${campaign.sendWindowEnd}). Sleeping 60s...`,
+            message: `Current local time (${windowCheck.currentHourStr}) is outside allowed window (${campaign.sendWindowStart} - ${campaign.sendWindowEnd}). Sleeping until window opens...`,
           });
-          await new Promise((r) => setTimeout(r, 60000));
+          const sleepMs = Math.min(windowCheck.msUntilWindowStart || 60000, 60000);
+          await new Promise((r) => setTimeout(r, sleepMs));
           continue;
         }
 
-        // 2. Fetch next PENDING recipient (Idempotent DB lock)
+        // 2. Fetch next PENDING/QUEUED recipient
         const recipient = await db.campaignRecipient.findFirst({
-          where: { campaignId, status: 'PENDING' },
+          where: { campaignId, status: { in: ['PENDING', 'QUEUED'] } },
           orderBy: { id: 'asc' },
         });
 
         if (!recipient) {
-          // All recipients processed! Complete campaign
-          await db.campaign.update({
-            where: { id: campaignId },
-            data: { status: 'COMPLETED', completedAt: new Date() },
+          // Check if any RETRY_WAIT or UNCERTAIN remain
+          const pendingRemaining = await db.campaignRecipient.count({
+            where: { campaignId, status: { in: ['PENDING', 'QUEUED', 'RETRY_WAIT'] } },
           });
 
-          eventBus.emitLog(campaignId, {
-            type: 'success',
-            status: 'COMPLETED',
-            message: `Campaign "${campaign.name}" completed successfully!`,
-          });
+          if (pendingRemaining === 0) {
+            await db.campaign.update({
+              where: { id: campaignId },
+              data: { status: 'COMPLETED', completedAt: new Date() },
+            });
+
+            eventBus.emitLog(campaignId, {
+              type: 'success',
+              status: 'COMPLETED',
+              message: `Campaign "${campaign.name}" completed successfully!`,
+            });
+            break;
+          }
+
+          // Wait 5s for retries
+          await new Promise((r) => setTimeout(r, 5000));
+          continue;
+        }
+
+        // 3. Instance Pool Selection & Circuit Filter
+        const healthyInstances = availableInstances.filter(
+          (inst) => CircuitBreaker.getState(inst.name) !== 'open'
+        );
+
+        if (healthyInstances.length === 0) {
+          await this.triggerCircuitBreaker(campaignId, 'All assigned instances have open circuit breakers');
           break;
         }
 
-        // 3. Instance Rotation (ROUND_ROBIN or LEAST_USED)
-        let activeInstance = availableInstances[instanceIndex % availableInstances.length];
+        let activeInstance = healthyInstances[instanceIndex % healthyInstances.length]!;
         if (campaign.rotationMode === 'LEAST_USED') {
-          const sorted = [...availableInstances].sort((a, b) => a.sentToday - b.sentToday);
-          activeInstance = sorted[0];
+          const sorted = [...healthyInstances].sort((a, b) => a.sentToday - b.sentToday);
+          activeInstance = sorted[0]!;
         }
         instanceIndex++;
 
-        // 4. Mark recipient as SENDING
-        await db.campaignRecipient.update({
-          where: { id: recipient.id },
-          data: { status: 'SENDING', attempts: { increment: 1 } },
+        // 4. Daily Cap & Counter Check (local timezone)
+        const localDate = DateTime.now().setZone(campaign.timezone).toFormat('yyyy-MM-dd');
+        const effectiveCap = campaign.warmUpMode
+          ? getEffectiveWarmupCap(activeInstance.warmUpDay, activeInstance.dailyCap)
+          : activeInstance.dailyCap;
+
+        const counter = await db.dailyInstanceCounter.upsert({
+          where: { instanceId_localDate: { instanceId: activeInstance.id, localDate } },
+          update: {},
+          create: { instanceId: activeInstance.id, localDate, sent: 0 },
         });
 
-        // 5. Select Variant (A/B Testing)
-        const variant = campaign.variants.length > 0
-          ? campaign.variants[recipient.variantIndex % campaign.variants.length]
-          : { content: 'Hello {name}', mediaType: 'text', mediaUrl: null, fileName: null, caption: null };
+        if (counter.sent >= effectiveCap) {
+          eventBus.emitLog(campaignId, {
+            type: 'warning',
+            status: 'DAILY_CAP_REACHED',
+            message: `Instance "${activeInstance.name}" reached daily cap (${counter.sent}/${effectiveCap}).`,
+          });
+          // Try other instances or wait
+          if (healthyInstances.length <= 1) {
+            await new Promise((r) => setTimeout(r, 60000));
+          }
+          continue;
+        }
 
-        // 6. Render Message with Fallback syntax & Spintax
-        const finalMessage = renderMessage(variant.content, {
-          name: recipient.name,
-          phone: recipient.phone,
-          custom_variables: recipient.customVariables,
-        });
+        // 5. Atomic State Transition: PENDING/QUEUED -> SENDING
+        const transitionToSending = await transitionMessage(
+          recipient.id,
+          ['PENDING', 'QUEUED'],
+          'SENDING',
+          {
+            instanceUsed: activeInstance.name,
+            sendingAt: new Date(),
+            attempts: recipient.attempts + 1,
+          }
+        );
+
+        if (!transitionToSending.success) {
+          // Another process grabbed it or status mutated
+          continue;
+        }
+
+        // 6. Select Variant & Render Message
+        const variant =
+          campaign.variants.length > 0
+            ? campaign.variants[recipient.variantIndex % campaign.variants.length]!
+            : { content: 'Hello {{name}}', mediaType: 'text', mediaUrl: null, fileName: null, caption: null };
+
+        const seedKey = `${campaignId}_${recipient.id}_${recipient.phone}`;
+        const finalMessage = renderMessage(
+          variant.content,
+          {
+            name: recipient.name,
+            phone: recipient.phone,
+            customVariables: recipient.customVariables,
+          },
+          { seedKey }
+        );
 
         // 7. Human Presence Simulation
         if (campaign.simulateTyping) {
@@ -160,18 +278,26 @@ export class CampaignRunner {
           } catch {}
         }
 
-        // 8. Dispatch Message
+        // 8. Dispatch to Evolution API
         let sendSuccess = false;
         let errorMessage = '';
         let messageId = '';
+        const startTime = Date.now();
 
         try {
           let dispatchRes: any;
           if (variant.mediaType && variant.mediaType !== 'text' && variant.mediaUrl) {
             dispatchRes = await evolution.sendMedia(activeInstance.name, recipient.phone, {
               mediaType: variant.mediaType as any,
-              mimetype: variant.mediaType === 'image' ? 'image/jpeg' : (variant.mediaType === 'video' ? 'video/mp4' : 'application/pdf'),
-              caption: variant.caption ? renderMessage(variant.caption, { name: recipient.name }) : finalMessage,
+              mimetype:
+                variant.mediaType === 'image'
+                  ? 'image/jpeg'
+                  : variant.mediaType === 'video'
+                  ? 'video/mp4'
+                  : 'application/pdf',
+              caption: variant.caption
+                ? renderMessage(variant.caption, { name: recipient.name }, { seedKey })
+                : finalMessage,
               media: variant.mediaUrl,
               fileName: variant.fileName || 'document',
             });
@@ -181,32 +307,35 @@ export class CampaignRunner {
 
           sendSuccess = true;
           messageId = dispatchRes?.key?.id || dispatchRes?.id || `MSG_${Date.now()}`;
+          CircuitBreaker.recordSuccess(activeInstance.name);
+          sendDurationHistogram.observe({ instance: activeInstance.name, result: 'success' }, (Date.now() - startTime) / 1000);
         } catch (err: any) {
           errorMessage = err.message || 'Dispatch error';
+          CircuitBreaker.recordFailure(activeInstance.name, EvolutionClient.isCircuitBreakerError(err));
+          sendDurationHistogram.observe({ instance: activeInstance.name, result: 'error' }, (Date.now() - startTime) / 1000);
 
-          // Circuit breaker check
           if (EvolutionClient.isCircuitBreakerError(err)) {
-            await db.campaignRecipient.update({
-              where: { id: recipient.id },
-              data: { status: 'FAILED', lastError: errorMessage },
-            });
+            await transitionMessage(recipient.id, 'SENDING', 'FAILED', { lastError: errorMessage });
             await this.triggerCircuitBreaker(campaignId, errorMessage);
             return;
           }
         }
 
-        // 9. Update Recipient Record
+        // 9. Post-Send State Machine Update
         if (sendSuccess) {
           consecutiveFailures = 0;
-          await db.campaignRecipient.update({
-            where: { id: recipient.id },
-            data: {
-              status: 'SENT',
-              sentAt: new Date(),
-              messageId,
-              renderedMessage: finalMessage,
-              instanceUsed: activeInstance.name,
-            },
+          await transitionMessage(recipient.id, 'SENDING', 'SENT', {
+            evolutionMessageId: messageId,
+            remoteJid: `${recipient.phone}@s.whatsapp.net`,
+            renderedMessage: finalMessage,
+            instanceUsed: activeInstance.name,
+            sentAt: new Date(),
+          });
+
+          // Atomic increment on DailyInstanceCounter
+          await db.dailyInstanceCounter.update({
+            where: { instanceId_localDate: { instanceId: activeInstance.id, localDate } },
+            data: { sent: { increment: 1 } },
           });
 
           await db.instance.update({
@@ -214,71 +343,77 @@ export class CampaignRunner {
             data: { sentToday: { increment: 1 } },
           });
 
+          try {
+            messagesCounter.inc({ status: 'SENT', instance: activeInstance.name });
+          } catch {}
+
           eventBus.emitLog(campaignId, {
             type: 'success',
             status: 'SENT',
+            message: `Message sent to ${recipient.phone} via "${activeInstance.name}"`,
+            recipientId: recipient.id,
             phone: recipient.phone,
-            recipientName: recipient.name,
-            instance: activeInstance.name,
-            message: finalMessage.length > 50 ? finalMessage.substring(0, 47) + '...' : finalMessage,
+            messageId,
           });
         } else {
           consecutiveFailures++;
-          await db.campaignRecipient.update({
-            where: { id: recipient.id },
-            data: {
-              status: 'FAILED',
+          try {
+            messagesCounter.inc({ status: 'FAILED', instance: activeInstance.name });
+          } catch {}
+
+          if (recipient.attempts < recipient.maxAttempts) {
+            await transitionMessage(recipient.id, 'SENDING', 'RETRY_WAIT', {
               lastError: errorMessage,
-              instanceUsed: activeInstance.name,
-            },
-          });
+            });
+          } else {
+            await transitionMessage(recipient.id, 'SENDING', 'FAILED', {
+              lastError: errorMessage,
+              failedAt: new Date(),
+            });
+          }
 
           eventBus.emitLog(campaignId, {
-            type: 'error',
+            type: 'danger',
             status: 'FAILED',
+            message: `Send failed to ${recipient.phone}: ${errorMessage}`,
+            recipientId: recipient.id,
             phone: recipient.phone,
-            recipientName: recipient.name,
-            instance: activeInstance.name,
-            error: errorMessage,
           });
 
-          // Check consecutive failure limit
-          if (consecutiveFailures >= 3) {
-            await this.triggerCircuitBreaker(campaignId, `${consecutiveFailures} consecutive dispatches failed.`);
+          if (consecutiveFailures >= 5) {
+            await this.triggerCircuitBreaker(
+              campaignId,
+              `5 consecutive failures on instance "${activeInstance.name}"`
+            );
             return;
           }
         }
 
+        // 10. Anti-Ban Pacing & Human Pause Jitter
         messagesInCurrentBatch++;
-
-        // 10. Batch Break check
         if (messagesInCurrentBatch >= campaign.batchBreakSize) {
           messagesInCurrentBatch = 0;
-          const breakSeconds = campaign.batchBreakDuration * 60;
+          const breakSecs = campaign.batchBreakDuration * 60;
           eventBus.emitLog(campaignId, {
             type: 'info',
-            status: 'BATCH_COOLDOWN',
-            message: `Batch break active: resting for ${campaign.batchBreakDuration} minutes to prevent rate limiting...`,
+            status: 'BATCH_BREAK',
+            message: `Batch break reached (${campaign.batchBreakSize} messages). Taking a ${campaign.batchBreakDuration} min cooldown...`,
           });
-          await new Promise((r) => setTimeout(r, breakSeconds * 1000));
+          await new Promise((r) => setTimeout(r, breakSecs * 1000));
         } else {
-          // 11. Anti-Ban Pacing Jitter Delay
-          const jitterDelay = calculateJitterDelay(campaign.minDelay, campaign.maxDelay);
-          eventBus.emitJitter(campaignId, jitterDelay, jitterDelay, recipient.phone);
-
-          for (let s = jitterDelay; s > 0; s--) {
-            if (this.cancelFlags.get(campaignId) || this.pauseFlags.get(campaignId)) break;
-            eventBus.emitJitter(campaignId, s, jitterDelay, recipient.phone);
-            await new Promise((r) => setTimeout(r, 1000));
-          }
+          const delaySecs = calculateJitterDelay(campaign.minDelay, campaign.maxDelay, true, 0.04);
+          eventBus.emitJitter(campaignId, delaySecs, delaySecs);
+          await new Promise((r) => setTimeout(r, delaySecs * 1000));
         }
+
+        // Update queue depth gauge
+        const remainingQueued = await db.campaignRecipient.count({
+          where: { campaignId, status: { in: ['PENDING', 'QUEUED'] } },
+        });
+        try {
+          queueDepthGauge.set({ instance: activeInstance.name }, remainingQueued);
+        } catch {}
       }
-    } catch (fatal: any) {
-      logger.error({ fatal, campaignId }, 'Fatal campaign execution error');
-      await db.campaign.update({
-        where: { id: campaignId },
-        data: { status: 'FAILED', haltReason: fatal.message },
-      });
     } finally {
       this.activeCampaigns.delete(campaignId);
       this.cancelFlags.delete(campaignId);
@@ -288,4 +423,3 @@ export class CampaignRunner {
 }
 
 export const campaignRunner = CampaignRunner.instance;
-

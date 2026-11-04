@@ -29,30 +29,41 @@ model Setting {
 }
 
 model Instance {
-  id            String             @id @default(cuid())
-  name          String             @unique
-  status        String             @default("CLOSE") // "OPEN", "CONNECTING", "CLOSE"
-  profileName   String?
-  profileNumber String?
-  profilePicUrl String?
-  dailyCap      Int                @default(200)
-  sentToday     Int                @default(0)
-  lastResetDate String?
-  warmUpDay     Int                @default(1)
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
-  campaigns     CampaignInstance[]
+  id                String             @id @default(cuid())
+  name              String             @unique
+  evolutionName     String?
+  status            String             @default("CLOSE") // "OPEN", "CONNECTING", "CLOSE"
+  profileName       String?
+  profileNumber     String?
+  profilePicUrl     String?
+  dailyCap          Int                @default(200)
+  sentToday         Int                @default(0)
+  lastResetDate     String?
+  warmUpDay         Int                @default(1)
+  warmupSchedule    String?            // JSON array e.g. [20, 40, 60, 100, 150, 200, 250]
+  health            String?            // JSON health info
+  connectedAt       DateTime?
+  warmupStartedAt   DateTime?
+  circuitState      String             @default("closed") // "closed", "open", "half-open"
+  consecutiveErrors Int                @default(0)
+  lastErrorAt       DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  campaigns         CampaignInstance[]
 }
 
 model Contact {
   id              String        @id @default(cuid())
   phone           String        @unique
   name            String?
-  customFields    String? // JSON string: { "company": "Acme", "city": "Delhi" }
-  tags            String? // JSON array: ["vip", "leads"]
+  customFields    String?       // JSON string: { "company": "Acme", "city": "Delhi" }
+  tags            String?       // JSON array: ["vip", "leads"]
   optInStatus     Boolean       @default(true)
   isBlacklisted   Boolean       @default(false)
   blacklistReason String?
+  source          String?       @default("MANUAL")
+  waExists        Boolean?
+  waCheckedAt     DateTime?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   lists           ListContact[]
@@ -81,7 +92,7 @@ model Blacklist {
   id        String   @id @default(cuid())
   phone     String   @unique
   reason    String?
-  source    String   @default("MANUAL") // "MANUAL", "BULK_IMPORT", "OPT_OUT"
+  source    String   @default("MANUAL") // "MANUAL", "BULK_IMPORT", "OPT_OUT", "COMPLAINT"
   createdAt DateTime @default(now())
 }
 
@@ -93,9 +104,19 @@ model MessageTemplate {
   mediaUrl  String?
   fileName  String?
   caption   String?
-  tags      String? // JSON array
+  tags      String?  // JSON array
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model MediaAsset {
+  id        String   @id @default(cuid())
+  sha256    String   @unique
+  mime      String
+  size      Int
+  path      String
+  url       String?
+  createdAt DateTime @default(now())
 }
 
 model Campaign {
@@ -112,7 +133,12 @@ model Campaign {
   timezone           String              @default("Asia/Kolkata")
   warmUpMode         Boolean             @default(false)
   rotationMode       String              @default("ROUND_ROBIN") // "ROUND_ROBIN" or "LEAST_USED"
+  riskScore          Int?                @default(0)
+  riskFactors        String?             // JSON
+  riskOverride       Boolean             @default(false)
+  riskOverrideBy     String?
   consentConfirmedAt DateTime?
+  consentConfirmedBy String?
   scheduledAt        DateTime?
   startedAt          DateTime?
   completedAt        DateTime?
@@ -138,6 +164,7 @@ model CampaignVariant {
   id            String   @id @default(cuid())
   campaignId    String
   index         Int      @default(0)
+  label         String?  @default("Variant A")
   content       String
   mediaType     String?  @default("text")
   mediaUrl      String?
@@ -153,48 +180,99 @@ model CampaignRecipient {
   contactId          String?
   phone              String
   name               String?
-  customVariables    String? // JSON
+  customVariables    String?   // JSON
   variantIndex       Int       @default(0)
-  status             String    @default("PENDING") // "PENDING", "SENDING", "SENT", "DELIVERED", "READ", "FAILED", "SKIPPED", "REPLIED"
+  status             String    @default("PENDING") // "PENDING", "QUEUED", "SENDING", "SENT", "DELIVERED", "READ", "FAILED", "RETRY_WAIT", "UNCERTAIN", "CANCELLED", "SKIPPED"
   attempts           Int       @default(0)
+  maxAttempts        Int       @default(3)
   lastError          String?
+  errorCode          String?
+  queuedAt           DateTime?
+  sendingAt          DateTime?
   sentAt             DateTime?
   deliveredAt        DateTime?
   readAt             DateTime?
+  failedAt           DateTime?
+  repliedAt          DateTime?
   messageId          String?
+  evolutionMessageId String?
+  remoteJid          String?
   renderedMessage    String?
   instanceUsed       String?
   evaluationStatus   String?   @default("UNVERIFIED") // "VERIFIED_WA", "NOT_WA", "QUALITY_PASSED", "SPAM_FLAGGED"
   qualityScore       Int?      @default(100)
   campaign           Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
+  @@unique([campaignId, phone])
   @@index([campaignId, status])
   @@index([phone])
+  @@index([evolutionMessageId])
+}
+
+model DailyInstanceCounter {
+  id         String   @id @default(cuid())
+  instanceId String
+  localDate  String   // "YYYY-MM-DD"
+  sent       Int      @default(0)
+  updatedAt  DateTime @updatedAt
+
+  @@unique([instanceId, localDate])
+}
+
+model WebhookEvent {
+  id          String    @id @default(cuid())
+  instanceId  String?
+  dedupeKey   String    @unique
+  type        String
+  payload     String    // JSON
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+
+  @@index([instanceId, type])
 }
 
 model IncomingMessage {
-  id           String   @id @default(cuid())
-  messageId    String   @unique
+  id           String    @id @default(cuid())
+  messageId    String    @unique
   instanceName String
   phone        String
   pushName     String?
   body         String
-  status       String   @default("UNREAD") // "UNREAD", "READ", "HANDLED"
-  isOptOut     Boolean  @default(false)
-  receivedAt   DateTime @default(now())
+  status       String    @default("UNREAD") // "UNREAD", "READ", "HANDLED"
+  isOptOut     Boolean   @default(false)
+  remoteJid    String?
+  campaignId   String?
+  receivedAt   DateTime  @default(now())
 
   @@index([phone])
   @@index([instanceName])
+}
+
+model OutboundWebhook {
+  id        String   @id @default(cuid())
+  url       String
+  secret    String
+  events    String   // JSON array
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model ApiKey {
+  id        String   @id @default(cuid())
+  name      String
+  keyHash   String   @unique
+  role      String   @default("OPERATOR")
+  createdAt DateTime @default(now())
 }
 
 model AuditLog {
   id        String   @id @default(cuid())
   userId    String?
   userEmail String?
-  action    String // e.g. "CAMPAIGN_START", "INSTANCE_CREATE", "SETTINGS_UPDATE"
-  entity    String // "CAMPAIGN", "INSTANCE", "SETTINGS", "CONTACT"
-  details   String? // JSON details
+  action    String   // e.g. "CAMPAIGN_START", "INSTANCE_CREATE", "SETTINGS_UPDATE"
+  entity    String   // "CAMPAIGN", "INSTANCE", "SETTINGS", "CONTACT"
+  entityId  String?
+  details   String?  // JSON details
   createdAt DateTime @default(now())
   user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 }
-
