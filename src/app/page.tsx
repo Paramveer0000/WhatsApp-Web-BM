@@ -541,7 +541,15 @@ export default function AppDashboard() {
           setLiveStats(payload.stats || payload.campaign?.stats);
           if (payload.campaign?.status) {
             setCampaigns((prev) =>
-              prev.map((c) => (c.id === activeCampaignId ? { ...c, status: payload.campaign.status } : c))
+              prev.map((c) =>
+                c.id === activeCampaignId
+                  ? {
+                      ...c,
+                      status: payload.campaign.status,
+                      haltReason: payload.campaign.haltReason !== undefined ? payload.campaign.haltReason : c.haltReason,
+                    }
+                  : c
+              )
             );
           }
         } else if (payload.type === 'LOG') {
@@ -629,10 +637,14 @@ export default function AppDashboard() {
   };
 
   // Campaign Actions
-  const handleCampaignAction = async (action: 'pause' | 'resume' | 'abort') => {
+  const handleCampaignAction = async (action: 'pause' | 'resume' | 'abort' | 'override_window') => {
     if (!activeCampaignId) return;
     try {
-      const res = await fetch(`/api/campaigns/${activeCampaignId}/${action}`, { method: 'POST' });
+      const res = await fetch(`/api/campaigns/${activeCampaignId}/control`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: action.toUpperCase() }),
+      });
       if (res.ok) {
         toast.success(`Campaign ${action}d successfully`);
         loadCampaigns();
@@ -1786,6 +1798,32 @@ export default function AppDashboard() {
                   </button>
                 </div>
               </div>
+
+              {/* Sending Window / Guardrail Pause Notice */}
+              {activeCampaign?.haltReason && (
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-bold text-amber-300">
+                        {activeCampaign.haltReason.toLowerCase().includes('window')
+                          ? 'Campaign Paused by Anti-Ban Guardrails (Sending Window)'
+                          : 'Campaign Status Notice'}
+                      </p>
+                      <p className="text-xs text-amber-200/90 mt-0.5">{activeCampaign.haltReason}</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCampaignAction('override_window')}
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white rounded-xl text-xs font-bold transition shadow shrink-0 cursor-pointer"
+                    title="Bypass sending window and send messages immediately"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Send Now (Override Window)</span>
+                  </button>
+                </div>
+              )}
 
               {/* Progress & Speed Breakdown */}
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">

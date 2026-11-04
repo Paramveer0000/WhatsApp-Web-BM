@@ -19,16 +19,46 @@ function verifySecretConstantTime(given: string, expected: string): boolean {
 
 export async function POST(req: NextRequest, { params }: { params?: { instanceId?: string } } = {}) {
   try {
-    // 1. Constant-time Secret Verification
-    const secretHeader = req.headers.get('x-webhook-secret') || req.headers.get('apikey') || '';
-    const expectedSecret = process.env.WEBHOOK_SECRET;
+    const payload = await req.json().catch(() => ({}));
 
-    if (expectedSecret && (!secretHeader || !verifySecretConstantTime(secretHeader, expectedSecret))) {
-      logger.warn('Webhook secret verification failed');
-      return NextResponse.json({ error: 'Unauthorized secret' }, { status: 401 });
+    // 1. Multi-Provider Secret Verification
+    // Evolution API may send credentials in x-webhook-secret, apikey header, query string, or payload.apikey
+    const candidateTokens = [
+      req.headers.get('x-webhook-secret'),
+      req.headers.get('apikey'),
+      req.headers.get('authorization')?.replace(/^Bearer\s+/i, ''),
+      req.nextUrl.searchParams.get('secret'),
+      req.nextUrl.searchParams.get('apikey'),
+      payload?.apikey,
+    ].filter(Boolean) as string[];
+
+    const validSecrets = new Set<string>();
+    if (process.env.WEBHOOK_SECRET) validSecrets.add(process.env.WEBHOOK_SECRET);
+    if (process.env.GLOBAL_API_KEY) validSecrets.add(process.env.GLOBAL_API_KEY);
+
+    // Fetch database setting secrets if available
+    try {
+      const dbKey = await db.setting.findUnique({ where: { key: 'GLOBAL_API_KEY' } });
+      if (dbKey?.value) validSecrets.add(dbKey.value);
+      const dbSecret = await db.setting.findUnique({ where: { key: 'WEBHOOK_SECRET' } });
+      if (dbSecret?.value) validSecrets.add(dbSecret.value);
+    } catch {}
+
+    // If secrets are configured, at least one candidate must match one of the valid secrets
+    if (validSecrets.size > 0) {
+      const isAuthorized = candidateTokens.some((token) =>
+        Array.from(validSecrets).some((secret) => verifySecretConstantTime(token, secret))
+      );
+
+      if (!isAuthorized) {
+        logger.warn(
+          { candidateCount: candidateTokens.length, path: req.nextUrl.pathname },
+          'Webhook secret verification failed'
+        );
+        return NextResponse.json({ error: 'Unauthorized secret' }, { status: 401 });
+      }
     }
 
-    const payload = await req.json();
     const event = (payload.event || '').toLowerCase();
     const instanceName =
       params?.instanceId || payload.instance || payload.instanceName || 'default';

@@ -24,6 +24,7 @@ export class CampaignRunner {
   private activeCampaigns = new Set<string>();
   private cancelFlags = new Map<string, boolean>();
   private pauseFlags = new Map<string, boolean>();
+  private overrideWindowFlags = new Set<string>();
 
   static instance = new CampaignRunner();
 
@@ -33,6 +34,10 @@ export class CampaignRunner {
 
   getActiveCampaignIds(): string[] {
     return Array.from(this.activeCampaigns);
+  }
+
+  overrideWindow(campaignId: string) {
+    this.overrideWindowFlags.add(campaignId);
   }
 
   requestPause(campaignId: string) {
@@ -179,8 +184,13 @@ export class CampaignRunner {
           todaySentInstance: 0,
         };
 
-        const windowCheck = evaluateWindowRule(dummyCtx as any);
+        const hasWindowOverride = this.overrideWindowFlags.has(campaignId);
+        const windowCheck = hasWindowOverride ? { allowed: true } : evaluateWindowRule(dummyCtx as any);
         if (!windowCheck.allowed) {
+          await db.campaign.update({
+            where: { id: campaignId },
+            data: { haltReason: windowCheck.reason },
+          });
           eventBus.emitLog(campaignId, {
             type: 'warning',
             status: 'SEND_WINDOW_SLEEP',
@@ -195,6 +205,12 @@ export class CampaignRunner {
           const sleepMs = Math.min(windowCheck.sleepMs || 60000, 60000);
           await new Promise((r) => setTimeout(r, sleepMs));
           continue;
+        } else {
+          // Clear halt reason once allowed window is reached or overridden
+          await db.campaign.updateMany({
+            where: { id: campaignId, haltReason: { not: null } },
+            data: { haltReason: null },
+          });
         }
 
         // 2. Fetch next PENDING/QUEUED recipient

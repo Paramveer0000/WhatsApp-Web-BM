@@ -23,7 +23,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
     }
 
-    if (action === 'START' || action === 'RESUME') {
+    if (action === 'START' || action === 'RESUME' || action === 'OVERRIDE_WINDOW' || action === 'SEND_NOW') {
+      if (action === 'OVERRIDE_WINDOW' || action === 'SEND_NOW') {
+        campaignRunner.overrideWindow(campaignId);
+      }
       await db.campaign.update({
         where: { id: campaignId },
         data: { status: 'RUNNING', haltReason: null },

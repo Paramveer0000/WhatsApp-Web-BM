@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { assignTwoLayerDistribution } from '../src/lib/distribution';
 import { renderMessage } from '../src/lib/spintax';
-import { generateSmartFallbackVariations } from '../src/app/api/ai/variations/route';
+import { generateSmartFallbackVariations } from '../src/lib/variations';
 
 // 1. Generate 60 realistic test contacts
 const FIRST_NAMES = [
