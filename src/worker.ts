@@ -1,13 +1,13 @@
-import { db } from './lib/db';
+import { db, ensureDbSchema } from './lib/db';
 import { campaignRunner } from './lib/queue/campaign-runner';
 import { logger } from './lib/logger';
 
 console.log('=== WhatsApp Campaign Background Worker v2 Started ===');
 logger.info('Background worker polling loop and reconciler initialized.');
 
-// Run startup reconciliation once on worker boot
-campaignRunner
-  .reconcileStartup()
+// Ensure SQLite schema columns exist, then run startup reconciliation
+ensureDbSchema()
+  .then(() => campaignRunner.reconcileStartup())
   .then(() => {
     logger.info('Startup reconciliation completed successfully.');
   })
@@ -22,6 +22,7 @@ async function checkAndRunScheduledCampaigns() {
   isChecking = true;
 
   try {
+    await ensureDbSchema();
     const now = new Date();
 
     // Look for running campaigns that might have been interrupted by restart, or scheduled campaigns ready to run

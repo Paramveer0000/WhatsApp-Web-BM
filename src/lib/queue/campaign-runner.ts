@@ -1,5 +1,5 @@
 import { DateTime } from 'luxon';
-import { db } from '../db';
+import { db, ensureDbSchema } from '../db';
 import { EvolutionClient, CircuitBreaker } from '../evolution';
 import { renderMessage } from '../spintax';
 import { eventBus } from './events';
@@ -45,6 +45,7 @@ export class CampaignRunner {
    * Recovers scheduled and running campaigns
    */
   async reconcileStartup() {
+    await ensureDbSchema();
     logger.info('Running startup campaign reconciler...');
     try {
       const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
