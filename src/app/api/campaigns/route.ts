@@ -72,12 +72,17 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await req.json();
+    const rawInstances: string[] = body.instanceIds || body.instances || [];
+    const rawLists: string[] = body.listIds || body.contactListIds || [];
+    const rawTemplate: string = body.template || body.content || '';
+    const consentConfirmed = body.consentConfirmed ?? true;
+    const launchImmediately = body.launchImmediately ?? body.sendNow ?? false;
+    const scheduledAt = body.scheduledAt ? new Date(body.scheduledAt) : null;
+
     const {
       name,
-      instanceIds = [],
-      listIds = [],
-      recipients = [], // direct array or from lists
-      variants = [], // A/B testing variants
+      recipients = [],
+      variants = [],
       minDelay = 12,
       maxDelay = 25,
       simulateTyping = true,
@@ -88,17 +93,28 @@ export async function POST(req: NextRequest) {
       timezone = 'Asia/Kolkata',
       warmUpMode = false,
       rotationMode = 'ROUND_ROBIN',
-      scheduledAt,
-      consentConfirmed,
-      launchImmediately = false,
     } = body;
 
     if (!name || !name.trim()) {
       return NextResponse.json({ error: 'Campaign name is required' }, { status: 400 });
     }
 
-    if (!instanceIds || instanceIds.length === 0) {
+    if (!rawInstances || rawInstances.length === 0) {
       return NextResponse.json({ error: 'At least one WhatsApp instance must be assigned' }, { status: 400 });
+    }
+
+    // Resolve instances by ID or Name
+    const instanceRecords = await db.instance.findMany({
+      where: {
+        OR: [
+          { id: { in: rawInstances } },
+          { name: { in: rawInstances } },
+        ],
+      },
+    });
+
+    if (instanceRecords.length === 0) {
+      return NextResponse.json({ error: 'No matching WhatsApp instances found in database' }, { status: 400 });
     }
 
     // Compliance Check: User must confirm opt-in consent
@@ -111,9 +127,9 @@ export async function POST(req: NextRequest) {
     // 1. Gather all target recipients (from selected lists or direct array)
     const targetContactsMap = new Map<string, { phone: string; name?: string; customVariables?: any }>();
 
-    if (listIds.length > 0) {
+    if (rawLists.length > 0) {
       const listContacts = await db.listContact.findMany({
-        where: { listId: { in: listIds } },
+        where: { listId: { in: rawLists } },
         include: { contact: true },
       });
 
@@ -158,23 +174,33 @@ export async function POST(req: NextRequest) {
         warmUpMode: Boolean(warmUpMode),
         rotationMode: rotationMode || 'ROUND_ROBIN',
         consentConfirmedAt: new Date(),
-        scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
+        scheduledAt,
         createdById: user.id,
       },
     });
 
-    // 3. Link Instances
-    for (const instId of instanceIds) {
+    // 3. Link Instances (using resolved database IDs)
+    for (const inst of instanceRecords) {
       await db.campaignInstance.create({
         data: {
           campaignId: campaign.id,
-          instanceId: instId,
+          instanceId: inst.id,
         },
       });
     }
 
-    // 4. Create Variants (A/B testing)
-    const defaultVariants = variants.length > 0 ? variants : [{ content: 'Hello {name}' }];
+    // 4. Create Variants (A/B testing or default wizard template)
+    const defaultVariants = variants.length > 0
+      ? variants
+      : [{
+          content: rawTemplate || 'Hello {name}',
+          mediaType: body.mediaType || 'text',
+          mediaUrl: body.mediaUrl || null,
+          fileName: body.fileName || null,
+          caption: body.caption || null,
+          weightPercent: 100,
+        }];
+
     for (let i = 0; i < defaultVariants.length; i++) {
       const v = defaultVariants[i];
       await db.campaignVariant.create({
@@ -222,6 +248,7 @@ export async function POST(req: NextRequest) {
           name: campaign.name,
           recipientsCount: allContacts.length,
           status: campaignStatus,
+          scheduledAt: scheduledAt?.toISOString() || null,
         }),
       },
     });
@@ -243,4 +270,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
-

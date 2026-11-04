@@ -148,6 +148,8 @@ export default function AppDashboard() {
   const [maxDelay, setMaxDelay] = useState(25);
   const [batchSize, setBatchSize] = useState(50);
   const [batchDelay, setBatchDelay] = useState(180);
+  const [isScheduled, setIsScheduled] = useState(false);
+  const [scheduleTime, setScheduleTime] = useState('');
   const [launchSafetyCheck, setLaunchSafetyCheck] = useState(false);
 
   // Templates Library Mock
@@ -432,7 +434,8 @@ export default function AppDashboard() {
           maxDelay,
           batchSize,
           batchDelay,
-          sendNow: true
+          sendNow: !isScheduled,
+          scheduledAt: isScheduled && scheduleTime ? new Date(scheduleTime).toISOString() : undefined,
         })
       });
 
@@ -440,8 +443,13 @@ export default function AppDashboard() {
       if (!res.ok) throw new Error(data.error || 'Failed to create campaign');
 
       await loadCampaigns();
-      setActiveCampaignId(data.campaign.id);
-      setCurrentTab('live');
+      if (isScheduled) {
+        alert(`Campaign "${wizName}" scheduled successfully for automatic execution at ${new Date(scheduleTime).toLocaleString()}!`);
+        setCurrentTab('campaigns');
+      } else {
+        setActiveCampaignId(data.campaign.id);
+        setCurrentTab('live');
+      }
     } catch (err: any) {
       alert(err.message);
     }
@@ -1673,6 +1681,35 @@ export default function AppDashboard() {
                       </div>
                     </div>
 
+                    {/* Schedule for Later Option */}
+                    <div className="pt-2 space-y-2 border-t border-slate-800">
+                      <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
+                        <input
+                          type="checkbox"
+                          checked={isScheduled}
+                          onChange={(e) => setIsScheduled(e.target.checked)}
+                          className="rounded text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <span className="font-semibold text-slate-200">Schedule this campaign for automatic execution</span>
+                      </label>
+
+                      {isScheduled && (
+                        <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center gap-3">
+                          <Clock className="w-4 h-4 text-emerald-400 shrink-0" />
+                          <div className="flex-1">
+                            <label className="text-[11px] text-slate-400 block mb-1">Execution Date & Time</label>
+                            <input
+                              type="datetime-local"
+                              required={isScheduled}
+                              value={scheduleTime}
+                              onChange={(e) => setScheduleTime(e.target.value)}
+                              className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
                     <div className="pt-2">
                       <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
                         <input
@@ -1687,14 +1724,14 @@ export default function AppDashboard() {
 
                     <button
                       type="submit"
-                      disabled={!launchSafetyCheck}
+                      disabled={!launchSafetyCheck || (isScheduled && !scheduleTime)}
                       className={`w-full py-3 rounded-xl font-bold text-xs shadow-lg transition ${
-                        launchSafetyCheck
+                        launchSafetyCheck && (!isScheduled || scheduleTime)
                           ? 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer shadow-emerald-950/50'
                           : 'bg-slate-800 text-slate-500 cursor-not-allowed'
                       }`}
                     >
-                      Launch Campaign Now →
+                      {isScheduled ? 'Schedule Campaign for Automatic Dispatch →' : 'Launch Campaign Now →'}
                     </button>
                   </div>
                 </div>

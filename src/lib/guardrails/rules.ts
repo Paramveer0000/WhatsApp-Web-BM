@@ -330,3 +330,4 @@ export async function logGuardrailEvent(event: {
     console.error('Failed to log guardrail event:', err);
   }
 }
+
