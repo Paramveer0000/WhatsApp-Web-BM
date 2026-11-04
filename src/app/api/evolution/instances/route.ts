@@ -26,22 +26,44 @@ export async function GET() {
       const name = inst.instanceName || inst.name;
       if (!name) continue;
 
-      const status = (inst.state || inst.connectionStatus || 'CLOSE').toUpperCase();
+      // Check all possible status properties from various Evolution API v2 payloads
+      const rawStatus = (
+        inst.status ||
+        inst.state ||
+        inst.connectionStatus ||
+        item.status ||
+        item.connectionStatus ||
+        item.state ||
+        'CLOSE'
+      ).toString().toUpperCase();
+
+      const isOpen = rawStatus === 'OPEN' || rawStatus === 'CONNECTED';
+      const status = isOpen ? 'OPEN' : (rawStatus === 'CONNECTING' ? 'CONNECTING' : 'CLOSE');
+
+      // Extract phone number from owner, number, or profile
+      let ownerNumber: string | null = null;
+      const rawOwner = inst.owner || inst.number || inst.profileNumber || item.owner;
+      if (rawOwner) {
+        ownerNumber = String(rawOwner).split('@')[0].replace(/[^\d]/g, '');
+      }
+
+      const profileName = inst.profileName || inst.name || null;
+      const profilePicUrl = inst.profilePicUrl || inst.profilePictureUrl || null;
 
       await db.instance.upsert({
         where: { name },
         update: {
-          status: status === 'OPEN' || status === 'CONNECTED' ? 'OPEN' : status,
-          profileName: inst.profileName || null,
-          profileNumber: inst.owner ? inst.owner.split('@')[0] : null,
-          profilePicUrl: inst.profilePicUrl || null,
+          status,
+          profileName: profileName || undefined,
+          profileNumber: ownerNumber || undefined,
+          profilePicUrl: profilePicUrl || undefined,
         },
         create: {
           name,
-          status: status === 'OPEN' || status === 'CONNECTED' ? 'OPEN' : status,
-          profileName: inst.profileName || null,
-          profileNumber: inst.owner ? inst.owner.split('@')[0] : null,
-          profilePicUrl: inst.profilePicUrl || null,
+          status,
+          profileName,
+          profileNumber: ownerNumber,
+          profilePicUrl,
         },
       });
     }
@@ -50,7 +72,18 @@ export async function GET() {
       orderBy: { createdAt: 'desc' },
     });
 
-    return NextResponse.json({ success: true, instances: allInstances });
+    // Augment with backward-compatible aliases for connectionStatus and phone
+    const mappedInstances = allInstances.map((inst) => {
+      const isConnected = inst.status?.toUpperCase() === 'OPEN';
+      return {
+        ...inst,
+        connectionStatus: isConnected ? 'open' : 'close',
+        phone: inst.profileNumber || '',
+        isOpen: isConnected,
+      };
+    });
+
+    return NextResponse.json({ success: true, instances: mappedInstances });
   } catch (err: any) {
     logger.error({ err }, 'Error in GET /api/evolution/instances');
     return NextResponse.json({ error: err.message }, { status: 500 });
@@ -75,9 +108,8 @@ export async function POST(req: NextRequest) {
     }
 
     const client = await EvolutionClient.fromDatabase();
-    let result: any;
     try {
-      result = await client.createInstance(instanceName, true);
+      await client.createInstance(instanceName, true);
     } catch (err: any) {
       logger.error({ err, apiUrl: client.getApiUrl() }, 'Evolution API createInstance failed');
       const statusCode = err.status || 502;
@@ -97,26 +129,24 @@ export async function POST(req: NextRequest) {
     try {
       const host = req.headers.get('host') || 'localhost:3000';
       const protocol = req.headers.get('x-forwarded-proto') || 'http';
-      const webhookUrl = `${protocol}://${host}/api/webhooks/evolution`;
-      const secret = process.env.WEBHOOK_SECRET || 'whsec-evolution';
+      const webhookUrl = `${protocol}://${host}/api/webhooks/evolution/${encodeURIComponent(instanceName)}`;
+      const secret = process.env.WEBHOOK_SECRET || 'whsec-evolution-shared-secret';
       await client.setWebhook(instanceName, webhookUrl, secret);
     } catch (whErr: any) {
-      logger.warn({ err: whErr.message }, 'Webhook auto-setup non-fatal error');
+      logger.warn({ instanceName, err: whErr.message }, 'Webhook auto-setup non-fatal error');
     }
 
-    await db.auditLog.create({
-      data: {
-        userId: user.id,
-        userEmail: user.email,
-        action: 'INSTANCE_CREATE',
-        entity: 'INSTANCE',
-        details: JSON.stringify({ instanceName }),
+    return NextResponse.json({
+      success: true,
+      instance: {
+        ...created,
+        connectionStatus: 'connecting',
+        phone: created.profileNumber || '',
+        isOpen: false,
       },
     });
-
-    return NextResponse.json({ success: true, instance: created, raw: result });
   } catch (err: any) {
-    logger.error({ err }, 'Error creating instance');
+    logger.error({ err }, 'Error in POST /api/evolution/instances');
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

@@ -388,3 +388,4 @@ export function ManualAddContactModal({
     </div>
   );
 }
+

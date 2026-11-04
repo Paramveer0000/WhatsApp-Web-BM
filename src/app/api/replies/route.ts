@@ -193,6 +193,7 @@ export async function GET(req: NextRequest) {
     for (const msg of recentMessages) {
       if (!contactMap.has(msg.phone)) {
         contactMap.set(msg.phone, {
+          id: msg.phone,
           phone: msg.phone,
           pushName: msg.pushName,
           instanceName: msg.instanceName,
@@ -221,6 +222,7 @@ export async function GET(req: NextRequest) {
     for (const cr of campaignContacts) {
       if (!contactMap.has(cr.phone)) {
         contactMap.set(cr.phone, {
+          id: cr.phone,
           phone: cr.phone,
           pushName: cr.name,
           instanceName: cr.instanceUsed || 'Campaign Broadcast',

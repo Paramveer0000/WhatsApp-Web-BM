@@ -83,6 +83,7 @@ import { DistributionMode, RotationScope, VariantInput } from '@/lib/rotation';
 import { GuardrailsConsoleTab } from '@/components/GuardrailsConsoleTab';
 import { SystemLogsConsole } from '@/components/SystemLogsConsole';
 import { ManualAddContactModal } from '@/components/ManualAddContactModal';
+import { CreateTemplateModal } from '@/components/CreateTemplateModal';
 
 type TabType = 'overview' | 'campaigns' | 'live' | 'wizard' | 'contacts' | 'templates' | 'replies' | 'instances' | 'guardrails' | 'reports' | 'system' | 'settings';
 
@@ -150,6 +151,10 @@ export default function AppDashboard() {
   const [sendingReply, setSendingReply] = useState(false);
   const [syncingReplies, setSyncingReplies] = useState(false);
   const [uploadingChat, setUploadingChat] = useState(false);
+
+  // Templates State
+  const [savedTemplates, setSavedTemplates] = useState<any[]>([]);
+  const [showCreateTemplateModal, setShowCreateTemplateModal] = useState(false);
 
   // Campaign Wizard State
   const [wizName, setWizName] = useState(`Campaign-${Date.now().toString().slice(-4)}`);
@@ -316,7 +321,20 @@ export default function AppDashboard() {
     loadAnalytics();
     loadSettings();
     loadConversations();
+    loadTemplates();
   }, [router]);
+
+  const loadTemplates = async () => {
+    try {
+      const res = await fetch('/api/templates');
+      const data = await res.json();
+      if (res.ok && data.templates) {
+        setSavedTemplates(data.templates);
+      }
+    } catch (err) {
+      console.error('Error fetching templates:', err);
+    }
+  };
 
   const loadInstances = async () => {
     try {
@@ -325,7 +343,7 @@ export default function AppDashboard() {
       if (res.ok && data.instances) {
         setInstances(data.instances);
         if (data.instances.length > 0 && !replyInstance) {
-          const connected = data.instances.find((i: any) => i.connectionStatus === 'open');
+          const connected = data.instances.find((i: any) => (i.status?.toUpperCase() === 'OPEN' || i.connectionStatus === 'open'));
           if (connected) setReplyInstance(connected.name);
           else setReplyInstance(data.instances[0].name);
         }
@@ -412,8 +430,9 @@ export default function AppDashboard() {
       if (res.ok && data.conversations) {
         setConversations(data.conversations);
         if (data.conversations.length > 0 && !selectedConversation) {
-          setSelectedConversation(data.conversations[0].id);
-          loadConversationMessages(data.conversations[0].id);
+          const firstId = data.conversations[0].id || data.conversations[0].phone;
+          setSelectedConversation(firstId);
+          loadConversationMessages(firstId);
         }
       }
     } catch (err) {
@@ -422,8 +441,9 @@ export default function AppDashboard() {
   };
 
   const loadConversationMessages = async (convId: string) => {
+    if (!convId) return;
     try {
-      const res = await fetch(`/api/replies/${convId}`);
+      const res = await fetch(`/api/replies/${encodeURIComponent(convId)}`);
       const data = await res.json();
       if (res.ok && data.messages) {
         setConversationMessages(data.messages);
@@ -674,15 +694,15 @@ export default function AppDashboard() {
 
   // Send WhatsApp Reply
   const handleSendReply = async () => {
-    if (!replyInputText.trim() || !selectedConversation || !replyInstance) return;
+    if (!replyInputText.trim() || !selectedConversation) return;
     setSendingReply(true);
     try {
-      const res = await fetch(`/api/replies/${selectedConversation}/send`, {
+      const res = await fetch(`/api/replies/${encodeURIComponent(selectedConversation)}/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           text: replyInputText.trim(),
-          instanceName: replyInstance
+          instanceName: replyInstance || undefined,
         })
       });
       const d = await res.json();
@@ -822,7 +842,7 @@ export default function AppDashboard() {
   };
 
   const activeCampaign = campaigns.find((c) => c.id === activeCampaignId);
-  const connectedCount = instances.filter((i) => i.connectionStatus === 'open').length;
+  const connectedCount = instances.filter((i) => (i.status?.toUpperCase() === 'OPEN' || i.connectionStatus === 'open')).length;
 
   return (
     <div className="min-h-screen bg-[#0b141a] text-slate-100 flex flex-col md:flex-row font-sans selection:bg-emerald-500/30 selection:text-emerald-300">
@@ -1120,12 +1140,12 @@ export default function AppDashboard() {
             {/* Instance Status Chips */}
             <div className="hidden lg:flex items-center gap-2">
               {instances.slice(0, 2).map((inst) => {
-                const isOpen = inst.connectionStatus === 'open';
+                const isOpen = inst.status?.toUpperCase() === 'OPEN' || inst.connectionStatus === 'open';
                 return (
                   <div
                     key={inst.id}
                     className="flex items-center gap-2 px-2.5 py-1 rounded-xl bg-slate-950 border border-slate-800 text-[11px]"
-                    title={`Instance: ${inst.name} | Status: ${inst.connectionStatus}`}
+                    title={`Instance: ${inst.name} | Status: ${isOpen ? 'Connected' : 'Offline'}`}
                   >
                     <span
                       className={`w-2 h-2 rounded-full ${
@@ -1319,7 +1339,7 @@ export default function AppDashboard() {
                       </div>
                     ) : (
                       instances.slice(0, 3).map((inst) => {
-                        const isOpen = inst.connectionStatus === 'open';
+                        const isOpen = inst.status?.toUpperCase() === 'OPEN' || inst.connectionStatus === 'open';
                         return (
                           <div
                             key={inst.id}
@@ -1335,7 +1355,7 @@ export default function AppDashboard() {
                               </div>
                               <div>
                                 <p className="text-xs font-bold text-white">{inst.name}</p>
-                                <p className="text-[11px] text-slate-400 font-mono">{inst.phone || 'No phone set'}</p>
+                                <p className="text-[11px] text-slate-400 font-mono">{inst.profileNumber || inst.phone || 'No phone set'}</p>
                               </div>
                             </div>
                             <span
@@ -1886,11 +1906,14 @@ export default function AppDashboard() {
                           }
                           className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-xs text-white h-24 font-mono"
                         >
-                          {instances.map((i) => (
-                            <option key={i.id} value={i.name}>
-                              {i.name} ({i.connectionStatus === 'open' ? 'Connected' : 'Offline'})
-                            </option>
-                          ))}
+                          {instances.map((i) => {
+                            const isConn = i.status?.toUpperCase() === 'OPEN' || i.connectionStatus === 'open';
+                            return (
+                              <option key={i.id} value={i.name}>
+                                {i.name} ({isConn ? 'Connected' : 'Offline'})
+                              </option>
+                            );
+                          })}
                         </select>
                         <span className="text-[10px] text-slate-500">Hold Ctrl to select multiple</span>
                       </div>
@@ -2338,14 +2361,73 @@ export default function AppDashboard() {
           {/* ========================================================= */}
           {currentTab === 'templates' && (
             <div className="space-y-6">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                   <h2 className="text-lg font-bold text-white">Message Templates</h2>
-                  <p className="text-xs text-slate-400">Ready-made high converting WhatsApp campaign copy</p>
+                  <p className="text-xs text-slate-400">Ready-made copy and your custom saved WhatsApp campaign templates</p>
                 </div>
+                <button
+                  onClick={() => setShowCreateTemplateModal(true)}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-md shadow-emerald-950/40 cursor-pointer self-start sm:self-auto"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>+ Create Template</span>
+                </button>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {/* Custom Saved Templates */}
+                {savedTemplates.map((tmpl) => {
+                  let cat = 'Custom';
+                  if (tmpl.tags) {
+                    try {
+                      const parsed = JSON.parse(tmpl.tags);
+                      if (Array.isArray(parsed) && parsed[0]) cat = parsed[0];
+                    } catch {}
+                  }
+                  return (
+                    <div
+                      key={tmpl.id}
+                      className="bg-slate-900 border border-emerald-500/30 rounded-2xl p-5 shadow-xl flex flex-col justify-between space-y-4 hover:border-emerald-500/60 transition relative"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 uppercase tracking-wider">
+                            {cat} (Custom)
+                          </span>
+                          <button
+                            onClick={async () => {
+                              if (!confirm(`Delete template "${tmpl.name}"?`)) return;
+                              await fetch(`/api/templates/${tmpl.id}`, { method: 'DELETE' });
+                              loadTemplates();
+                            }}
+                            className="text-slate-500 hover:text-rose-400 p-1 transition"
+                            title="Delete custom template"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        <h3 className="text-sm font-bold text-white">{tmpl.name}</h3>
+                        <div className="bg-[#0b141a] p-3 rounded-xl border border-slate-800/80 text-xs text-slate-300 font-mono mt-3 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
+                          {tmpl.content}
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          setWizTemplate(tmpl.content);
+                          if (tmpl.mediaType) setWizMediaType(tmpl.mediaType);
+                          setCurrentTab('wizard');
+                        }}
+                        className="w-full py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <span>Use in New Campaign →</span>
+                      </button>
+                    </div>
+                  );
+                })}
+
+                {/* Built-in Sample Templates */}
                 {sampleTemplates.map((tmpl) => (
                   <div
                     key={tmpl.id}
@@ -2353,8 +2435,8 @@ export default function AppDashboard() {
                   >
                     <div>
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 uppercase tracking-wider">
-                          {tmpl.category}
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-300 uppercase tracking-wider">
+                          {tmpl.category} (Sample)
                         </span>
                         <span className="text-[11px] font-mono text-slate-400">{tmpl.usageCount} sent</span>
                       </div>
@@ -2377,6 +2459,15 @@ export default function AppDashboard() {
                   </div>
                 ))}
               </div>
+
+              {/* Create Template Modal */}
+              <CreateTemplateModal
+                isOpen={showCreateTemplateModal}
+                onClose={() => setShowCreateTemplateModal(false)}
+                onTemplateSaved={() => {
+                  loadTemplates();
+                }}
+              />
             </div>
           )}
 
@@ -2394,11 +2485,14 @@ export default function AppDashboard() {
                     onChange={(e) => setReplyInstance(e.target.value)}
                     className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white font-mono"
                   >
-                    {instances.map((i) => (
-                      <option key={i.id} value={i.name}>
-                        {i.name} ({i.connectionStatus === 'open' ? 'Connected' : 'Offline'})
-                      </option>
-                    ))}
+                    {instances.map((i) => {
+                      const isConn = i.status?.toUpperCase() === 'OPEN' || i.connectionStatus === 'open';
+                      return (
+                        <option key={i.id} value={i.name}>
+                          {i.name} ({isConn ? 'Connected' : 'Offline'})
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
 
@@ -2441,26 +2535,30 @@ export default function AppDashboard() {
                         No conversations yet. Sync chats or upload a .txt export above.
                       </div>
                     ) : (
-                      conversations.map((conv) => (
-                        <button
-                          key={conv.id}
-                          onClick={() => {
-                            setSelectedConversation(conv.id);
-                            loadConversationMessages(conv.id);
-                          }}
-                          className={`w-full text-left p-3.5 transition cursor-pointer flex items-start justify-between ${
-                            selectedConversation === conv.id ? 'bg-slate-850' : 'hover:bg-slate-850/40'
-                          }`}
-                        >
-                          <div className="truncate">
-                            <p className="text-xs font-bold text-white font-mono truncate">+{conv.phone}</p>
-                            <p className="text-[11px] text-slate-400 truncate mt-0.5">{conv.lastMessage || 'No message snippet'}</p>
-                          </div>
-                          {conv.status === 'UNREAD' && (
-                            <span className="w-2 h-2 rounded-full bg-teal-400 shrink-0 mt-1" />
-                          )}
-                        </button>
-                      ))
+                      conversations.map((conv) => {
+                        const convKey = conv.id || conv.phone;
+                        const isSel = selectedConversation === convKey || selectedConversation === conv.phone;
+                        return (
+                          <button
+                            key={convKey}
+                            onClick={() => {
+                              setSelectedConversation(convKey);
+                              loadConversationMessages(convKey);
+                            }}
+                            className={`w-full text-left p-3.5 transition cursor-pointer flex items-start justify-between ${
+                              isSel ? 'bg-slate-800 border-l-4 border-emerald-500' : 'hover:bg-slate-850/40'
+                            }`}
+                          >
+                            <div className="truncate">
+                              <p className="text-xs font-bold text-white font-mono truncate">+{conv.phone}</p>
+                              <p className="text-[11px] text-slate-400 truncate mt-0.5">{conv.lastMessage || 'No message snippet'}</p>
+                            </div>
+                            {conv.status === 'UNREAD' && (
+                              <span className="w-2 h-2 rounded-full bg-teal-400 shrink-0 mt-1" />
+                            )}
+                          </button>
+                        );
+                      })
                     )}
                   </div>
                 </div>
@@ -2470,7 +2568,7 @@ export default function AppDashboard() {
                   {/* Thread Header */}
                   <div className="p-3.5 border-b border-slate-800 bg-slate-900/80 flex items-center justify-between">
                     <span className="text-xs font-bold text-white font-mono">
-                      {selectedConversation ? `Chat with +${conversations.find((c) => c.id === selectedConversation)?.phone || ''}` : 'Select a conversation'}
+                      {selectedConversation ? `Chat with +${conversations.find((c) => (c.id === selectedConversation || c.phone === selectedConversation))?.phone || selectedConversation}` : 'Select a conversation'}
                     </span>
                   </div>
 
@@ -2481,25 +2579,29 @@ export default function AppDashboard() {
                         No messages in this thread yet.
                       </div>
                     ) : (
-                      conversationMessages.map((msg, i) => (
-                        <div
-                          key={i}
-                          className={`flex ${msg.direction === 'OUTGOING' ? 'justify-end' : 'justify-start'}`}
-                        >
+                      conversationMessages.map((msg, i) => {
+                        const isOutgoing = msg.direction === 'OUTGOING' || msg.type === 'outgoing';
+                        const timeStr = msg.createdAt || msg.time || new Date().toISOString();
+                        return (
                           <div
-                            className={`max-w-[75%] rounded-2xl px-3.5 py-2 text-xs shadow ${
-                              msg.direction === 'OUTGOING'
-                                ? 'bg-[#005c4b] text-white rounded-tr-none'
-                                : 'bg-[#202c33] text-slate-200 rounded-tl-none'
-                            }`}
+                            key={msg.id || i}
+                            className={`flex ${isOutgoing ? 'justify-end' : 'justify-start'}`}
                           >
-                            <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
-                            <span className="text-[10px] text-slate-400 block text-right mt-1 font-mono">
-                              {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </span>
+                            <div
+                              className={`max-w-[75%] rounded-2xl px-3.5 py-2 text-xs shadow ${
+                                isOutgoing
+                                  ? 'bg-[#005c4b] text-white rounded-tr-none'
+                                  : 'bg-[#202c33] text-slate-200 rounded-tl-none'
+                              }`}
+                            >
+                              <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
+                              <span className="text-[10px] text-slate-400 block text-right mt-1 font-mono">
+                                {new Date(timeStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                      ))
+                        );
+                      })
                     )}
                   </div>
 
@@ -2562,7 +2664,7 @@ export default function AppDashboard() {
                   </div>
                 ) : (
                   instances.map((inst) => {
-                    const isOpen = inst.connectionStatus === 'open';
+                    const isOpen = inst.status?.toUpperCase() === 'OPEN' || inst.connectionStatus === 'open';
                     return (
                       <div
                         key={inst.id}
@@ -2579,7 +2681,7 @@ export default function AppDashboard() {
                             </div>
                             <div>
                               <h3 className="text-sm font-bold text-white">{inst.name}</h3>
-                              <p className="text-xs text-slate-400 font-mono">{inst.phone || 'No phone set'}</p>
+                              <p className="text-xs text-slate-400 font-mono">{inst.profileNumber || inst.phone || 'No phone set'}</p>
                             </div>
                           </div>
                           <span
