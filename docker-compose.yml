@@ -46,9 +46,11 @@ services:
       - app_data:/app/prisma
     networks:
       - default
+      - dokploy-network
     depends_on:
       - redis
       - app
+      - evolution
 
   redis:
     image: redis:7-alpine

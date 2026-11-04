@@ -650,3 +650,4 @@ export function SystemLogsConsole({ connectedInstancesCount = 0 }: SystemLogsCon
     </div>
   );
 }
+
