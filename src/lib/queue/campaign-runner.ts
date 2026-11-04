@@ -459,6 +459,40 @@ export class CampaignRunner {
               lastError: errorMessage,
               failedAt: new Date(),
             });
+
+            // User requirement: "if message fail , it(same msg) will auto asign to second contact"
+            // Reassign the exact failed variant to the next pending contact so this message is delivered!
+            try {
+              if (variant && (recipient.variantId || variant.id)) {
+                const nextPending = await db.campaignRecipient.findFirst({
+                  where: {
+                    campaignId,
+                    status: 'PENDING',
+                    id: { not: recipient.id },
+                  },
+                  orderBy: { rotationIndex: 'asc' },
+                });
+
+                if (nextPending) {
+                  await db.campaignRecipient.update({
+                    where: { id: nextPending.id },
+                    data: {
+                      variantId: variant.id || recipient.variantId,
+                      variantIndex: recipient.variantIndex,
+                    },
+                  });
+                  eventBus.emitLog(campaignId, {
+                    type: 'info',
+                    status: 'VARIANT_REASSIGNED',
+                    message: `Undelivered message variant (${variant.label || `M${variant.position || ''}`}) auto-reassigned to next contact (${nextPending.phone}).`,
+                    recipientId: nextPending.id,
+                    phone: nextPending.phone,
+                  });
+                }
+              }
+            } catch (reassignErr: any) {
+              logger.warn({ reassignErr: reassignErr.message }, 'Failed to reassign failed variant to next contact');
+            }
           }
 
           eventBus.emitLog(campaignId, {

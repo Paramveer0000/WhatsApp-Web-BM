@@ -471,7 +471,7 @@ export function redistributeRemainingRecipients(
 
 export const VariantInputSchema = z.object({
   id: z.string().optional(),
-  position: z.number().int().min(1).max(8),
+  position: z.number().int().min(1).max(20),
   label: z.string().min(1).max(50),
   content: z.string().min(1, 'Message text is required'),
   mediaType: z.string().nullable().optional(),
@@ -495,12 +495,12 @@ export const CampaignRotationSchema = z
   .refine(
     (data) => {
       if (data.distributionMode !== 'SINGLE') {
-        return data.variants.length >= 2 && data.variants.length <= 8;
+        return data.variants.length >= 2 && data.variants.length <= 20;
       }
       return data.variants.length >= 1;
     },
     {
-      message: 'Multi-message distribution modes (Rotate, Random, Weighted) require between 2 and 8 message variants.',
+      message: 'Multi-message distribution modes (Rotate, Random, Weighted) require between 2 and 20 message variants.',
       path: ['variants'],
     }
   )

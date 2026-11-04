@@ -279,6 +279,9 @@ export default function MultiMessageRotationEditor({
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [previewRecipientNumber, setPreviewRecipientNumber] = useState(1);
   const [editingCardIndex, setEditingCardIndex] = useState(0);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [previewPage, setPreviewPage] = useState(0);
+  const PREVIEW_PAGE_SIZE = 16;
 
   // Auto-sync singleTemplate to/from variants when switching modes
   const handleModeChange = (newMode: DistributionMode) => {
@@ -328,7 +331,7 @@ export default function MultiMessageRotationEditor({
 
   // Add new message card (up to 8)
   const handleAddVariant = () => {
-    if (variants.length >= 8) return;
+    if (variants.length >= 20) return;
     const newPos = variants.length + 1;
     const equalWeight = Math.floor(100 / (variants.length + 1));
     const updated = [
@@ -371,8 +374,8 @@ export default function MultiMessageRotationEditor({
 
   // Duplicate variant
   const handleDuplicateVariant = (index: number) => {
-    if (variants.length >= 8) {
-      alert('Maximum 8 message variants allowed.');
+    if (variants.length >= 20) {
+      alert('Maximum 20 message variants allowed.');
       return;
     }
     const source = variants[index]!;
@@ -408,40 +411,62 @@ export default function MultiMessageRotationEditor({
     onVariantsChange(updated);
   };
 
-  // Intelligent Variations Generator Helper
-  const handleGenerateVariations = () => {
-    const baseContent = variants[0]?.content || singleTemplate || 'Special discount offer for your team';
-    const variationsTemplates = [
-      {
-        label: 'Message 1 (Friendly)',
-        content: `{Hi|Hello|Hey} {name|Friend}! Exciting news: we have an exclusive *20% discount* waiting for you today. Use code \`SAVE20\` at checkout!`,
-      },
-      {
-        label: 'Message 2 (Direct & Short)',
-        content: `Hello {name|there}: Enjoy 20% off all orders this week with code \`SAVE20\`. Valid till Sunday!`,
-      },
-      {
-        label: 'Message 3 (Value & Feature)',
-        content: `Greetings {name|Partner}! Discover what is new in our latest release. Take advantage of a special 20% savings with voucher \`SAVE20\`.`,
-      },
-      {
-        label: 'Message 4 (Urgent Exclusive)',
-        content: `Reminder {name|Customer}: Your private 20% discount voucher \`SAVE20\` expires soon. Don’t miss out!`,
-      },
-    ];
+  // Intelligent Variations Generator: takes 1 base message and generates 12 AI variations (13 total)
+  const handleGenerateVariations = async () => {
+    const baseContent =
+      variants[editingCardIndex]?.content ||
+      variants[0]?.content ||
+      singleTemplate ||
+      '{Hi|Hello|Hey} {name|Friend}! Exciting news: we have an exclusive *20% discount* waiting for you today. Use code `SAVE20` at checkout!';
 
-    const updated = variationsTemplates.map((item, idx) => ({
-      position: idx + 1,
-      label: item.label,
-      content: item.content,
-      mediaType: 'text',
-      mediaUrl: '',
-      fileName: '',
-      weight: 25,
-    }));
+    setIsGenerating(true);
+    try {
+      const res = await fetch('/api/ai/variations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ baseMessage: baseContent, count: 12 }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to generate variations');
 
-    onVariantsChange(updated);
-    alert('Generated 4 distinct tone variants (Friendly, Direct, Value, Urgent) with diverse vocabulary!');
+      // Keep Message 1 as the original provided base message
+      const totalCount = 1 + (data.variations?.length || 12);
+      const equalWeight = Math.floor(100 / totalCount);
+
+      const baseVariant: VariantInput = {
+        position: 1,
+        label: variants[0]?.label || 'Message 1 (Base)',
+        content: baseContent,
+        mediaType: variants[0]?.mediaType || singleMediaType || 'text',
+        mediaUrl: variants[0]?.mediaUrl || singleMediaUrl || '',
+        fileName: variants[0]?.fileName || singleFileName || '',
+        weight: equalWeight,
+      };
+
+      // Add the 12 AI variations as Messages 2 to 13
+      const generatedList: VariantInput[] = (data.variations || []).map((item: any, idx: number) => ({
+        position: idx + 2,
+        label: item.label || `Message ${idx + 2}`,
+        content: item.content,
+        mediaType: baseVariant.mediaType,
+        mediaUrl: baseVariant.mediaUrl,
+        fileName: baseVariant.fileName,
+        weight: equalWeight,
+      }));
+
+      const allVariants = [baseVariant, ...generatedList];
+      // Adjust remainder weight on first variant
+      const sumWeight = allVariants.reduce((sum, v) => sum + (v.weight || 0), 0);
+      if (sumWeight < 100) allVariants[0]!.weight = (allVariants[0]!.weight || 0) + (100 - sumWeight);
+
+      onVariantsChange(allVariants);
+      setEditingCardIndex(0);
+      onActivePreviewVariantIndexChange(0);
+    } catch (err: any) {
+      alert(err.message || 'Error generating variations');
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   // Detect duplicate pairs
@@ -450,7 +475,7 @@ export default function MultiMessageRotationEditor({
     return detectDuplicateVariants(variants, 0.85);
   }, [variants, distributionMode]);
 
-  // Rotation colors per message
+  // Rotation colors per message (16 vibrant palettes for up to 20 messages)
   const badgeColors = [
     { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/40', bar: 'bg-emerald-500' },
     { bg: 'bg-sky-500/20', text: 'text-sky-300', border: 'border-sky-500/40', bar: 'bg-sky-500' },
@@ -460,23 +485,36 @@ export default function MultiMessageRotationEditor({
     { bg: 'bg-indigo-500/20', text: 'text-indigo-300', border: 'border-indigo-500/40', bar: 'bg-indigo-500' },
     { bg: 'bg-teal-500/20', text: 'text-teal-300', border: 'border-teal-500/40', bar: 'bg-teal-500' },
     { bg: 'bg-cyan-500/20', text: 'text-cyan-300', border: 'border-cyan-500/40', bar: 'bg-cyan-500' },
+    { bg: 'bg-fuchsia-500/20', text: 'text-fuchsia-300', border: 'border-fuchsia-500/40', bar: 'bg-fuchsia-500' },
+    { bg: 'bg-orange-500/20', text: 'text-orange-300', border: 'border-orange-500/40', bar: 'bg-orange-500' },
+    { bg: 'bg-lime-500/20', text: 'text-lime-300', border: 'border-lime-500/40', bar: 'bg-lime-500' },
+    { bg: 'bg-pink-500/20', text: 'text-pink-300', border: 'border-pink-500/40', bar: 'bg-pink-500' },
+    { bg: 'bg-violet-500/20', text: 'text-violet-300', border: 'border-violet-500/40', bar: 'bg-violet-500' },
+    { bg: 'bg-yellow-500/20', text: 'text-yellow-300', border: 'border-yellow-500/40', bar: 'bg-yellow-500' },
+    { bg: 'bg-emerald-600/20', text: 'text-emerald-200', border: 'border-emerald-600/40', bar: 'bg-emerald-600' },
+    { bg: 'bg-blue-600/20', text: 'text-blue-200', border: 'border-blue-600/40', bar: 'bg-blue-600' },
   ];
 
-  // Calculate projected recipient assignments for the preview strip (first 12)
-  const previewStrip = Array.from({ length: 12 }, (_, i) => {
+  // Dynamic window for sequence preview across the ENTIRE audience
+  const totalAudience = Math.max(totalRecipientsCount, 1);
+  const startRecipientIdx = previewPage * PREVIEW_PAGE_SIZE;
+  const currentWindowSize = Math.min(PREVIEW_PAGE_SIZE, Math.max(1, totalAudience - startRecipientIdx));
+
+  const previewStrip = Array.from({ length: currentWindowSize }, (_, i) => {
+    const globalIdx = startRecipientIdx + i;
     let variantPos = 1;
     if (distributionMode === 'SINGLE' || variants.length === 0) {
       variantPos = 1;
     } else if (distributionMode === 'ROTATE') {
-      variantPos = (i % variants.length) + 1;
+      variantPos = (globalIdx % variants.length) + 1;
     } else if (distributionMode === 'RANDOM') {
-      variantPos = ((i * 7 + 3) % variants.length) + 1;
+      variantPos = ((globalIdx * 7 + 3) % variants.length) + 1;
     } else if (distributionMode === 'WEIGHTED') {
-      variantPos = (i % variants.length) + 1;
+      variantPos = (globalIdx % variants.length) + 1;
     }
     const color = badgeColors[(variantPos - 1) % badgeColors.length]!;
     return {
-      recipientIdx: i + 1,
+      recipientIdx: globalIdx + 1,
       variantPos,
       label: `M${variantPos}`,
       color,
@@ -678,27 +716,28 @@ export default function MultiMessageRotationEditor({
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold text-white flex items-center gap-1.5">
                 <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Message Variants ({variants.length} of 8 max)</span>
+                <span>Message Variants ({variants.length} of 20 max)</span>
               </span>
             </div>
 
             <div className="flex items-center gap-2">
               <button
                 type="button"
+                disabled={isGenerating}
                 onClick={handleGenerateVariations}
-                className="flex items-center gap-1 px-3 py-1.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white rounded-xl text-xs font-semibold shadow transition cursor-pointer"
-                title="Automatically generate 4 distinct tone variations"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 disabled:opacity-50 text-white rounded-xl text-xs font-semibold shadow transition cursor-pointer"
+                title="Keep base message and auto-generate 12 distinct variations with AI"
               >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Auto-Generate 4 Variations</span>
+                {isGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                <span>{isGenerating ? 'Generating 12 Variations...' : 'Auto-Generate 12 Variations'}</span>
               </button>
 
               <button
                 type="button"
-                disabled={variants.length >= 8}
+                disabled={variants.length >= 20 || isGenerating}
                 onClick={handleAddVariant}
                 className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
-                  variants.length < 8
+                  variants.length < 20
                     ? 'bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30'
                     : 'bg-slate-800 text-slate-600 cursor-not-allowed'
                 }`}
@@ -710,15 +749,40 @@ export default function MultiMessageRotationEditor({
           </div>
 
           {/* Rotation Order Preview Strip (Section 2) */}
-          <div className="bg-slate-950 border border-slate-800 rounded-2xl p-3.5 space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-bold text-slate-300 flex items-center gap-1.5">
-                <Shuffle className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Live Rotation Sequence Strip (First 12 Recipients)</span>
-              </span>
-              <span className="text-[11px] text-slate-400 font-mono">
-                Clean audience spread with no skipped gaps
-              </span>
+          <div className="bg-slate-950 border border-slate-800 rounded-2xl p-3.5 space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div>
+                <span className="font-bold text-slate-200 flex items-center gap-1.5">
+                  <Shuffle className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Full Audience Continuous Rotation (All {totalRecipientsCount} Recipients)</span>
+                </span>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Rotation cycles continuously through all {totalRecipientsCount} contacts (M1 → M2 → ... → M{variants.length} → M1...) without stopping.
+                </p>
+              </div>
+
+              {/* Sequence Pagination Window */}
+              <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-xl p-1 text-[11px]">
+                <button
+                  type="button"
+                  disabled={previewPage === 0}
+                  onClick={() => setPreviewPage(Math.max(0, previewPage - 1))}
+                  className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-300 font-semibold transition"
+                >
+                  ‹ Prev
+                </button>
+                <span className="font-mono text-emerald-400 text-[10px] px-1.5 font-bold">
+                  Recipients {startRecipientIdx + 1}–{Math.min(totalRecipientsCount, startRecipientIdx + currentWindowSize)} of {totalRecipientsCount}
+                </span>
+                <button
+                  type="button"
+                  disabled={startRecipientIdx + PREVIEW_PAGE_SIZE >= totalRecipientsCount}
+                  onClick={() => setPreviewPage(previewPage + 1)}
+                  className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-300 font-semibold transition"
+                >
+                  Next ›
+                </button>
+              </div>
             </div>
 
             {/* Sequence Chips */}
