@@ -60,7 +60,8 @@ import {
   AlertTriangle,
   X,
   Sliders,
-  ListFilter
+  ListFilter,
+  UserPlus
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -81,6 +82,7 @@ import CampaignVariantsLiveTab from '@/components/CampaignVariantsLiveTab';
 import { DistributionMode, RotationScope, VariantInput } from '@/lib/rotation';
 import { GuardrailsConsoleTab } from '@/components/GuardrailsConsoleTab';
 import { SystemLogsConsole } from '@/components/SystemLogsConsole';
+import { ManualAddContactModal } from '@/components/ManualAddContactModal';
 
 type TabType = 'overview' | 'campaigns' | 'live' | 'wizard' | 'contacts' | 'templates' | 'replies' | 'instances' | 'guardrails' | 'reports' | 'system' | 'settings';
 
@@ -123,6 +125,8 @@ export default function AppDashboard() {
   const [showImportWizard, setShowImportWizard] = useState(false);
   const [importingFile, setImportingFile] = useState(false);
   const [importStats, setImportStats] = useState<any>(null);
+  const [showAddContactModal, setShowAddContactModal] = useState(false);
+  const [contactSuccessMsg, setContactSuccessMsg] = useState('');
 
   // Settings State
   const [settings, setSettings] = useState<Record<string, string>>({});
@@ -2162,6 +2166,16 @@ export default function AppDashboard() {
 
                 {/* Quick Actions & Template Downloads */}
                 <div className="flex flex-wrap items-center gap-2">
+                  {/* Manual Add Contact Button */}
+                  <button
+                    onClick={() => setShowAddContactModal(true)}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-md shadow-emerald-950/40"
+                    title="Manually add a single contact"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                    <span>Add Contact</span>
+                  </button>
+
                   <a
                     href="/api/contacts/sample?format=csv"
                     download="sample_contacts.csv"
@@ -2180,7 +2194,7 @@ export default function AppDashboard() {
                   </a>
 
                   {/* Upload Contacts Button */}
-                  <label className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow">
+                  <label className="flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-bold transition cursor-pointer border border-slate-700/80 shadow">
                     <Upload className="w-3.5 h-3.5" />
                     <span>{importingFile ? 'Importing...' : 'Import Contacts'}</span>
                     <input
@@ -2193,6 +2207,17 @@ export default function AppDashboard() {
                   </label>
                 </div>
               </div>
+
+              {/* Manual Contact Added Success Banner */}
+              {contactSuccessMsg && (
+                <div className="bg-slate-900 border border-emerald-500/40 rounded-2xl p-4 text-xs font-mono text-emerald-400 flex items-center justify-between shadow-lg">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <span>{contactSuccessMsg}</span>
+                  </div>
+                  <button onClick={() => setContactSuccessMsg('')} className="text-slate-400 hover:text-white">✕</button>
+                </div>
+              )}
 
               {/* Import Results Banner */}
               {importStats && (
@@ -2271,7 +2296,18 @@ export default function AppDashboard() {
                             <td className="p-4 font-bold text-white">{c.name || 'Unnamed'}</td>
                             <td className="p-4 font-mono tabular-nums text-emerald-400">+{c.phone}</td>
                             <td className="p-4 font-mono text-[11px] text-slate-400">
-                              {c.customVariables ? JSON.stringify(c.customVariables) : '-'}
+                              {(() => {
+                                const raw = c.customFields || c.customVariables;
+                                if (!raw) return '-';
+                                try {
+                                  const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+                                  return Object.entries(parsed)
+                                    .map(([k, v]) => `${k}: ${v}`)
+                                    .join(', ') || '-';
+                                } catch {
+                                  return String(raw);
+                                }
+                              })()}
                             </td>
                             <td className="p-4 font-mono text-[11px] text-slate-400">
                               {new Date(c.createdAt).toLocaleDateString()}
@@ -2282,6 +2318,18 @@ export default function AppDashboard() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Manual Add Contact Modal */}
+              <ManualAddContactModal
+                isOpen={showAddContactModal}
+                onClose={() => setShowAddContactModal(false)}
+                onContactSaved={(newContact) => {
+                  loadContacts();
+                  setContactSuccessMsg(`Contact ${newContact.name || newContact.phone} successfully added!`);
+                  setTimeout(() => setContactSuccessMsg(''), 4000);
+                }}
+                availableLists={contactLists}
+              />
             </div>
           )}
 

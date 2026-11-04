@@ -64,27 +64,57 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await req.json();
-    const phoneResult = normalizePhone(body.phone);
+    if (!body.phone) {
+      return NextResponse.json({ error: 'Phone number is required' }, { status: 400 });
+    }
+
+    const phoneResult = normalizePhone(body.phone, body.defaultCountryCode || '91');
 
     if (!phoneResult.isValid) {
-      return NextResponse.json({ error: phoneResult.error || 'Invalid phone' }, { status: 400 });
+      return NextResponse.json({ error: phoneResult.error || 'Invalid phone number format' }, { status: 400 });
+    }
+
+    let customFieldsStr: string | null = null;
+    if (body.customFields) {
+      customFieldsStr = typeof body.customFields === 'string' ? body.customFields : JSON.stringify(body.customFields);
+    }
+
+    let tagsStr: string | null = null;
+    if (body.tags) {
+      tagsStr = typeof body.tags === 'string' ? body.tags : JSON.stringify(body.tags);
     }
 
     const contact = await db.contact.upsert({
       where: { phone: phoneResult.formatted },
       update: {
-        name: body.name || undefined,
-        customFields: body.customFields ? JSON.stringify(body.customFields) : undefined,
-        tags: body.tags ? JSON.stringify(body.tags) : undefined,
+        name: body.name ? String(body.name).trim() : undefined,
+        customFields: customFieldsStr || undefined,
+        tags: tagsStr || undefined,
       },
       create: {
         phone: phoneResult.formatted,
-        name: body.name || null,
-        customFields: body.customFields ? JSON.stringify(body.customFields) : null,
-        tags: body.tags ? JSON.stringify(body.tags) : JSON.stringify(['manual']),
+        name: body.name ? String(body.name).trim() : null,
+        customFields: customFieldsStr,
+        tags: tagsStr || JSON.stringify(['manual']),
         optInStatus: true,
       },
     });
+
+    if (body.listId) {
+      await db.listContact.upsert({
+        where: {
+          listId_contactId: {
+            listId: body.listId,
+            contactId: contact.id,
+          },
+        },
+        update: {},
+        create: {
+          listId: body.listId,
+          contactId: contact.id,
+        },
+      });
+    }
 
     return NextResponse.json({ success: true, contact });
   } catch (err: any) {
@@ -92,4 +122,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
-
