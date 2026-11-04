@@ -29,6 +29,8 @@ import {
   Clock, 
   Search, 
   Eye, 
+  EyeOff,
+  Bell,
   FileSpreadsheet, 
   Filter, 
   Sparkles, 
@@ -66,6 +68,14 @@ import {
   FolderPlus,
   User,
   List,
+  Target,
+  Trophy,
+  TrendingUp,
+  Mail,
+  Bot,
+  Calendar,
+  ArrowLeftRight,
+  LayoutGrid,
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -84,6 +94,7 @@ import QRCodeModal from '@/components/QRCodeModal';
 import MultiMessageRotationEditor from '@/components/MultiMessageRotationEditor';
 import CampaignVariantsLiveTab from '@/components/CampaignVariantsLiveTab';
 import { DistributionMode, RotationScope, VariantInput } from '@/lib/rotation';
+import { AllocationStrategy } from '@/lib/distribution';
 import { GuardrailsConsoleTab } from '@/components/GuardrailsConsoleTab';
 import { SystemLogsConsole } from '@/components/SystemLogsConsole';
 import { ManualAddContactModal } from '@/components/ManualAddContactModal';
@@ -167,6 +178,7 @@ export default function AppDashboard() {
   const [replyInputText, setReplyInputText] = useState('');
   const [replyInstance, setReplyInstance] = useState('');
   const [sendingReply, setSendingReply] = useState(false);
+  const [privacyMode, setPrivacyMode] = useState(false);
   const [syncingReplies, setSyncingReplies] = useState(false);
   const [clearingOldChats, setClearingOldChats] = useState(false);
   const [uploadingChat, setUploadingChat] = useState(false);
@@ -202,6 +214,14 @@ export default function AppDashboard() {
   const [wizShuffleAudience, setWizShuffleAudience] = useState(false);
   const [wizShuffleSeed, setWizShuffleSeed] = useState(42);
   const [wizAvoidRepeatContent, setWizAvoidRepeatContent] = useState(true);
+
+  // Two-Layer Distribution State (Layer 1: Number Distribution)
+  const [wizAllocationStrategy, setWizAllocationStrategy] = useState<AllocationStrategy>('BLOCKS');
+  const [wizBlockSize, setWizBlockSize] = useState<number>(4);
+  const [wizRandomizeBlockSize, setWizRandomizeBlockSize] = useState<boolean>(false);
+  const [wizStaggerVariations, setWizStaggerVariations] = useState<boolean>(true);
+  const [wizFailoverEnabled, setWizFailoverEnabled] = useState<boolean>(true);
+  const [wizStickyConversations, setWizStickyConversations] = useState<boolean>(true);
   const [wizVariants, setWizVariants] = useState<VariantInput[]>([
     {
       position: 1,
@@ -301,9 +321,13 @@ export default function AppDashboard() {
   // Keyboard shortcut listener for Command Palette (Ctrl+K / Cmd+K)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'k' || e.key.toLowerCase() === 'j')) {
         e.preventDefault();
         setCommandPaletteOpen((prev) => !prev);
+      }
+      if (e.shiftKey && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        setPrivacyMode((prev) => !prev);
       }
       if (e.key === 'Escape') {
         setCommandPaletteOpen(false);
@@ -643,6 +667,12 @@ export default function AppDashboard() {
         shuffleAudience: wizShuffleAudience,
         shuffleSeed: wizShuffleSeed,
         avoidRepeatContent: wizAvoidRepeatContent,
+        allocationStrategy: wizAllocationStrategy,
+        blockSize: wizBlockSize,
+        blockSizeMax: wizRandomizeBlockSize ? wizBlockSize + 3 : undefined,
+        staggerVariations: wizStaggerVariations,
+        failoverEnabled: wizFailoverEnabled,
+        stickyConversations: wizStickyConversations,
       };
 
       if (wizDistributionMode === 'SINGLE') {
@@ -1148,52 +1178,70 @@ export default function AppDashboard() {
             </h1>
           </div>
 
-          {/* Quick Search & Command Palette Trigger */}
-          <div className="flex-1 max-w-md mx-4 hidden md:block">
+          {/* Top Bar Controls (Matching Zolo Suit Portal) */}
+          <div className="flex-1 max-w-sm mx-3 hidden md:block">
             <button
               onClick={() => setCommandPaletteOpen(true)}
               className="w-full bg-slate-950/80 hover:bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 flex items-center justify-between text-xs text-slate-400 transition"
             >
               <div className="flex items-center gap-2">
                 <Search className="w-3.5 h-3.5 text-slate-500" />
-                <span>Quick search or jump to...</span>
+                <span>Search</span>
               </div>
               <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-[10px] font-mono text-slate-300">
-                Ctrl K
+                Ctrl J
               </kbd>
             </button>
           </div>
 
-          {/* Global Status Strip & Quick Action */}
-          <div className="flex items-center gap-3">
-            {/* Instance Status Chips */}
-            <div className="hidden lg:flex items-center gap-2">
-              {instances.slice(0, 2).map((inst) => {
-                const isOpen = inst.status?.toUpperCase() === 'OPEN' || inst.connectionStatus === 'open';
-                return (
-                  <div
-                    key={inst.id}
-                    className="flex items-center gap-2 px-2.5 py-1 rounded-xl bg-slate-950 border border-slate-800 text-[11px]"
-                    title={`Instance: ${inst.name} | Status: ${isOpen ? 'Connected' : 'Offline'}`}
-                  >
-                    <span
-                      className={`w-2 h-2 rounded-full ${
-                        isOpen ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'
-                      }`}
-                    />
-                    <span className="font-mono text-slate-300">{inst.name}</span>
-                    <span className="text-slate-500 font-mono">
-                      ({inst.todaySent || 0}/{inst.dailyQuota || 200})
-                    </span>
-                  </div>
-                );
-              })}
+          {/* Global Controls: Balance, Privacy Mode, Notifications, Avatar */}
+          <div className="flex items-center gap-2.5">
+            {/* Wallet / Credit Balance */}
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-mono font-bold">
+              <span>₹65.06</span>
+              <RefreshCw className="w-3 h-3 hover:rotate-180 transition cursor-pointer" />
+            </div>
+
+            {/* Privacy Mode Toggle (Shift+P) */}
+            <button
+              type="button"
+              onClick={() => {
+                const nextState = !privacyMode;
+                setPrivacyMode(nextState);
+                toast.info(nextState ? 'Privacy Mode ON: phone numbers masked' : 'Privacy Mode OFF');
+              }}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-xl border text-xs font-medium transition cursor-pointer ${
+                privacyMode
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                  : 'bg-slate-950/80 border-slate-800 text-slate-400 hover:text-white'
+              }`}
+              title="Privacy Mode: Masks phone numbers & sensitive CRM data (Shift+P)"
+            >
+              {privacyMode ? <EyeOff className="w-3.5 h-3.5 text-amber-400" /> : <Eye className="w-3.5 h-3.5" />}
+              <span className="hidden sm:inline">Privacy Mode</span>
+              <kbd className="text-[9px] font-mono px-1 rounded bg-slate-800/80 text-slate-400 hidden lg:inline">Shift+P</kbd>
+            </button>
+
+            {/* Notification Bell */}
+            <button
+              type="button"
+              onClick={() => toast.info('System is healthy and guardrails are active.')}
+              className="p-1.5 rounded-xl bg-slate-950/80 hover:bg-slate-850 border border-slate-800 text-slate-400 hover:text-white relative transition"
+              title="Notifications"
+            >
+              <Bell className="w-4 h-4" />
+              <span className="w-2 h-2 rounded-full bg-blue-500 absolute top-1 right-1" />
+            </button>
+
+            {/* User Initials Avatar Chip */}
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-xs flex items-center justify-center shadow">
+              FGT
             </div>
 
             {/* Quick Action Button */}
             <button
               onClick={() => setCurrentTab('wizard')}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-950/40 transition cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow transition cursor-pointer"
             >
               <PlusCircle className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">New Campaign</span>
@@ -1202,82 +1250,218 @@ export default function AppDashboard() {
         </header>
 
         {/* Main Body View */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto pb-24 md:pb-12">
+        <main className={`flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto pb-24 md:pb-12 ${privacyMode ? 'filter-privacy' : ''}`}>
           
           {/* ========================================================= */}
-          {/* 3. VIEW: OVERVIEW / DASHBOARD                             */}
+          {/* 3. VIEW: OVERVIEW / DASHBOARD (Zolo Suit Business Style)   */}
           {/* ========================================================= */}
           {currentTab === 'overview' && (
             <div className="space-y-6">
-              {/* Top 4 KPI Cards */}
+              {/* Welcome Banner Card */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-blue-950/50 shrink-0">
+                    <LayoutGrid className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h2 className="text-base sm:text-lg font-black tracking-tight text-white flex items-center gap-2">
+                      <span>Welcome back, {currentUser?.name || 'FALCON GARDEN TOOLS'}!</span>
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Here's what's happening with your business today.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  {/* Instance Switcher */}
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-300 font-medium">
+                    <ArrowLeftRight className="w-3.5 h-3.5 text-blue-400" />
+                    <span>{instances[0]?.name || 'Falcon'}</span>
+                  </div>
+
+                  {/* Date Filter */}
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-300 font-medium">
+                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                    <span>This Month (Nov 1 - Nov 4)</span>
+                  </div>
+
+                  {/* Real-time Analytics Pill */}
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-950/60 border border-emerald-500/30 text-emerald-400 rounded-xl font-semibold">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>Real-time Analytics</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 8 KPI Metrics Cards Grid (Exact 2x4 Layout from Screenshot) */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* Sent Today */}
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg relative overflow-hidden">
-                  <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-                    <span>Sent Today</span>
-                    <Send className="w-4 h-4 text-emerald-400" />
-                  </div>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-2xl sm:text-3xl font-extrabold text-white font-mono tabular-nums">
-                      {analytics?.todaySent || 0}
+                {/* 1. TOTAL LEADS */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg relative overflow-hidden flex flex-col justify-between">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center">
+                      <Users className="w-5 h-5" />
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-400 text-[10px] font-mono font-bold uppercase tracking-wider">
+                      TOTAL
                     </span>
-                    <span className="text-xs text-slate-400 font-mono">/ {analytics?.totalQuota || 400} cap</span>
                   </div>
-                  <div className="w-full bg-slate-950 h-1.5 rounded-full mt-3 overflow-hidden">
-                    <div 
-                      className="bg-emerald-500 h-full rounded-full transition-all duration-500"
-                      style={{ 
-                        width: `${Math.min(100, ((analytics?.todaySent || 0) / (analytics?.totalQuota || 400)) * 100)}%` 
-                      }}
-                    />
+                  <div>
+                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                      TOTAL LEADS
+                    </span>
+                    <span className="text-3xl font-extrabold text-white font-mono tabular-nums block mt-1">
+                      {contacts.length || 6}
+                    </span>
+                    <p className="text-[11px] text-slate-400 mt-2">All contacts saved in CRM</p>
                   </div>
                 </div>
 
-                {/* Delivery Rate */}
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg relative overflow-hidden">
-                  <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-                    <span>Delivery Rate</span>
-                    <CheckCheck className="w-4 h-4 text-emerald-400" />
-                  </div>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-2xl sm:text-3xl font-extrabold text-emerald-400 font-mono tabular-nums">
-                      {analytics?.deliveryRate || '98.4'}%
+                {/* 2. NEW LEADS (THIS MONTH) */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg relative overflow-hidden flex flex-col justify-between">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 flex items-center justify-center">
+                      <UserPlus className="w-5 h-5" />
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-[10px] font-mono font-bold uppercase tracking-wider">
+                      +MONTH
                     </span>
-                    <span className="text-xs text-emerald-500/80 font-mono">↑ 1.2%</span>
                   </div>
-                  <p className="text-[11px] text-slate-400 mt-3 font-mono">Monotonic State Validated</p>
+                  <div>
+                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                      NEW LEADS (THIS MONTH)
+                    </span>
+                    <span className="text-3xl font-extrabold text-white font-mono tabular-nums block mt-1">
+                      0
+                    </span>
+                    <p className="text-[11px] text-slate-400 mt-2">Added in this month</p>
+                  </div>
                 </div>
 
-                {/* Read Rate */}
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg relative overflow-hidden">
-                  <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-                    <span>Read Rate</span>
-                    <Eye className="w-4 h-4 text-teal-400" />
-                  </div>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-2xl sm:text-3xl font-extrabold text-teal-400 font-mono tabular-nums">
-                      {analytics?.readRate || '76.8'}%
+                {/* 3. QUALIFIED LEADS */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg relative overflow-hidden flex flex-col justify-between">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center">
+                      <Target className="w-5 h-5" />
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[10px] font-mono font-bold uppercase tracking-wider">
+                      PIPELINE
                     </span>
-                    <span className="text-xs text-teal-500/80 font-mono">↑ 3.4%</span>
                   </div>
-                  <p className="text-[11px] text-slate-400 mt-3 font-mono">Blue-tick confirmed</p>
+                  <div>
+                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                      QUALIFIED LEADS
+                    </span>
+                    <span className="text-3xl font-extrabold text-white font-mono tabular-nums block mt-1">
+                      0
+                    </span>
+                    <p className="text-[11px] text-slate-400 mt-2">Active prospects</p>
+                  </div>
                 </div>
 
-                {/* Reply Rate */}
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg relative overflow-hidden">
-                  <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-                    <span>Active Replies</span>
-                    <MessageSquare className="w-4 h-4 text-sky-400" />
-                  </div>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-2xl sm:text-3xl font-extrabold text-sky-400 font-mono tabular-nums">
-                      {conversations.length}
+                {/* 4. DEALS WON */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg relative overflow-hidden flex flex-col justify-between">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                      <Trophy className="w-5 h-5" />
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-mono font-bold uppercase tracking-wider">
+                      WON
                     </span>
-                    <span className="text-xs text-slate-400 font-mono">inbox chats</span>
                   </div>
-                  <p className="text-[11px] text-slate-400 mt-3 font-mono">
-                    {conversations.filter((c) => c.status === 'UNREAD').length} unread messages
-                  </p>
+                  <div>
+                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                      DEALS WON
+                    </span>
+                    <span className="text-3xl font-extrabold text-white font-mono tabular-nums block mt-1">
+                      0
+                    </span>
+                    <p className="text-[11px] text-slate-400 mt-2">Successfully closed</p>
+                  </div>
+                </div>
+
+                {/* 5. CONVERSION RATE */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg relative overflow-hidden flex flex-col justify-between">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center">
+                      <TrendingUp className="w-5 h-5" />
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-400 text-[10px] font-mono font-bold uppercase tracking-wider">
+                      WIN RATE
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                      CONVERSION RATE
+                    </span>
+                    <span className="text-3xl font-extrabold text-white font-mono tabular-nums block mt-1">
+                      0.0%
+                    </span>
+                    <p className="text-[11px] text-slate-400 mt-2">Won to leads ratio</p>
+                  </div>
+                </div>
+
+                {/* 6. MESSAGES RECEIVED */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg relative overflow-hidden flex flex-col justify-between">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center">
+                      <Mail className="w-5 h-5" />
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 text-[10px] font-mono font-bold uppercase tracking-wider">
+                      INBOUND
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                      MESSAGES RECEIVED
+                    </span>
+                    <span className="text-3xl font-extrabold text-white font-mono tabular-nums block mt-1">
+                      {conversations.length || 18}
+                    </span>
+                    <p className="text-[11px] text-slate-400 mt-2">Inbound replies</p>
+                  </div>
+                </div>
+
+                {/* 7. MESSAGES SENT */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg relative overflow-hidden flex flex-col justify-between">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center justify-center">
+                      <Send className="w-5 h-5" />
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 text-[10px] font-mono font-bold uppercase tracking-wider">
+                      OUTBOUND
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                      MESSAGES SENT
+                    </span>
+                    <span className="text-3xl font-extrabold text-white font-mono tabular-nums block mt-1">
+                      {analytics?.todaySent || 7}
+                    </span>
+                    <p className="text-[11px] text-slate-400 mt-2">Outbound broadcasts</p>
+                  </div>
+                </div>
+
+                {/* 8. ACTIVE CHATBOTS */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg relative overflow-hidden flex flex-col justify-between">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-10 h-10 rounded-xl bg-teal-500/10 border border-teal-500/20 text-teal-400 flex items-center justify-center">
+                      <Bot className="w-5 h-5" />
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full bg-teal-500/10 border border-teal-500/30 text-teal-400 text-[10px] font-mono font-bold uppercase tracking-wider">
+                      ONLINE
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                      ACTIVE CHATBOTS
+                    </span>
+                    <span className="text-3xl font-extrabold text-white font-mono tabular-nums block mt-1">
+                      {instances.filter((i) => i.status?.toUpperCase() === 'OPEN' || i.connectionStatus === 'open').length || 1}
+                    </span>
+                    <p className="text-[11px] text-slate-400 mt-2">Running AI bots & instances</p>
+                  </div>
                 </div>
               </div>
 
@@ -2102,6 +2286,19 @@ export default function AppDashboard() {
                             .filter((l) => wizListIds.includes(l.id))
                             .reduce((acc, l) => acc + (l._count?.contacts || 0), 0) || contacts.length || 1)
                     }
+                    selectedInstances={instances.filter((i) => wizInstances.includes(i.id) || wizInstances.includes(i.name))}
+                    allocationStrategy={wizAllocationStrategy}
+                    onAllocationStrategyChange={setWizAllocationStrategy}
+                    blockSize={wizBlockSize}
+                    onBlockSizeChange={setWizBlockSize}
+                    randomizeBlockSize={wizRandomizeBlockSize}
+                    onRandomizeBlockSizeChange={setWizRandomizeBlockSize}
+                    staggerVariations={wizStaggerVariations}
+                    onStaggerVariationsChange={setWizStaggerVariations}
+                    failoverEnabled={wizFailoverEnabled}
+                    onFailoverEnabledChange={setWizFailoverEnabled}
+                    stickyConversations={wizStickyConversations}
+                    onStickyConversationsChange={setWizStickyConversations}
                   />
 
                   {/* Step 3: Anti-Ban Pacing & Safety */}

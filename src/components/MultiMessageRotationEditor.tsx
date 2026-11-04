@@ -37,6 +37,11 @@ import {
   detectDuplicateVariants,
   calculateJaccardSimilarity,
 } from '@/lib/rotation';
+import {
+  AllocationStrategy,
+  assignTwoLayerDistribution,
+  MAX_VARIANTS,
+} from '@/lib/distribution';
 import { countSpintaxVariations } from '@/lib/spintax';
 import { toast } from '@/lib/toast';
 
@@ -64,6 +69,20 @@ interface MultiMessageRotationEditorProps {
   activePreviewVariantIndex: number;
   onActivePreviewVariantIndexChange: (index: number) => void;
   totalRecipientsCount?: number;
+  // Two-Layer Distribution Props (Layer 1: Number Distribution)
+  selectedInstances?: any[];
+  allocationStrategy?: AllocationStrategy;
+  onAllocationStrategyChange?: (strategy: AllocationStrategy) => void;
+  blockSize?: number;
+  onBlockSizeChange?: (size: number) => void;
+  randomizeBlockSize?: boolean;
+  onRandomizeBlockSizeChange?: (randomize: boolean) => void;
+  staggerVariations?: boolean;
+  onStaggerVariationsChange?: (stagger: boolean) => void;
+  failoverEnabled?: boolean;
+  onFailoverEnabledChange?: (failover: boolean) => void;
+  stickyConversations?: boolean;
+  onStickyConversationsChange?: (sticky: boolean) => void;
 }
 
 function MediaUploadInput({
@@ -276,13 +295,86 @@ export default function MultiMessageRotationEditor({
   activePreviewVariantIndex,
   onActivePreviewVariantIndexChange,
   totalRecipientsCount = 500,
+  selectedInstances = [],
+  allocationStrategy = 'BLOCKS',
+  onAllocationStrategyChange,
+  blockSize = 5,
+  onBlockSizeChange,
+  randomizeBlockSize = false,
+  onRandomizeBlockSizeChange,
+  staggerVariations = true,
+  onStaggerVariationsChange,
+  failoverEnabled = true,
+  onFailoverEnabledChange,
+  stickyConversations = true,
+  onStickyConversationsChange,
 }: MultiMessageRotationEditorProps) {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [previewRecipientNumber, setPreviewRecipientNumber] = useState(1);
   const [editingCardIndex, setEditingCardIndex] = useState(0);
   const [isGenerating, setIsGenerating] = useState(false);
   const [previewPage, setPreviewPage] = useState(0);
+  const [previewViewMode, setPreviewViewMode] = useState<'lanes' | 'matrix'>('lanes');
+  const [matrixPage, setMatrixPage] = useState(0);
   const PREVIEW_PAGE_SIZE = 16;
+  const MATRIX_PAGE_SIZE = 10;
+
+  // Auto-switch rotationScope to 'INSTANCE' (Per Sending Number) when 2+ instances are selected
+  useEffect(() => {
+    if (selectedInstances.length >= 2 && rotationScope === 'CAMPAIGN' && onRotationScopeChange) {
+      onRotationScopeChange('INSTANCE');
+    }
+  }, [selectedInstances.length, rotationScope, onRotationScopeChange]);
+
+  // Compute live two-layer distribution
+  const twoLayerData = React.useMemo(() => {
+    if (selectedInstances.length < 2) return null;
+    const sampleSize = Math.min(100, Math.max(10, totalRecipientsCount));
+    const sampleContacts = Array.from({ length: sampleSize }, (_, idx) => ({
+      id: `rec_${idx + 1}`,
+      phone: `9198000000${String(idx + 1).padStart(2, '0')}`,
+      name: `Recipient ${idx + 1}`,
+    }));
+
+    const mappedInstances = selectedInstances.map((i) => ({
+      id: i.id || i.name,
+      name: i.name,
+      phone: i.phone,
+      dailyQuota: i.dailyQuota || 200,
+      todaySent: i.todaySent || 0,
+      capacity: Math.max(0, (i.dailyQuota || 200) - (i.todaySent || 0)),
+      healthy: i.status?.toUpperCase() === 'OPEN' || i.connectionStatus === 'open',
+    }));
+
+    const activeVList = variants.length > 0
+      ? variants
+      : [{ position: 1, label: 'Message 1', content: singleTemplate || 'Hello {name}', weight: 100 }];
+
+    return assignTwoLayerDistribution({
+      contacts: sampleContacts,
+      instances: mappedInstances,
+      variants: activeVList,
+      allocationStrategy,
+      blockSize: Math.max(1, blockSize),
+      blockSizeMax: randomizeBlockSize ? blockSize + 3 : undefined,
+      distributionMode,
+      rotationScope,
+      staggerVariations,
+      stickyConversations,
+    });
+  }, [
+    selectedInstances,
+    totalRecipientsCount,
+    variants,
+    singleTemplate,
+    allocationStrategy,
+    blockSize,
+    randomizeBlockSize,
+    distributionMode,
+    rotationScope,
+    staggerVariations,
+    stickyConversations,
+  ]);
 
   // Auto-sync singleTemplate to/from variants when switching modes
   const handleModeChange = (newMode: DistributionMode) => {
@@ -531,6 +623,431 @@ export default function MultiMessageRotationEditor({
 
   return (
     <div className="space-y-4">
+      {/* ========================================================= */}
+      {/* 0. LAYER 1: HOW TO SPLIT CONTACTS BETWEEN NUMBERS        */}
+      {/* ========================================================= */}
+      {selectedInstances && selectedInstances.length >= 2 ? (
+        <div className="bg-slate-900 border border-emerald-500/30 rounded-2xl p-4 shadow-xl space-y-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">
+                <Smartphone className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                  <span>How to Split Contacts Between Numbers</span>
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold">
+                    Layer 1
+                  </span>
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  Broadcast is partitioned across {selectedInstances.length} active WhatsApp numbers to distribute traffic naturally.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-mono text-emerald-400 font-semibold bg-emerald-950/60 border border-emerald-500/30 px-2.5 py-1 rounded-xl">
+                {selectedInstances.length} Numbers Selected
+              </span>
+            </div>
+          </div>
+
+          {/* Strategy Selection Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 text-xs">
+            {/* Strategy 1: Blocks */}
+            <button
+              type="button"
+              onClick={() => onAllocationStrategyChange && onAllocationStrategyChange('BLOCKS')}
+              className={`p-3 rounded-xl border text-left transition flex flex-col justify-between cursor-pointer ${
+                allocationStrategy === 'BLOCKS'
+                  ? 'bg-emerald-600/20 border-emerald-500 text-white shadow-md shadow-emerald-950/40'
+                  : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-850'
+              }`}
+            >
+              <div>
+                <p className="font-bold text-slate-100 flex items-center justify-between">
+                  <span>1. Blocks</span>
+                  {allocationStrategy === 'BLOCKS' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
+                </p>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Consecutive groups of {blockSize} contacts per number (A:1-{blockSize}, B:{blockSize + 1}-{blockSize * 2}...).
+                </p>
+              </div>
+              <span className="text-[9px] text-emerald-400 font-bold mt-2 font-mono">Recommended ⭐</span>
+            </button>
+
+            {/* Strategy 2: Round Robin */}
+            <button
+              type="button"
+              onClick={() => onAllocationStrategyChange && onAllocationStrategyChange('ROUND_ROBIN')}
+              className={`p-3 rounded-xl border text-left transition flex flex-col justify-between cursor-pointer ${
+                allocationStrategy === 'ROUND_ROBIN'
+                  ? 'bg-emerald-600/20 border-emerald-500 text-white shadow-md shadow-emerald-950/40'
+                  : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-850'
+              }`}
+            >
+              <div>
+                <p className="font-bold text-slate-100 flex items-center justify-between">
+                  <span>2. Round-Robin</span>
+                  {allocationStrategy === 'ROUND_ROBIN' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
+                </p>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Alternates contacts 1-by-1 across numbers (C1→A, C2→B, C3→A, C4→B...).
+                </p>
+              </div>
+              <span className="text-[9px] text-slate-400 mt-2 font-mono">1-by-1 Interleaved</span>
+            </button>
+
+            {/* Strategy 3: Proportional */}
+            <button
+              type="button"
+              onClick={() => onAllocationStrategyChange && onAllocationStrategyChange('PROPORTIONAL')}
+              className={`p-3 rounded-xl border text-left transition flex flex-col justify-between cursor-pointer ${
+                allocationStrategy === 'PROPORTIONAL'
+                  ? 'bg-emerald-600/20 border-emerald-500 text-white shadow-md shadow-emerald-950/40'
+                  : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-850'
+              }`}
+            >
+              <div>
+                <p className="font-bold text-slate-100 flex items-center justify-between">
+                  <span>3. Proportional</span>
+                  {allocationStrategy === 'PROPORTIONAL' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
+                </p>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Splits contacts proportionally by each number's remaining daily budget.
+                </p>
+              </div>
+              <span className="text-[9px] text-sky-400 mt-2 font-mono">Capacity-Balanced</span>
+            </button>
+
+            {/* Strategy 4: Manual Weights */}
+            <button
+              type="button"
+              onClick={() => onAllocationStrategyChange && onAllocationStrategyChange('WEIGHTED')}
+              className={`p-3 rounded-xl border text-left transition flex flex-col justify-between cursor-pointer ${
+                allocationStrategy === 'WEIGHTED'
+                  ? 'bg-emerald-600/20 border-emerald-500 text-white shadow-md shadow-emerald-950/40'
+                  : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-850'
+              }`}
+            >
+              <div>
+                <p className="font-bold text-slate-100 flex items-center justify-between">
+                  <span>4. Manual Weights</span>
+                  {allocationStrategy === 'WEIGHTED' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
+                </p>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Custom percentage allocation per WhatsApp number.
+                </p>
+              </div>
+              <span className="text-[9px] text-purple-400 mt-2 font-mono">Custom Splits</span>
+            </button>
+
+            {/* Strategy 5: Fill then Spill */}
+            <button
+              type="button"
+              onClick={() => onAllocationStrategyChange && onAllocationStrategyChange('FILL_THEN_SPILL')}
+              className={`p-3 rounded-xl border text-left transition flex flex-col justify-between cursor-pointer ${
+                allocationStrategy === 'FILL_THEN_SPILL'
+                  ? 'bg-emerald-600/20 border-emerald-500 text-white shadow-md shadow-emerald-950/40'
+                  : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-850'
+              }`}
+            >
+              <div>
+                <p className="font-bold text-slate-100 flex items-center justify-between">
+                  <span>5. Fill-then-Spill</span>
+                  {allocationStrategy === 'FILL_THEN_SPILL' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
+                </p>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Fills primary number up to limit before spilling to secondary numbers.
+                </p>
+              </div>
+              <span className="text-[9px] text-amber-400 mt-2 font-mono">Sequential Cap</span>
+            </button>
+          </div>
+
+          {/* Block Size Stepper (When BLOCKS is active) */}
+          {allocationStrategy === 'BLOCKS' && (
+            <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+              <div>
+                <span className="font-bold text-slate-200">Block Size (Contacts Per Number):</span>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Each number will send a block of {blockSize} contacts before rotating to the next number. (Default matches your {variants.length} message variations).
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-xl p-1">
+                  <button
+                    type="button"
+                    disabled={blockSize <= 1}
+                    onClick={() => onBlockSizeChange && onBlockSizeChange(Math.max(1, blockSize - 1))}
+                    className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-white font-bold flex items-center justify-center transition"
+                  >
+                    -
+                  </button>
+                  <span className="w-10 text-center font-mono font-bold text-emerald-400 text-sm">
+                    {blockSize}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={blockSize >= 500}
+                    onClick={() => onBlockSizeChange && onBlockSizeChange(blockSize + 1)}
+                    className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-white font-bold flex items-center justify-center transition"
+                  >
+                    +
+                  </button>
+                </div>
+
+                <label className="flex items-center gap-1.5 cursor-pointer text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={randomizeBlockSize}
+                    onChange={(e) => onRandomizeBlockSizeChange && onRandomizeBlockSizeChange(e.target.checked)}
+                    className="rounded text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span className="text-[11px] font-medium">Randomize block jitter (±2)</span>
+                </label>
+              </div>
+            </div>
+          )}
+
+          {/* Safety Toggles for Multi-Number Broadcasting */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs pt-1">
+            <label className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={staggerVariations}
+                onChange={(e) => onStaggerVariationsChange && onStaggerVariationsChange(e.target.checked)}
+                className="rounded text-emerald-600 focus:ring-emerald-500"
+              />
+              <div>
+                <span className="font-bold text-slate-200 block text-[11px]">Stagger Variations</span>
+                <span className="text-[10px] text-slate-400">Number A starts at M1, B at M2</span>
+              </div>
+            </label>
+
+            <label className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={failoverEnabled}
+                onChange={(e) => onFailoverEnabledChange && onFailoverEnabledChange(e.target.checked)}
+                className="rounded text-emerald-600 focus:ring-emerald-500"
+              />
+              <div>
+                <span className="font-bold text-slate-200 block text-[11px]">Failover Protection</span>
+                <span className="text-[10px] text-slate-400">Auto-migrates if a number drops</span>
+              </div>
+            </label>
+
+            <label className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={stickyConversations}
+                onChange={(e) => onStickyConversationsChange && onStickyConversationsChange(e.target.checked)}
+                className="rounded text-emerald-600 focus:ring-emerald-500"
+              />
+              <div>
+                <span className="font-bold text-slate-200 block text-[11px]">Sticky Conversations</span>
+                <span className="text-[10px] text-slate-400">Keep prior contacts on same number</span>
+              </div>
+            </label>
+          </div>
+
+          {/* Visual Assignment Matrix & Multi-Number Lanes Preview */}
+          {twoLayerData && (
+            <div className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <span className="font-bold text-slate-200 text-xs flex items-center gap-1.5">
+                    <Shuffle className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Two-Layer Broadcast Assignment Matrix (Live Multi-Number Preview)</span>
+                  </span>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Click any chip to preview that recipient's exact message and sender in the phone simulator.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-lg p-0.5 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewViewMode('lanes')}
+                    className={`px-2.5 py-1 rounded transition font-medium ${
+                      previewViewMode === 'lanes' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Lanes View
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewViewMode('matrix')}
+                    className={`px-2.5 py-1 rounded transition font-medium ${
+                      previewViewMode === 'matrix' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Matrix Table
+                  </button>
+                </div>
+              </div>
+
+              {/* View 1: Horizontal Multi-Number Lanes */}
+              {previewViewMode === 'lanes' && (
+                <div className="space-y-2.5">
+                  {Object.entries(twoLayerData.lanes).map(([instId, items], instIdx) => {
+                    const instObj = selectedInstances.find((i) => i.id === instId || i.name === instId);
+                    const instName = instObj?.name || instId;
+                    const colorPalette = [
+                      { pill: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' },
+                      { pill: 'bg-sky-500/20 text-sky-300 border-sky-500/40' },
+                      { pill: 'bg-purple-500/20 text-purple-300 border-purple-500/40' },
+                      { pill: 'bg-amber-500/20 text-amber-300 border-amber-500/40' },
+                    ][instIdx % 4]!;
+
+                    return (
+                      <div key={instId} className="bg-slate-900/90 border border-slate-800/90 rounded-xl p-2.5 space-y-1.5">
+                        <div className="flex items-center justify-between text-xs font-mono">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                            <span className="font-bold text-white">{instName}</span>
+                            <span className="text-[10px] text-slate-400">
+                              ({items.length} contacts allocated • {Math.round((items.length / twoLayerData.allocations.length) * 100)}%)
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-emerald-400">Parallel Send Lane #{instIdx + 1}</span>
+                        </div>
+
+                        {/* Recipient Chips in Send Order */}
+                        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+                          {items.slice(0, 16).map((item) => {
+                            const vPos = item.variantPosition || 1;
+                            const badgeCol = badgeColors[(vPos - 1) % badgeColors.length]!;
+                            return (
+                              <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => {
+                                  const idx = (item.variantPosition || 1) - 1;
+                                  setEditingCardIndex(idx);
+                                  onActivePreviewVariantIndexChange(idx);
+                                }}
+                                className={`flex flex-col items-center justify-center min-w-[58px] py-1 px-1.5 rounded-lg border cursor-pointer transition hover:scale-105 shrink-0 ${badgeCol.bg} ${badgeCol.text} ${badgeCol.border}`}
+                                title={`${instName} sending "${item.variantLabel}" to ${item.name || item.phone}`}
+                              >
+                                <span className="text-[9px] opacity-70 font-mono">R{item.allocationIndex + 1}</span>
+                                <span className="font-bold text-[11px]">{item.variantLabel.slice(0, 8)}</span>
+                              </button>
+                            );
+                          })}
+                          {items.length > 16 && (
+                            <span className="text-[10px] text-slate-500 font-mono pl-1 shrink-0">
+                              +{items.length - 16} more...
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* View 2: Matrix Table */}
+              {previewViewMode === 'matrix' && (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs text-slate-300">
+                    <thead className="bg-slate-900 text-slate-400 font-mono text-[10px] uppercase border-b border-slate-800">
+                      <tr>
+                        <th className="p-2.5">Recipient</th>
+                        <th className="p-2.5">WhatsApp Number</th>
+                        <th className="p-2.5">Assigned Variant</th>
+                        <th className="p-2.5">Preview Message</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60 font-sans">
+                      {twoLayerData.allocations.slice(matrixPage * MATRIX_PAGE_SIZE, (matrixPage + 1) * MATRIX_PAGE_SIZE).map((row) => (
+                        <tr
+                          key={row.id}
+                          onClick={() => {
+                            const idx = (row.variantPosition || 1) - 1;
+                            setEditingCardIndex(idx);
+                            onActivePreviewVariantIndexChange(idx);
+                          }}
+                          className="hover:bg-slate-900/60 transition cursor-pointer"
+                        >
+                          <td className="p-2.5 font-mono text-emerald-400">
+                            #{row.allocationIndex + 1} ({row.name || row.phone})
+                          </td>
+                          <td className="p-2.5 font-bold text-white">
+                            <span className="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-200">
+                              {row.instanceName}
+                            </span>
+                          </td>
+                          <td className="p-2.5">
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold">
+                              {row.variantLabel}
+                            </span>
+                          </td>
+                          <td className="p-2.5 text-slate-400 truncate max-w-[200px]">
+                            {row.renderedPreview || row.variantContent}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  <div className="flex items-center justify-between pt-2 text-[11px] text-slate-400">
+                    <span>
+                      Showing {matrixPage * MATRIX_PAGE_SIZE + 1}–{Math.min(twoLayerData.allocations.length, (matrixPage + 1) * MATRIX_PAGE_SIZE)} of {twoLayerData.allocations.length}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        disabled={matrixPage === 0}
+                        onClick={() => setMatrixPage(Math.max(0, matrixPage - 1))}
+                        className="px-2 py-0.5 rounded bg-slate-800 disabled:opacity-30 text-white"
+                      >
+                        ‹ Prev
+                      </button>
+                      <button
+                        type="button"
+                        disabled={(matrixPage + 1) * MATRIX_PAGE_SIZE >= twoLayerData.allocations.length}
+                        onClick={() => setMatrixPage(matrixPage + 1)}
+                        className="px-2 py-0.5 rounded bg-slate-800 disabled:opacity-30 text-white"
+                      >
+                        Next ›
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Distribution Summary & Parallel Speedup Projection */}
+              <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-mono">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  <span className="text-slate-300">Parallel Send Lanes:</span>
+                  <span className="text-emerald-400 font-bold">
+                    {Math.round(totalRecipientsCount / selectedInstances.length)} msgs/number
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-400">
+                  Estimated duration: ~{Math.ceil((totalRecipientsCount / selectedInstances.length) * 15 / 60)} mins (in parallel)
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="bg-slate-950 border border-slate-800/80 rounded-2xl p-3 flex items-center justify-between text-xs text-slate-400">
+          <div className="flex items-center gap-2">
+            <Smartphone className="w-4 h-4 text-slate-500" />
+            <span>
+              Single WhatsApp Number Active: broadcasting sequentially. (Tip: select 2+ numbers in Step 1 to unlock parallel anti-ban load distribution).
+            </span>
+          </div>
+          <span className="text-[10px] font-mono text-emerald-400">1 Number</span>
+        </div>
+      )}
+
       {/* ========================================================= */}
       {/* 1. DISTRIBUTION MODES SELECTOR (Section 1)               */}
       {/* ========================================================= */}

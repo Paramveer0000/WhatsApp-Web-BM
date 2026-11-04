@@ -30,3 +30,23 @@ body {
   background: rgba(71, 85, 105, 1);
 }
 
+
+
+/* Privacy Mode (Shift+P): blurs phone numbers, message bodies & sensitive CRM data */
+.filter-privacy td:nth-child(2),
+.filter-privacy td:nth-child(3),
+.filter-privacy [data-sensitive="true"],
+.filter-privacy .font-mono:not(header *),
+.filter-privacy .privacy-blur {
+  filter: blur(5px);
+  user-select: none;
+  transition: filter 0.2s ease-in-out;
+}
+
+.filter-privacy td:nth-child(2):hover,
+.filter-privacy td:nth-child(3):hover,
+.filter-privacy [data-sensitive="true"]:hover,
+.filter-privacy .font-mono:not(header *):hover,
+.filter-privacy .privacy-blur:hover {
+  filter: blur(0);
+}

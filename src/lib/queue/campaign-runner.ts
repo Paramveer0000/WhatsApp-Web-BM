@@ -239,7 +239,16 @@ export class CampaignRunner {
         }
 
         let activeInstance = healthyInstances[instanceIndex % healthyInstances.length]!;
-        if (campaign.rotationMode === 'LEAST_USED') {
+
+        // Respect Layer 1 allocated instance if set at enqueue time
+        if (recipient.instanceUsed) {
+          const matching = healthyInstances.find(
+            (inst) => inst.name === recipient.instanceUsed || inst.id === recipient.instanceUsed
+          );
+          if (matching) {
+            activeInstance = matching;
+          }
+        } else if (campaign.rotationMode === 'LEAST_USED') {
           const sorted = [...healthyInstances].sort((a, b) => a.sentToday - b.sentToday);
           activeInstance = sorted[0]!;
         }

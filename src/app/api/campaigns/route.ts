@@ -15,6 +15,7 @@ import {
   DistributionMode,
   RotationScope,
 } from '@/lib/rotation';
+import { assignTwoLayerDistribution, AllocationStrategy, InstanceAllocationInput } from '@/lib/distribution';
 
 export async function GET() {
   try {
@@ -395,7 +396,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 6. Enqueue-Time Deterministic Assignment (Section 3)
+    // 6. Two-Layer Enqueue-Time Deterministic Distribution (Layer 1: Instances + Layer 2: Variants)
     const audienceList: RecipientInput[] = Array.from(targetContactsMap.values()).map((c, idx) => ({
       id: `rec_${idx + 1}`,
       contactId: c.contactId,
@@ -403,29 +404,44 @@ export async function POST(req: NextRequest) {
       name: c.name,
       customVariables: c.customVariables,
       listId: c.listId,
-      instanceId: instanceRecords[idx % instanceRecords.length]?.id,
     }));
 
-    const rotationResult = assignMessageRotation({
-      audience: audienceList,
+    const instanceInputs: InstanceAllocationInput[] = instanceRecords.map((inst) => ({
+      id: inst.id,
+      name: inst.name,
+      phone: inst.profileNumber,
+      dailyQuota: inst.dailyCap,
+      todaySent: inst.sentToday,
+      capacity: Math.max(0, inst.dailyCap - inst.sentToday),
+      healthy: inst.status?.toUpperCase() === 'OPEN',
+    }));
+
+    const twoLayerResult = assignTwoLayerDistribution({
+      contacts: audienceList,
+      instances: instanceInputs,
       variants: createdVariants,
+      allocationStrategy: (body.allocationStrategy as AllocationStrategy) || 'BLOCKS',
+      blockSize: Number(body.blockSize) || createdVariants.length || 5,
+      blockSizeMax: body.blockSizeMax ? Number(body.blockSizeMax) : undefined,
       distributionMode: validatedRotation.data.distributionMode,
-      rotationScope: validatedRotation.data.rotationScope,
-      shuffleAudience: validatedRotation.data.shuffleAudience,
-      shuffleSeed: validatedRotation.data.shuffleSeed ?? undefined,
-      campaignId: campaign.id,
+      rotationScope: instanceRecords.length > 1 ? 'INSTANCE' : validatedRotation.data.rotationScope,
+      staggerVariations: body.staggerVariations ?? true,
+      allocationSeed: body.allocationSeed ? Number(body.allocationSeed) : (validatedRotation.data.shuffleSeed ?? 42),
+      stickyConversations: body.stickyConversations ?? true,
       previousContentHashes,
       avoidRepeatContent: validatedRotation.data.avoidRepeatContent,
     });
 
-    const recipientData = rotationResult.assignments.map((assigned) => ({
+    const recipientData = twoLayerResult.allocations.map((assigned) => ({
       campaignId: campaign.id,
       phone: assigned.phone,
       name: assigned.name || null,
       customVariables: assigned.customVariables ? JSON.stringify(assigned.customVariables) : null,
       variantId: assigned.variantId || null,
       variantIndex: assigned.variantIndex,
-      rotationIndex: assigned.rotationIndex,
+      rotationIndex: assigned.allocationIndex + 1,
+      instanceUsed: assigned.instanceName,
+      renderedMessage: assigned.renderedPreview || assigned.variantContent,
       status: 'PENDING',
     }));
 
