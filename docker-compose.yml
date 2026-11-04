@@ -107,9 +107,10 @@ services:
       - AUTHENTICATION_TYPE=apikey
       - AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES=true
       - DATABASE_ENABLED=true
-      - DATABASE_PROVIDER=postgresql
-      - DATABASE_CONNECTION_URI=postgresql://evolution:evolution_pass@postgres:5432/evolution?schema=public
+      - DATABASE_PROVIDER=${DATABASE_PROVIDER:-postgresql}
+      - DATABASE_CONNECTION_URI=${DATABASE_CONNECTION_URI:-postgresql://evolution:evolution_pass@postgres:5432/evolution?schema=public}
       - DATABASE_CONNECTION_CLIENT_NAME=evolution_v2
+      - DATABASE_CLIENT_NAME=evolution_api
       - DATABASE_CLIENT=pg
       - DATABASE_SAVE_DATA_INSTANCE=true
       - DATABASE_SAVE_DATA_CHATS=true

@@ -73,3 +73,4 @@ export const sseClientsGauge =
 (global as any).__prom_sse_clients__ = sseClientsGauge;
 
 export { globalRegistry as registry };
+

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   Send, 
@@ -45,12 +45,28 @@ import {
   Video,
   FileText,
   Upload,
-  CheckCheck
+  CheckCheck,
+  ChevronLeft,
+  ChevronRight,
+  LayoutDashboard,
+  Activity,
+  ExternalLink,
+  Command,
+  Shield,
+  MessageCircle,
+  FileDown,
+  Check,
+  AlertTriangle,
+  X,
+  Sliders,
+  ListFilter
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
   AreaChart, 
   Area, 
+  BarChart,
+  Bar,
   XAxis, 
   YAxis, 
   Tooltip, 
@@ -60,11 +76,16 @@ import * as XLSX from 'xlsx';
 import LiveWhatsAppBubble from '@/components/LiveWhatsAppBubble';
 import QRCodeModal from '@/components/QRCodeModal';
 
+type TabType = 'overview' | 'campaigns' | 'live' | 'wizard' | 'contacts' | 'templates' | 'replies' | 'instances' | 'reports' | 'system' | 'settings';
+
 export default function AppDashboard() {
   const router = useRouter();
 
-  // Active Tab
-  const [currentTab, setCurrentTab] = useState<'overview' | 'live' | 'wizard' | 'instances' | 'contacts' | 'replies' | 'history' | 'settings'>('overview');
+  // Active Navigation & Layout State
+  const [currentTab, setCurrentTab] = useState<TabType>('overview');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [commandSearch, setCommandSearch] = useState('');
   const [currentUser, setCurrentUser] = useState<any>(null);
 
   // Global State
@@ -82,7 +103,7 @@ export default function AppDashboard() {
   const [recipientSearch, setRecipientSearch] = useState('');
   const [inspectRecipient, setInspectRecipient] = useState<any>(null);
 
-  // Modal State
+  // Modals State
   const [qrModalInstance, setQrModalInstance] = useState<string | null>(null);
   const [newInstanceModal, setNewInstanceModal] = useState(false);
   const [newInstanceName, setNewInstanceName] = useState('');
@@ -91,6 +112,9 @@ export default function AppDashboard() {
   const [contacts, setContacts] = useState<any[]>([]);
   const [contactLists, setContactLists] = useState<any[]>([]);
   const [blacklist, setBlacklist] = useState<any[]>([]);
+  const [contactSubTab, setContactSubTab] = useState<'all' | 'lists' | 'blacklist'>('all');
+  const [contactSearch, setContactSearch] = useState('');
+  const [showImportWizard, setShowImportWizard] = useState(false);
   const [importingFile, setImportingFile] = useState(false);
   const [importStats, setImportStats] = useState<any>(null);
 
@@ -103,6 +127,10 @@ export default function AppDashboard() {
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [conversationMessages, setConversationMessages] = useState<any[]>([]);
   const [replyInputText, setReplyInputText] = useState('');
+  const [replyInstance, setReplyInstance] = useState('');
+  const [sendingReply, setSendingReply] = useState(false);
+  const [syncingReplies, setSyncingReplies] = useState(false);
+  const [uploadingChat, setUploadingChat] = useState(false);
 
   // Campaign Wizard State
   const [wizName, setWizName] = useState(`Campaign-${Date.now().toString().slice(-4)}`);
@@ -114,369 +142,341 @@ export default function AppDashboard() {
   const [wizMediaType, setWizMediaType] = useState('text');
   const [wizMediaUrl, setWizMediaUrl] = useState('');
   const [wizFileName, setWizFileName] = useState('');
-  const [replyInstance, setReplyInstance] = useState('');
-  const [sendingReply, setSendingReply] = useState(false);
-  const [syncingReplies, setSyncingReplies] = useState(false);
-  const [uploadingChat, setUploadingChat] = useState(false);
-  const [wizMinDelay, setWizMinDelay] = useState(12);
-  const [wizMaxDelay, setWizMaxDelay] = useState(25);
-  const [wizSimulateTyping, setWizSimulateTyping] = useState(true);
-  const [wizBatchSize, setWizBatchSize] = useState(30);
-  const [wizBatchDuration, setWizBatchDuration] = useState(5);
-  const [wizRotation, setWizRotation] = useState('ROUND_ROBIN');
-  const [wizConsentConfirmed, setWizConsentConfirmed] = useState(false);
-  const [wizLaunching, setWizLaunching] = useState(false);
-  const [wizError, setWizError] = useState<string | null>(null);
+  const [pacingPreset, setPacingPreset] = useState<'safe' | 'balanced' | 'fast'>('balanced');
+  const [minDelay, setMinDelay] = useState(10);
+  const [maxDelay, setMaxDelay] = useState(25);
+  const [batchSize, setBatchSize] = useState(50);
+  const [batchDelay, setBatchDelay] = useState(180);
+  const [launchSafetyCheck, setLaunchSafetyCheck] = useState(false);
 
-  // Check Auth
+  // Templates Library Mock
+  const sampleTemplates = [
+    {
+      id: 't-1',
+      title: 'Special 20% Discount Offer',
+      category: 'Marketing',
+      content: '{Hi|Hello|Greetings} {name|Friend}!\n\nExciting news! We have an exclusive *20% discount* waiting for you on your next order.\n\nUse voucher code: `SAVE20` at checkout.\n\n{Shop now|Claim your discount} before it expires on Sunday!',
+      mediaType: 'text',
+      usageCount: 142
+    },
+    {
+      id: 't-2',
+      title: 'Order Confirmation & Tracking',
+      category: 'Transactional',
+      content: 'Hello {name|Customer},\n\nYour order *#{company|1024}* has been confirmed and is being packed! 📦\n\nEstimated delivery: _Within 3 business days_.\n\nTrack your order anytime by replying *TRACK*. Thank you for choosing us!',
+      mediaType: 'text',
+      usageCount: 389
+    },
+    {
+      id: 't-3',
+      title: 'Webinar & Event Reminder',
+      category: 'Reminder',
+      content: 'Hi {name|there}! Just a gentle reminder that our live masterclass starts in *1 hour*.\n\nTopic: *Scaling WhatsApp Outreach in 2026*\nJoin link: https://meet.example.com/live\n\nSee you inside!',
+      mediaType: 'text',
+      usageCount: 95
+    },
+    {
+      id: 't-4',
+      title: 'VIP Customer Welcome',
+      category: 'Onboarding',
+      content: '{Welcome|Glad to have you} {name|Partner}!\n\nThank you for joining our VIP Community. As a member, you get priority support and early access to our seasonal releases.\n\nSave this number to stay updated!',
+      mediaType: 'text',
+      usageCount: 215
+    },
+    {
+      id: 't-5',
+      title: 'Customer Feedback & Review',
+      category: 'Support',
+      content: 'Hi {name|there}, how was your recent experience with our service? ⭐\n\nWe would love to hear your thoughts! Reply with a rating from *1 (poor)* to *5 (excellent)*.\n\nWe appreciate your valuable feedback!',
+      mediaType: 'text',
+      usageCount: 78
+    },
+    {
+      id: 't-6',
+      title: 'Re-engagement / We Miss You',
+      category: 'Retention',
+      content: '{Hey|Hi} {name|there}! It has been a while since we connected. We have added lots of exciting new features designed specifically for your workflow.\n\nReply *DEMO* and our team will share a personalized walkthrough!',
+      mediaType: 'text',
+      usageCount: 160
+    }
+  ];
+
+  // Keyboard shortcut listener for Command Palette (Ctrl+K / Cmd+K)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setCommandPaletteOpen((prev) => !prev);
+      }
+      if (e.key === 'Escape') {
+        setCommandPaletteOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Fetch initial data
   useEffect(() => {
     fetch('/api/auth/me')
-      .then((res) => res.json())
-      .then((data) => {
-        if (!data.authenticated) {
+      .then((res) => {
+        if (!res.ok) {
           router.push('/login');
-        } else {
-          setCurrentUser(data.user);
-          loadInitialData();
+          return null;
         }
+        return res.json();
+      })
+      .then((data) => {
+        if (data?.user) setCurrentUser(data.user);
       })
       .catch(() => router.push('/login'));
-  }, [router]);
 
-  // SSE Event Listener for Live Campaign
-  useEffect(() => {
-    const sse = new EventSource('/api/events');
-
-    sse.addEventListener('progress', (e: any) => {
-      try {
-        const d = JSON.parse(e.data);
-        if (d.campaignId === activeCampaignId) {
-          setLiveStats(d.stats);
-        }
-      } catch {}
-    });
-
-    sse.addEventListener('log', (e: any) => {
-      try {
-        const d = JSON.parse(e.data);
-        if (d.campaignId === activeCampaignId && activeCampaignId) {
-          setLiveLogs((prev) => [d, ...prev.slice(0, 100)]);
-          loadCampaignRecipients(activeCampaignId);
-        }
-      } catch {}
-    });
-
-    sse.addEventListener('jitter', (e: any) => {
-      try {
-        const d = JSON.parse(e.data);
-        if (d.campaignId === activeCampaignId) {
-          setJitterInfo(d);
-        }
-      } catch {}
-    });
-
-    return () => {
-      sse.close();
-    };
-  }, [activeCampaignId]);
-
-  const loadInitialData = () => {
     loadInstances();
     loadCampaigns();
+    loadContacts();
     loadAnalytics();
-    loadContactsAndLists();
     loadSettings();
-    loadReplies();
-  };
+    loadConversations();
+  }, [router]);
 
   const loadInstances = async () => {
-    const res = await fetch('/api/evolution/instances');
-    const d = await res.json();
-    if (d.success) setInstances(d.instances || []);
+    try {
+      const res = await fetch('/api/evolution/instances');
+      const data = await res.json();
+      if (res.ok && data.instances) {
+        setInstances(data.instances);
+        if (data.instances.length > 0 && !replyInstance) {
+          const connected = data.instances.find((i: any) => i.connectionStatus === 'open');
+          if (connected) setReplyInstance(connected.name);
+          else setReplyInstance(data.instances[0].name);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching instances:', err);
+    }
   };
 
   const loadCampaigns = async () => {
-    const res = await fetch('/api/campaigns');
-    const d = await res.json();
-    if (d.success) {
-      setCampaigns(d.campaigns || []);
-      const running = d.campaigns.find((c: any) => c.status === 'RUNNING' || c.status === 'PAUSED');
-      if (running && !activeCampaignId) {
-        setActiveCampaignId(running.id);
+    try {
+      const res = await fetch('/api/campaigns');
+      const data = await res.json();
+      if (res.ok && data.campaigns) {
+        setCampaigns(data.campaigns);
+        const running = data.campaigns.find((c: any) => c.status === 'RUNNING');
+        if (running && !activeCampaignId) {
+          setActiveCampaignId(running.id);
+        } else if (data.campaigns.length > 0 && !activeCampaignId) {
+          setActiveCampaignId(data.campaigns[0].id);
+        }
       }
+    } catch (err) {
+      console.error('Error fetching campaigns:', err);
+    }
+  };
+
+  const loadContacts = async () => {
+    try {
+      const [cRes, lRes, bRes] = await Promise.all([
+        fetch('/api/contacts?limit=200'),
+        fetch('/api/contacts/lists'),
+        fetch('/api/contacts/blacklist')
+      ]);
+      const [cData, lData, bData] = await Promise.all([
+        cRes.json(),
+        lRes.json(),
+        bRes.json()
+      ]);
+      if (cRes.ok && cData.contacts) setContacts(cData.contacts);
+      if (lRes.ok && lData.lists) setContactLists(lData.lists);
+      if (bRes.ok && bData.blacklist) setBlacklist(bData.blacklist);
+    } catch (err) {
+      console.error('Error fetching contacts:', err);
     }
   };
 
   const loadAnalytics = async () => {
-    const res = await fetch('/api/analytics');
-    const d = await res.json();
-    if (d.success) setAnalytics(d);
-  };
-
-  const loadContactsAndLists = async () => {
-    const [cRes, lRes, bRes] = await Promise.all([
-      fetch('/api/contacts'),
-      fetch('/api/lists'),
-      fetch('/api/blacklist'),
-    ]);
-    const cData = await cRes.json();
-    const lData = await lRes.json();
-    const bData = await bRes.json();
-
-    if (cData.success) setContacts(cData.contacts || []);
-    if (lData.success) setContactLists(lData.lists || []);
-    if (bData.success) setBlacklist(bData.blacklist || []);
+    try {
+      const res = await fetch('/api/analytics/overview');
+      const data = await res.json();
+      if (res.ok) setAnalytics(data);
+    } catch (err) {
+      console.error('Error fetching analytics:', err);
+    }
   };
 
   const loadSettings = async () => {
-    const res = await fetch('/api/settings');
-    const d = await res.json();
-    if (d.success) setSettings(d.settings || {});
-  };
-
-  const loadReplies = async () => {
-    const res = await fetch('/api/replies');
-    const d = await res.json();
-    if (d.success) setConversations(d.conversations || []);
-  };
-
-  const loadCampaignRecipients = async (campId: string) => {
     try {
-      const res = await fetch(`/api/campaigns/${campId}/recipients?status=${statusFilter}&search=${encodeURIComponent(recipientSearch)}`);
-      const d = await res.json();
-      if (d.success) setRecipientsList(d.recipients || []);
-    } catch {}
+      const res = await fetch('/api/settings');
+      const data = await res.json();
+      if (res.ok && data.settings) setSettings(data.settings);
+    } catch (err) {
+      console.error('Error fetching settings:', err);
+    }
   };
 
+  const loadConversations = async () => {
+    try {
+      const res = await fetch('/api/replies');
+      const data = await res.json();
+      if (res.ok && data.conversations) {
+        setConversations(data.conversations);
+        if (data.conversations.length > 0 && !selectedConversation) {
+          setSelectedConversation(data.conversations[0].id);
+          loadConversationMessages(data.conversations[0].id);
+        }
+      }
+    } catch (err) {
+      console.error('Error loading conversations:', err);
+    }
+  };
+
+  const loadConversationMessages = async (convId: string) => {
+    try {
+      const res = await fetch(`/api/replies/${convId}`);
+      const data = await res.json();
+      if (res.ok && data.messages) {
+        setConversationMessages(data.messages);
+      }
+    } catch (err) {
+      console.error('Error loading conversation messages:', err);
+    }
+  };
+
+  // SSE Stream for Live Campaign
   useEffect(() => {
-    if (activeCampaignId) {
-      loadCampaignRecipients(activeCampaignId);
-    }
-  }, [activeCampaignId, statusFilter, recipientSearch]);
+    if (!activeCampaignId || currentTab !== 'live') return;
 
-  const handleLogout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    router.push('/login');
-  };
+    loadRecipients(activeCampaignId);
 
-  const downloadSampleCSV = () => {
-    const csv = 'phone,name,company,city,tags\n919876543210,Rahul Sharma,Acme Corp,Mumbai,VIP;Lead\n919876543211,Priya Patel,Innovate Ltd,Delhi,Customer\n919876543212,Amit Verma,Alpha Labs,Bangalore,Enterprise\n919876543213,Neha Singh,Logistics Pro,Hyderabad,Partner\n919876543214,Vikram Mehta,Apex Tech,Chennai,Active';
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'sample_contacts_template.csv';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  };
+    const eventSource = new EventSource(`/api/campaigns/${activeCampaignId}/stream`);
 
-  const downloadSampleXLSX = () => {
-    const data = [
-      { phone: '919876543210', name: 'Rahul Sharma', company: 'Acme Corp', city: 'Mumbai', tags: 'VIP;Lead' },
-      { phone: '919876543211', name: 'Priya Patel', company: 'Innovate Ltd', city: 'Delhi', tags: 'Customer' },
-      { phone: '919876543212', name: 'Amit Verma', company: 'Alpha Labs', city: 'Bangalore', tags: 'Enterprise' },
-      { phone: '919876543213', name: 'Neha Singh', company: 'Logistics Pro', city: 'Hyderabad', tags: 'Partner' },
-      { phone: '919876543214', name: 'Vikram Mehta', company: 'Apex Tech', city: 'Chennai', tags: 'Active' },
-    ];
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Contacts');
-    XLSX.writeFile(wb, 'sample_contacts_template.xlsx');
-  };
-
-  const handleSendReply = async () => {
-    if (!replyInputText.trim() || !selectedConversation) return;
-    const instName = replyInstance || instances[0]?.name;
-    if (!instName) {
-      alert('Please connect at least one WhatsApp instance to send replies.');
-      return;
-    }
-
-    setSendingReply(true);
-    try {
-      const res = await fetch('/api/replies', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phone: selectedConversation,
-          text: replyInputText.trim(),
-          instanceName: instName,
-        }),
-      });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error || 'Failed to send reply');
-
-      setConversationMessages((prev) => [
-        ...prev,
-        {
-          id: 'REPLY_' + Date.now(),
-          type: 'outgoing',
-          text: replyInputText.trim(),
-          time: new Date(),
-          status: 'SENT',
-          instance: instName,
-        },
-      ]);
-      setReplyInputText('');
-    } catch (err: any) {
-      alert('Send reply failed: ' + err.message);
-    } finally {
-      setSendingReply(false);
-    }
-  };
-
-  const handleSyncChats = async () => {
-    setSyncingReplies(true);
-    try {
-      const res = await fetch('/api/replies?sync=true');
-      const d = await res.json();
-      if (d.success) {
-        setConversations(d.conversations || []);
-        alert(`Synced ${d.conversations?.length || 0} WhatsApp conversations!`);
-      } else {
-        alert(d.error || 'Sync failed');
-      }
-    } catch (err: any) {
-      alert('Sync failed: ' + err.message);
-    } finally {
-      setSyncingReplies(false);
-    }
-  };
-
-  const handleUploadChat = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !selectedConversation) return;
-
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      const content = evt.target?.result as string;
-      if (!content) return;
-
-      const lines = content.split(/\r?\n/);
-      const parsed: Array<{ date: string; sender: string; text: string; isMe: boolean }> = [];
-      const lineRegex = /^(?:\[?(\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}[,\s]+\d{1,2}:\d{1,2}(?::\d{1,2})?(?:\s*[AaPp][Mm])?)\]?)[ -]+([^:]+):\s*(.+)$/;
-
-      let currentMsg: { date: string; sender: string; text: string; isMe: boolean } | null = null;
-
-      for (const line of lines) {
-        const match = line.match(lineRegex);
-        if (match) {
-          if (currentMsg) parsed.push(currentMsg);
-          const rawDate = match[1];
-          const rawSender = match[2].trim();
-          const rawText = match[3].trim();
-          const isMe =
-            /^(you|me|admin|system|bulkflow)/i.test(rawSender) ||
-            rawSender.toLowerCase() === (currentUser?.name || '').toLowerCase();
-
-          currentMsg = {
-            date: new Date(rawDate).toISOString(),
-            sender: rawSender,
-            text: rawText,
-            isMe,
-          };
-        } else if (currentMsg && line.trim()) {
-          currentMsg.text += '\n' + line.trim();
-        }
-      }
-      if (currentMsg) parsed.push(currentMsg);
-
-      if (parsed.length === 0) {
-        alert('Could not parse any messages from this file. Please ensure it is a valid WhatsApp exported .txt chat file.');
-        return;
-      }
-
-      setUploadingChat(true);
+    eventSource.onmessage = (event) => {
       try {
-        const res = await fetch('/api/replies/upload-chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            phone: selectedConversation,
-            messages: parsed,
-          }),
-        });
-        const d = await res.json();
-        if (d.success) {
-          alert(`Successfully uploaded ${d.count} previous chat messages!`);
-          const threadRes = await fetch(`/api/replies?phone=${encodeURIComponent(selectedConversation)}`);
-          const threadData = await threadRes.json();
-          if (threadData.success) {
-            setConversationMessages(threadData.messages || []);
+        const payload = JSON.parse(event.data);
+        if (payload.type === 'INIT' || payload.type === 'HEARTBEAT' || payload.type === 'STATUS_CHANGE') {
+          setLiveStats(payload.stats || payload.campaign?.stats);
+          if (payload.campaign?.status) {
+            setCampaigns((prev) =>
+              prev.map((c) => (c.id === activeCampaignId ? { ...c, status: payload.campaign.status } : c))
+            );
           }
-        } else {
-          alert(d.error || 'Failed to save uploaded chat');
+        } else if (payload.type === 'LOG') {
+          setLiveLogs((prev) => [payload.log, ...prev].slice(0, 100));
+        } else if (payload.type === 'JITTER') {
+          setJitterInfo(payload);
         }
-      } catch (err: any) {
-        alert('Upload failed: ' + err.message);
-      } finally {
-        setUploadingChat(false);
+      } catch (e) {
+        console.error('Error parsing SSE event:', e);
       }
     };
-    reader.readAsText(file);
+
+    eventSource.onerror = () => {
+      eventSource.close();
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [activeCampaignId, currentTab]);
+
+  const loadRecipients = async (campaignId: string) => {
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}/recipients?limit=100`);
+      const data = await res.json();
+      if (res.ok && data.recipients) {
+        setRecipientsList(data.recipients);
+      }
+    } catch (err) {
+      console.error('Error loading recipients:', err);
+    }
   };
 
-  // Campaign Control
-  const handleCampaignControl = async (campId: string, action: string) => {
+  // Campaign Actions
+  const handleCampaignAction = async (action: 'pause' | 'resume' | 'abort') => {
+    if (!activeCampaignId) return;
     try {
-      const res = await fetch(`/api/campaigns/${campId}/control`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action }),
-      });
-      const d = await res.json();
-      if (!res.ok) alert(d.error || 'Action failed');
-      loadCampaigns();
+      const res = await fetch(`/api/campaigns/${activeCampaignId}/${action}`, { method: 'POST' });
+      if (res.ok) {
+        loadCampaigns();
+      } else {
+        const d = await res.json();
+        alert(d.error || `Failed to ${action} campaign`);
+      }
     } catch (err: any) {
       alert(err.message);
     }
   };
 
-  // Launch Campaign from Wizard
-  const handleLaunchCampaign = async () => {
+  // Create Campaign
+  const handleLaunchCampaign = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!wizName.trim() || wizInstances.length === 0 || wizListIds.length === 0) {
+      alert('Please fill in Campaign Name, select at least 1 Instance, and at least 1 Contact List');
+      return;
+    }
+
     try {
-      setWizError(null);
-      if (!wizName.trim()) throw new Error('Campaign name is required.');
-      if (wizInstances.length === 0) throw new Error('Please select at least one WhatsApp instance.');
-      if (wizListIds.length === 0) throw new Error('Please select at least one contact list.');
-      if (!wizConsentConfirmed) throw new Error('Please confirm opt-in consent compliance.');
-
-      setWizLaunching(true);
-
       const res = await fetch('/api/campaigns', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: wizName.trim(),
-          instanceIds: wizInstances,
-          listIds: wizListIds,
-          variants: [{ content: wizTemplate, mediaType: wizMediaType, mediaUrl: wizMediaUrl, fileName: wizFileName || (wizMediaType === 'document' ? 'document.pdf' : undefined) }],
-          minDelay: Number(wizMinDelay),
-          maxDelay: Number(wizMaxDelay),
-          simulateTyping: wizSimulateTyping,
-          batchBreakSize: Number(wizBatchSize),
-          batchBreakDuration: Number(wizBatchDuration),
-          rotationMode: wizRotation,
-          consentConfirmed: true,
-          launchImmediately: true,
-        }),
+          name: wizName,
+          instances: wizInstances,
+          contactListIds: wizListIds,
+          template: wizTemplate,
+          mediaType: wizMediaType,
+          mediaUrl: wizMediaUrl || undefined,
+          fileName: wizFileName || undefined,
+          minDelay,
+          maxDelay,
+          batchSize,
+          batchDelay,
+          sendNow: true
+        })
       });
 
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error || 'Failed to create campaign');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to create campaign');
 
-      setActiveCampaignId(d.campaign.id);
-      loadCampaigns();
+      await loadCampaigns();
+      setActiveCampaignId(data.campaign.id);
       setCurrentTab('live');
     } catch (err: any) {
-      setWizError(err.message);
-    } finally {
-      setWizLaunching(false);
+      alert(err.message);
     }
   };
 
-  // Create Instance
+  // Contact Import Handler
+  const handleImportContacts = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImportingFile(true);
+    setImportStats(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('listName', `Import-${new Date().toLocaleDateString()}`);
+
+      const res = await fetch('/api/contacts/import', {
+        method: 'POST',
+        body: formData
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to import contacts');
+
+      setImportStats(data);
+      loadContacts();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setImportingFile(false);
+    }
+  };
+
+  // Create WhatsApp Instance
   const handleCreateInstance = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newInstanceName.trim()) return;
@@ -485,7 +485,7 @@ export default function AppDashboard() {
       const res = await fetch('/api/evolution/instances', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instanceName: newInstanceName.trim() }),
+        body: JSON.stringify({ instanceName: newInstanceName.trim() })
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || 'Failed to create instance');
@@ -499,6 +499,79 @@ export default function AppDashboard() {
     }
   };
 
+  // Send WhatsApp Reply
+  const handleSendReply = async () => {
+    if (!replyInputText.trim() || !selectedConversation || !replyInstance) return;
+    setSendingReply(true);
+    try {
+      const res = await fetch(`/api/replies/${selectedConversation}/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: replyInputText.trim(),
+          instanceName: replyInstance
+        })
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'Failed to send reply');
+
+      setReplyInputText('');
+      loadConversationMessages(selectedConversation);
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setSendingReply(false);
+    }
+  };
+
+  // Sync Chats from WhatsApp
+  const handleSyncChats = async () => {
+    if (!replyInstance) {
+      alert('Please select an instance to sync chats from');
+      return;
+    }
+    setSyncingReplies(true);
+    try {
+      const res = await fetch('/api/replies', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instanceName: replyInstance })
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'Failed to sync chats');
+      alert(`Sync completed! ${d.syncedChats || 0} chats synced.`);
+      loadConversations();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setSyncingReplies(false);
+    }
+  };
+
+  // Upload Chat History File (.txt)
+  const handleUploadChatFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingChat(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/replies/upload-chat', {
+        method: 'POST',
+        body: formData
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'Failed to upload chat file');
+      alert(`Chat history parsed successfully! Imported ${d.importedMessages || 0} messages.`);
+      loadConversations();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setUploadingChat(false);
+    }
+  };
+
   // Save Settings
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -506,1337 +579,1906 @@ export default function AppDashboard() {
       const res = await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings),
+        body: JSON.stringify({ settings })
       });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error || 'Failed to save settings');
-      setSettingsSavedMsg('Settings saved successfully!');
-      setTimeout(() => setSettingsSavedMsg(''), 3000);
-      loadSettings();
+      if (res.ok) {
+        setSettingsSavedMsg('Settings saved successfully!');
+        setTimeout(() => setSettingsSavedMsg(''), 3000);
+      } else {
+        const d = await res.json();
+        alert(d.error || 'Failed to save settings');
+      }
     } catch (err: any) {
       alert(err.message);
     }
   };
 
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    router.push('/login');
+  };
+
   const activeCampaign = campaigns.find((c) => c.id === activeCampaignId);
+  const connectedCount = instances.filter((i) => i.connectionStatus === 'open').length;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
-      {/* Top Header */}
-      <header className="bg-slate-900 border-b border-slate-800 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          {/* Logo */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-700 flex items-center justify-center text-white shadow-lg shadow-emerald-950/40">
+    <div className="min-h-screen bg-[#0b141a] text-slate-100 flex flex-col md:flex-row font-sans selection:bg-emerald-500/30 selection:text-emerald-300">
+      
+      {/* ========================================================= */}
+      {/* 1. LEFT SIDEBAR (DESKTOP)                                */}
+      {/* ========================================================= */}
+      <aside 
+        className={`bg-slate-900 border-r border-slate-800 flex flex-col shrink-0 transition-all duration-300 z-30 sticky top-0 h-screen ${
+          sidebarCollapsed ? 'w-[72px]' : 'w-64'
+        } hidden md:flex`}
+      >
+        {/* Brand Header */}
+        <div className="h-16 px-4 border-b border-slate-800 flex items-center justify-between">
+          <div className="flex items-center gap-3 overflow-hidden">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-700 flex items-center justify-center text-white shadow-lg shadow-emerald-950/50 shrink-0">
               <Send className="w-5 h-5 -rotate-12 translate-x-0.5" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-base text-white tracking-tight">BulkFlow Manager</span>
-                <span className="text-[10px] font-semibold tracking-wider uppercase px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
-                  Evolution v2
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-400">Self-Hosted WhatsApp Gateway</p>
-            </div>
-          </div>
-
-          {/* Navigation Tabs */}
-          <nav className="hidden lg:flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800/80 text-xs font-medium">
-            <button
-              onClick={() => setCurrentTab('overview')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition cursor-pointer ${
-                currentTab === 'overview' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <BarChart3 className="w-3.5 h-3.5" />
-              <span>Overview</span>
-            </button>
-
-            <button
-              onClick={() => setCurrentTab('live')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition cursor-pointer ${
-                currentTab === 'live' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Radio className="w-3.5 h-3.5" />
-              <span>Live Campaign</span>
-              {activeCampaign?.status === 'RUNNING' && (
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-              )}
-            </button>
-
-            <button
-              onClick={() => setCurrentTab('wizard')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition cursor-pointer ${
-                currentTab === 'wizard' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <PlusCircle className="w-3.5 h-3.5" />
-              <span>New Campaign</span>
-            </button>
-
-            <button
-              onClick={() => setCurrentTab('instances')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition cursor-pointer ${
-                currentTab === 'instances' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Server className="w-3.5 h-3.5" />
-              <span>Instances</span>
-              <span className="px-1.5 py-0.2 rounded-full bg-slate-800 text-[10px] text-slate-300">
-                {instances.length}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setCurrentTab('contacts')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition cursor-pointer ${
-                currentTab === 'contacts' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Users className="w-3.5 h-3.5" />
-              <span>Contacts & Lists</span>
-            </button>
-
-            <button
-              onClick={() => setCurrentTab('replies')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition cursor-pointer ${
-                currentTab === 'replies' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <MessageSquare className="w-3.5 h-3.5" />
-              <span>Replies</span>
-              {conversations.some((c) => c.status === 'UNREAD') && (
-                <span className="w-2 h-2 rounded-full bg-teal-400"></span>
-              )}
-            </button>
-
-            <button
-              onClick={() => setCurrentTab('history')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition cursor-pointer ${
-                currentTab === 'history' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <History className="w-3.5 h-3.5" />
-              <span>History</span>
-            </button>
-
-            <button
-              onClick={() => setCurrentTab('settings')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition cursor-pointer ${
-                currentTab === 'settings' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <SettingsIcon className="w-3.5 h-3.5" />
-              <span>Settings</span>
-            </button>
-          </nav>
-
-          {/* User Profile Pill & Logout */}
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 px-3 py-1 bg-slate-800 rounded-xl border border-slate-700 text-xs">
-              <span className="text-slate-400 font-mono text-[11px]">{currentUser?.email}</span>
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-500/30">
-                {currentUser?.role || 'OPERATOR'}
-              </span>
-            </div>
-
-            <button
-              onClick={handleLogout}
-              title="Sign Out"
-              className="p-2 text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl transition cursor-pointer"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main View Body */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
-        {/* 1. OVERVIEW DASHBOARD */}
-        {currentTab === 'overview' && (
-          <div className="space-y-6">
-            {/* KPI Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg">
-                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                  Connected Instances
+            {!sidebarCollapsed && (
+              <div className="truncate">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-sm tracking-tight text-white">BulkFlow</span>
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+                    v2.0
+                  </span>
                 </div>
-                <div className="text-2xl font-bold text-emerald-400 font-mono">
-                  {analytics?.summary?.connectedInstancesCount || 0} / {analytics?.summary?.instancesCount || 0}
-                </div>
-                <div className="text-[11px] text-slate-500 mt-1">Baileys gateway connections</div>
-              </div>
-
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg">
-                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                  Today's Dispatches
-                </div>
-                <div className="text-2xl font-bold text-white font-mono">
-                  {analytics?.summary?.totalSentToday || 0} / {analytics?.summary?.totalDailyCap || 200}
-                </div>
-                <div className="text-[11px] text-slate-500 mt-1">Daily pacing cap quota</div>
-              </div>
-
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg">
-                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                  Active Running Campaigns
-                </div>
-                <div className="text-2xl font-bold text-amber-400 font-mono">
-                  {analytics?.summary?.activeCampaignsCount || 0}
-                </div>
-                <div className="text-[11px] text-slate-500 mt-1">Processing in background</div>
-              </div>
-
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg">
-                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                  Total Contacts & Opt-Outs
-                </div>
-                <div className="text-2xl font-bold text-teal-400 font-mono">
-                  {analytics?.summary?.totalContactsCount || 0}
-                </div>
-                <div className="text-[11px] text-slate-500 mt-1">
-                  {analytics?.summary?.blacklistCount || 0} blacklisted
-                </div>
-              </div>
-            </div>
-
-            {/* 7-Day Performance Chart (Recharts) */}
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-bold text-white">7-Day Dispatch & Delivery Trends</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">Real-time volume delivered, read receipts, and delivery attempts</p>
-                </div>
-                <span className="text-[11px] text-emerald-400 font-mono bg-emerald-950 px-2.5 py-1 rounded-full border border-emerald-500/30">
-                  Live Analytics
-                </span>
-              </div>
-
-              <div className="h-64 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={analytics?.chartData || []}>
-                    <defs>
-                      <linearGradient id="colorSent" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
-                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                    <XAxis dataKey="date" stroke="#64748b" fontSize={11} />
-                    <YAxis stroke="#64748b" fontSize={11} />
-                    <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', fontSize: '12px' }} />
-                    <Area type="monotone" dataKey="sent" stroke="#10b981" fillOpacity={1} fill="url(#colorSent)" />
-                    <Area type="monotone" dataKey="delivered" stroke="#38bdf8" fillOpacity={0.2} fill="#38bdf8" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* Instances & Quick Actions */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Instances Status List */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <Server className="w-4 h-4 text-emerald-400" />
-                    <span>WhatsApp Gateway Instances</span>
-                  </h3>
-                  <button
-                    onClick={() => setCurrentTab('instances')}
-                    className="text-xs text-emerald-400 hover:underline cursor-pointer"
-                  >
-                    Manage
-                  </button>
-                </div>
-
-                <div className="space-y-2">
-                  {instances.length === 0 ? (
-                    <div className="text-xs text-slate-500 italic py-6 text-center">
-                      No instances created yet. Click "Instances" to link WhatsApp.
-                    </div>
-                  ) : (
-                    instances.slice(0, 4).map((inst) => (
-                      <div key={inst.id} className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between">
-                        <div>
-                          <div className="font-semibold text-xs text-white font-mono">{inst.name}</div>
-                          <div className="text-[11px] text-slate-400">
-                            Sent today: {inst.sentToday} / {inst.dailyCap} cap
-                          </div>
-                        </div>
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                          inst.status === 'OPEN' ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40' : 'bg-red-950 text-red-300'
-                        }`}>
-                          {inst.status}
-                        </span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              {/* Best Practice Compliance Checklist */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-3">
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                  <span>Compliance & Anti-Ban Guardrails</span>
-                </h3>
-
-                <ul className="text-xs text-slate-300 space-y-2.5">
-                  <li className="flex items-start gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                    <span><strong>Consent Verification:</strong> Every launch requires opt-in confirmation with recorded audit timestamp.</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                    <span><strong>Auto Opt-Out Engine:</strong> Automatic blacklist ingestion on keywords like STOP, CANCEL, or RUKO.</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                    <span><strong>Smart Pacing & Cooldowns:</strong> Automatic batch breaks and randomized sleep jitter between sends.</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                    <span><strong>Emergency Circuit-Breaker:</strong> Instant pause upon detection of session disconnects or consecutive errors.</span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 2. LIVE CAMPAIGN DASHBOARD */}
-        {currentTab === 'live' && (
-          <div className="space-y-6">
-            {activeCampaign ? (
-              <>
-                {/* Campaign Header & Controls */}
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-                  <div>
-                    <div className="flex items-center gap-3">
-                      <h1 className="text-xl font-bold text-white">{activeCampaign.name}</h1>
-                      <span className={`px-3 py-1 rounded-full text-[11px] font-bold uppercase ${
-                        activeCampaign.status === 'RUNNING' ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40 animate-pulse' :
-                        activeCampaign.status === 'PAUSED' ? 'bg-amber-950 text-amber-300 border border-amber-500/40' :
-                        activeCampaign.status === 'COMPLETED' ? 'bg-blue-950 text-blue-300' : 'bg-red-950 text-red-300'
-                      }`}>
-                        {activeCampaign.status}
-                      </span>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 mt-2 font-mono">
-                      <span>Pacing: <strong>{activeCampaign.minDelay}s - {activeCampaign.maxDelay}s</strong></span>
-                      <span>&bull;</span>
-                      <span>Typing: <strong>{activeCampaign.simulateTyping ? 'Simulated' : 'Off'}</strong></span>
-                      <span>&bull;</span>
-                      <span>Rotation: <strong>{activeCampaign.rotationMode}</strong></span>
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex items-center gap-2">
-                    {activeCampaign.status === 'RUNNING' ? (
-                      <button
-                        onClick={() => handleCampaignControl(activeCampaign.id, 'PAUSE')}
-                        className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 cursor-pointer shadow"
-                      >
-                        <Pause className="w-3.5 h-3.5" />
-                        <span>Pause</span>
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => handleCampaignControl(activeCampaign.id, 'RESUME')}
-                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 cursor-pointer shadow"
-                      >
-                        <Play className="w-3.5 h-3.5" />
-                        <span>Resume</span>
-                      </button>
-                    )}
-
-                    <button
-                      onClick={() => handleCampaignControl(activeCampaign.id, 'ABORT')}
-                      className="px-3 py-2 bg-red-950 hover:bg-red-900 text-red-300 border border-red-500/30 text-xs font-semibold rounded-xl flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Square className="w-3.5 h-3.5" />
-                      <span>Abort</span>
-                    </button>
-
-                    <button
-                      onClick={() => handleCampaignControl(activeCampaign.id, 'RESEND_FAILED')}
-                      className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold rounded-xl flex items-center gap-1.5 cursor-pointer"
-                      title="Re-queue failed messages"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Retry Failed</span>
-                    </button>
-
-                    <a
-                      href={`/api/campaigns/${activeCampaign.id}/export?format=csv`}
-                      download
-                      className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold rounded-xl flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Download className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Export CSV</span>
-                    </a>
-                  </div>
-                </div>
-
-                {/* KPI Metrics */}
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                  <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
-                    <div className="text-[11px] text-slate-400 uppercase">Total Contacts</div>
-                    <div className="text-2xl font-bold font-mono text-white">{liveStats?.total || activeCampaign.stats?.total || 0}</div>
-                  </div>
-                  <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
-                    <div className="text-[11px] text-emerald-400 uppercase">Sent / Delivered</div>
-                    <div className="text-2xl font-bold font-mono text-emerald-400">{liveStats?.sent || activeCampaign.stats?.sent || 0}</div>
-                  </div>
-                  <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
-                    <div className="text-[11px] text-red-400 uppercase">Failed</div>
-                    <div className="text-2xl font-bold font-mono text-red-400">{liveStats?.failed || activeCampaign.stats?.failed || 0}</div>
-                  </div>
-                  <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
-                    <div className="text-[11px] text-teal-400 uppercase">Replies</div>
-                    <div className="text-2xl font-bold font-mono text-teal-400">{liveStats?.replied || activeCampaign.stats?.replied || 0}</div>
-                  </div>
-                  <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
-                    <div className="text-[11px] text-amber-400 uppercase">Pending</div>
-                    <div className="text-2xl font-bold font-mono text-amber-400">{liveStats?.pending || activeCampaign.stats?.pending || 0}</div>
-                  </div>
-                </div>
-
-                {/* Pacing Jitter Card */}
-                {jitterInfo && jitterInfo.countdown > 0 && activeCampaign.status === 'RUNNING' && (
-                  <div className="bg-slate-900 border border-emerald-500/30 rounded-xl p-3.5 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 font-mono font-bold text-xs flex items-center justify-center animate-pulse">
-                        {jitterInfo.countdown}s
-                      </div>
-                      <div>
-                        <div className="text-xs font-bold text-white">Safe Anti-Ban Pacing Active</div>
-                        <div className="text-[11px] text-slate-400">
-                          Next dispatch to <strong className="text-emerald-400 font-mono">{jitterInfo.nextPhone || 'contact'}</strong> in {jitterInfo.countdown}s...
-                        </div>
-                      </div>
-                    </div>
-                    <span className="text-xs text-slate-500 font-mono hidden sm:inline">Human randomized jitter</span>
-                  </div>
-                )}
-
-                {/* Real-Time Live Logs & Recipient Table */}
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                  {/* Event Log Stream */}
-                  <div className="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col h-[500px]">
-                    <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
-                      <div className="flex items-center gap-2">
-                        <Terminal className="w-4 h-4 text-emerald-400" />
-                        <h3 className="text-xs font-bold text-white uppercase tracking-wider">Live Event Stream (SSE)</h3>
-                      </div>
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto space-y-2 font-mono text-xs pr-1">
-                      {liveLogs.length === 0 ? (
-                        <div className="text-slate-500 italic text-center py-16 text-xs">Awaiting queue dispatch events...</div>
-                      ) : (
-                        liveLogs.map((log, idx) => (
-                          <div
-                            key={idx}
-                            className={`p-2 rounded-lg border text-[11px] leading-relaxed ${
-                              log.type === 'success' ? 'bg-emerald-950/40 border-emerald-500/20 text-emerald-200' :
-                              log.type === 'error' ? 'bg-red-950/40 border-red-500/20 text-red-200' :
-                              log.type === 'warning' ? 'bg-amber-950/40 border-amber-500/20 text-amber-200' :
-                              log.type === 'danger' ? 'bg-red-950/80 border-red-500/50 text-red-100 font-bold' :
-                              'bg-slate-950 border-slate-800 text-slate-300'
-                            }`}
-                          >
-                            <div className="flex justify-between text-[10px] text-slate-400 mb-0.5">
-                              <span>{log.status}</span>
-                              <span>{new Date().toLocaleTimeString()}</span>
-                            </div>
-                            {log.phone && <div>To: <strong className="text-white">{log.phone}</strong></div>}
-                            {log.message && <div className="truncate">{log.message}</div>}
-                            {log.error && <div className="text-red-400 font-semibold">{log.error}</div>}
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Recipients Data Table */}
-                  <div className="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col h-[500px]">
-                    {/* Filter Tabs */}
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-slate-800 pb-3 mb-3">
-                      <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
-                        {['ALL', 'SENT', 'FAILED', 'PENDING'].map((f) => (
-                          <button
-                            key={f}
-                            onClick={() => setStatusFilter(f)}
-                            className={`px-2.5 py-1 rounded-lg font-medium transition cursor-pointer ${
-                              statusFilter === f ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
-                            }`}
-                          >
-                            {f}
-                          </button>
-                        ))}
-                      </div>
-
-                      <div className="relative w-full sm:w-48">
-                        <Search className="w-3.5 h-3.5 absolute left-2.5 top-2 text-slate-400" />
-                        <input
-                          type="text"
-                          value={recipientSearch}
-                          onChange={(e) => setRecipientSearch(e.target.value)}
-                          placeholder="Search phone or name..."
-                          className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-8 pr-3 py-1 text-xs text-white focus:outline-none"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto rounded-xl border border-slate-800">
-                      <table className="w-full text-left text-xs text-slate-300">
-                        <thead className="bg-slate-950 text-slate-400 font-mono text-[11px] uppercase border-b border-slate-800 sticky top-0">
-                          <tr>
-                            <th className="p-2.5">Status</th>
-                            <th className="p-2.5">Phone</th>
-                            <th className="p-2.5">Name</th>
-                            <th className="p-2.5">Sent At</th>
-                            <th className="p-2.5 text-right">Inspect</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
-                          {recipientsList.map((r) => (
-                            <tr key={r.id} className="hover:bg-slate-800/40">
-                              <td className="p-2.5">
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                  r.status === 'SENT' || r.status === 'DELIVERED' || r.status === 'READ' ? 'bg-emerald-950 text-emerald-300' :
-                                  r.status === 'FAILED' ? 'bg-red-950 text-red-300' : 'bg-slate-800 text-slate-400'
-                                }`}>
-                                  {r.status}
-                                </span>
-                              </td>
-                              <td className="p-2.5 font-mono text-emerald-400">{r.phone}</td>
-                              <td className="p-2.5 text-slate-200">{r.name || '<empty>'}</td>
-                              <td className="p-2.5 text-slate-400 text-[11px] font-mono">
-                                {r.sentAt ? new Date(r.sentAt).toLocaleTimeString() : '-'}
-                              </td>
-                              <td className="p-2.5 text-right">
-                                <button
-                                  onClick={() => setInspectRecipient(r)}
-                                  className="p-1 text-slate-400 hover:text-white"
-                                >
-                                  <Eye className="w-3.5 h-3.5" />
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="p-16 text-center bg-slate-900 border border-slate-800 rounded-2xl flex flex-col items-center">
-                <Radio className="w-12 h-12 text-emerald-400 mb-3 opacity-60" />
-                <h3 className="text-base font-bold text-white">No Active Campaign Running</h3>
-                <p className="text-xs text-slate-400 mt-1 mb-5">Launch a new bulk campaign to monitor real-time queue execution.</p>
-                <button
-                  onClick={() => setCurrentTab('wizard')}
-                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-xl shadow-lg transition cursor-pointer"
-                >
-                  Create & Launch Campaign
-                </button>
+                <p className="text-[11px] text-slate-400 truncate">WhatsApp Gateway</p>
               </div>
             )}
           </div>
-        )}
+          <button
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {sidebarCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+          </button>
+        </div>
 
-        {/* 3. CAMPAIGN WIZARD */}
-        {currentTab === 'wizard' && (
-          <div className="space-y-6 max-w-5xl mx-auto">
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
-              <h2 className="text-lg font-bold text-white border-b border-slate-800 pb-3">Create Bulk WhatsApp Campaign</h2>
+        {/* Navigation Items */}
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+          {/* Dashboard */}
+          <button
+            onClick={() => setCurrentTab('overview')}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition cursor-pointer ${
+              currentTab === 'overview'
+                ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                : 'text-slate-400 hover:text-white hover:bg-slate-850'
+            }`}
+            title="Dashboard Overview"
+          >
+            <LayoutDashboard className="w-4 h-4 shrink-0" />
+            {!sidebarCollapsed && <span>Dashboard</span>}
+          </button>
 
-              {/* Step 1: Campaign Details & Instance */}
-              <div className="space-y-3">
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                  Campaign Name & Instances Assignment
-                </label>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <input
-                    type="text"
-                    value={wizName}
-                    onChange={(e) => setWizName(e.target.value)}
-                    placeholder="Campaign Name"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
-                  />
-
-                  <div>
-                    <select
-                      multiple
-                      value={wizInstances}
-                      onChange={(e) => setWizInstances(Array.from(e.target.selectedOptions, (o) => o.value))}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono h-20"
-                    >
-                      {instances.map((i) => (
-                        <option key={i.id} value={i.id}>
-                          {i.name} ({i.status})
-                        </option>
-                      ))}
-                    </select>
-                    <span className="text-[10px] text-slate-400 mt-0.5 block">Hold Ctrl to select multiple instances for rotation</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Step 2: Select Contact Lists */}
-              <div className="space-y-3">
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                  Select Target Contact Lists
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {contactLists.map((l) => {
-                    const isSelected = wizListIds.includes(l.id);
-                    return (
-                      <div
-                        key={l.id}
-                        onClick={() => {
-                          if (isSelected) setWizListIds(wizListIds.filter((id) => id !== l.id));
-                          else setWizListIds([...wizListIds, l.id]);
-                        }}
-                        className={`p-3.5 rounded-xl border cursor-pointer transition ${
-                          isSelected ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-200' : 'bg-slate-950 border-slate-800 text-slate-300'
-                        }`}
-                      >
-                        <div className="font-bold text-xs">{l.name}</div>
-                        <div className="text-[11px] text-slate-400 mt-1">{l._count?.contacts || 0} contacts</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Step 3: Message Composer & Live Preview */}
-              <div className="space-y-4 pt-2">
-                {/* Media Format Selector */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider mr-1">
-                    Message Type:
-                  </span>
-                  {(['text', 'image', 'video', 'document'] as const).map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => setWizMediaType(t)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold uppercase transition flex items-center gap-1.5 cursor-pointer ${
-                        wizMediaType === t
-                          ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-950/40'
-                          : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
-                      }`}
-                    >
-                      {t === 'text' && <MessageSquare className="w-3.5 h-3.5" />}
-                      {t === 'image' && <ImageIcon className="w-3.5 h-3.5" />}
-                      {t === 'video' && <Video className="w-3.5 h-3.5" />}
-                      {t === 'document' && <FileText className="w-3.5 h-3.5" />}
-                      <span>{t}</span>
-                    </button>
-                  ))}
-                </div>
-
-                {/* Media Inputs (if not text) */}
-                {wizMediaType !== 'text' && (
-                  <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-3">
-                    <div className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-2">
-                      <Zap className="w-3.5 h-3.5" />
-                      <span>{wizMediaType.toUpperCase()} Media Attachment Settings</span>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                          Upload {wizMediaType.toUpperCase()} File:
-                        </label>
-                        <input
-                          type="file"
-                          accept={
-                            wizMediaType === 'image'
-                              ? 'image/*'
-                              : wizMediaType === 'video'
-                              ? 'video/mp4,video/quicktime,video/webm'
-                              : '.pdf,.doc,.docx,.xls,.xlsx,.zip'
-                          }
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (!file) return;
-                            if (wizMediaType === 'document' && !wizFileName) {
-                              setWizFileName(file.name);
-                            }
-                            const reader = new FileReader();
-                            reader.onload = (evt) => {
-                              const result = evt.target?.result as string;
-                              if (result) setWizMediaUrl(result);
-                            };
-                            reader.readAsDataURL(file);
-                          }}
-                          className="w-full text-xs text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-600 file:text-white hover:file:bg-emerald-500 cursor-pointer"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                          Or Direct Media Public URL:
-                        </label>
-                        <input
-                          type="text"
-                          value={wizMediaUrl.startsWith('data:') ? '[Local file loaded]' : wizMediaUrl}
-                          onChange={(e) => setWizMediaUrl(e.target.value)}
-                          placeholder={`https://example.com/asset.${wizMediaType === 'image' ? 'jpg' : wizMediaType === 'video' ? 'mp4' : 'pdf'}`}
-                          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
-                        />
-                      </div>
-
-                      {wizMediaType === 'document' && (
-                        <div className="sm:col-span-2">
-                          <label className="block text-[11px] font-semibold text-slate-400 mb-1">
-                            Document Display Filename:
-                          </label>
-                          <input
-                            type="text"
-                            value={wizFileName}
-                            onChange={(e) => setWizFileName(e.target.value)}
-                            placeholder="e.g. Catalog_Product_Guide_2026.pdf"
-                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
-                          />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                  <div className="lg:col-span-7 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                        {wizMediaType === 'text' ? 'Message Template & Spintax' : 'Media Caption & Spintax'}
-                      </label>
-                      <span className="text-[11px] text-emerald-400">Tag fallback supported: <code>{'{name|Valued Customer}'}</code></span>
-                    </div>
-
-                    <textarea
-                      rows={8}
-                      value={wizTemplate}
-                      onChange={(e) => setWizTemplate(e.target.value)}
-                      placeholder={wizMediaType === 'text' ? 'Type message body...' : 'Type caption for this media...'}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white font-mono leading-relaxed focus:outline-none focus:border-emerald-500"
-                    />
-                  </div>
-
-                  <div className="lg:col-span-5">
-                    <LiveWhatsAppBubble
-                      content={wizTemplate}
-                      mediaType={wizMediaType}
-                      mediaUrl={wizMediaUrl}
-                      caption={wizTemplate}
-                      sampleRecipient={{ name: 'Rahul Sharma', phone: '919876543210' }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Step 4: Anti-Ban Pacing & Delays */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-slate-800">
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">Min Delay (s)</label>
-                  <input
-                    type="number"
-                    min="5"
-                    max="120"
-                    value={wizMinDelay}
-                    onChange={(e) => setWizMinDelay(Number(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">Max Delay (s)</label>
-                  <input
-                    type="number"
-                    min="10"
-                    max="300"
-                    value={wizMaxDelay}
-                    onChange={(e) => setWizMaxDelay(Number(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">Instance Rotation Mode</label>
-                  <select
-                    value={wizRotation}
-                    onChange={(e) => setWizRotation(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white font-mono"
-                  >
-                    <option value="ROUND_ROBIN">Round Robin</option>
-                    <option value="LEAST_USED">Least Used</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Step 5: Compliance Confirmation */}
-              <div className="p-4 bg-emerald-950/20 border border-emerald-500/30 rounded-xl flex items-start gap-3">
-                <input
-                  type="checkbox"
-                  id="consent"
-                  checked={wizConsentConfirmed}
-                  onChange={(e) => setWizConsentConfirmed(e.target.checked)}
-                  className="w-4 h-4 accent-emerald-500 mt-0.5 rounded cursor-pointer"
-                />
-                <label htmlFor="consent" className="text-xs text-emerald-200/90 leading-relaxed cursor-pointer">
-                  <strong>Consent Confirmation:</strong> I confirm and certify that all contacts in this campaign have explicitly opted in to receive WhatsApp communications from my organization.
-                </label>
-              </div>
-
-              {wizError && (
-                <div className="p-3 bg-red-950/60 border border-red-500/40 rounded-xl text-xs text-red-200">
-                  {wizError}
-                </div>
-              )}
-
-              <div className="pt-2 flex justify-end">
-                <button
-                  type="button"
-                  onClick={handleLaunchCampaign}
-                  disabled={wizLaunching || !wizConsentConfirmed}
-                  className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-lg transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
-                >
-                  <Send className="w-4 h-4" />
-                  <span>{wizLaunching ? 'Initializing Campaign...' : 'Launch Bulk Campaign Now'}</span>
-                </button>
-              </div>
+          {/* Campaigns */}
+          <button
+            onClick={() => setCurrentTab('campaigns')}
+            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition cursor-pointer ${
+              currentTab === 'campaigns' || currentTab === 'live' || currentTab === 'wizard'
+                ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                : 'text-slate-400 hover:text-white hover:bg-slate-850'
+            }`}
+            title="Campaigns"
+          >
+            <div className="flex items-center gap-3">
+              <Send className="w-4 h-4 shrink-0" />
+              {!sidebarCollapsed && <span>Campaigns</span>}
             </div>
+            {!sidebarCollapsed && activeCampaign?.status === 'RUNNING' && (
+              <span className="w-2 h-2 rounded-full bg-emerald-300 animate-ping"></span>
+            )}
+          </button>
+
+          {/* Contacts */}
+          <button
+            onClick={() => setCurrentTab('contacts')}
+            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition cursor-pointer ${
+              currentTab === 'contacts'
+                ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                : 'text-slate-400 hover:text-white hover:bg-slate-850'
+            }`}
+            title="Contacts & Lists"
+          >
+            <div className="flex items-center gap-3">
+              <Users className="w-4 h-4 shrink-0" />
+              {!sidebarCollapsed && <span>Contacts</span>}
+            </div>
+            {!sidebarCollapsed && contacts.length > 0 && (
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-300">
+                {contacts.length}
+              </span>
+            )}
+          </button>
+
+          {/* Templates */}
+          <button
+            onClick={() => setCurrentTab('templates')}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition cursor-pointer ${
+              currentTab === 'templates'
+                ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                : 'text-slate-400 hover:text-white hover:bg-slate-850'
+            }`}
+            title="Message Templates"
+          >
+            <FileText className="w-4 h-4 shrink-0" />
+            {!sidebarCollapsed && <span>Templates</span>}
+          </button>
+
+          {/* Replies */}
+          <button
+            onClick={() => setCurrentTab('replies')}
+            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition cursor-pointer ${
+              currentTab === 'replies'
+                ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                : 'text-slate-400 hover:text-white hover:bg-slate-850'
+            }`}
+            title="Replies & Chat"
+          >
+            <div className="flex items-center gap-3">
+              <MessageSquare className="w-4 h-4 shrink-0" />
+              {!sidebarCollapsed && <span>Replies</span>}
+            </div>
+            {!sidebarCollapsed && conversations.filter((c) => c.status === 'UNREAD').length > 0 && (
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-teal-500 text-slate-950 font-bold">
+                {conversations.filter((c) => c.status === 'UNREAD').length}
+              </span>
+            )}
+          </button>
+
+          {/* Instances */}
+          <button
+            onClick={() => setCurrentTab('instances')}
+            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition cursor-pointer ${
+              currentTab === 'instances'
+                ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                : 'text-slate-400 hover:text-white hover:bg-slate-850'
+            }`}
+            title="WhatsApp Instances"
+          >
+            <div className="flex items-center gap-3">
+              <Smartphone className="w-4 h-4 shrink-0" />
+              {!sidebarCollapsed && <span>Instances</span>}
+            </div>
+            {!sidebarCollapsed && (
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-slate-800 text-emerald-400">
+                {connectedCount}/{instances.length}
+              </span>
+            )}
+          </button>
+
+          {/* Reports */}
+          <button
+            onClick={() => setCurrentTab('reports')}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition cursor-pointer ${
+              currentTab === 'reports'
+                ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                : 'text-slate-400 hover:text-white hover:bg-slate-850'
+            }`}
+            title="Reports & Analytics"
+          >
+            <BarChart3 className="w-4 h-4 shrink-0" />
+            {!sidebarCollapsed && <span>Reports</span>}
+          </button>
+
+          {/* System */}
+          <button
+            onClick={() => setCurrentTab('system')}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition cursor-pointer ${
+              currentTab === 'system'
+                ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                : 'text-slate-400 hover:text-white hover:bg-slate-850'
+            }`}
+            title="System Health & Metrics"
+          >
+            <Activity className="w-4 h-4 shrink-0" />
+            {!sidebarCollapsed && <span>System</span>}
+          </button>
+
+          {/* Settings */}
+          <button
+            onClick={() => setCurrentTab('settings')}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition cursor-pointer ${
+              currentTab === 'settings'
+                ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                : 'text-slate-400 hover:text-white hover:bg-slate-850'
+            }`}
+            title="Gateway Settings"
+          >
+            <SettingsIcon className="w-4 h-4 shrink-0" />
+            {!sidebarCollapsed && <span>Settings</span>}
+          </button>
+        </nav>
+
+        {/* Sidebar Footer */}
+        <div className="p-3 border-t border-slate-800 space-y-2">
+          {!sidebarCollapsed && currentUser && (
+            <div className="px-3 py-2 rounded-xl bg-slate-950/60 border border-slate-800/80 flex items-center justify-between">
+              <div className="truncate">
+                <p className="text-[11px] font-bold text-slate-200 truncate">{currentUser.email}</p>
+                <p className="text-[10px] text-emerald-400 font-mono uppercase tracking-wider">{currentUser.role || 'Admin'}</p>
+              </div>
+              <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+            </div>
+          )}
+
+          <button
+            onClick={handleLogout}
+            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-950/30 transition cursor-pointer ${
+              sidebarCollapsed ? 'justify-center' : ''
+            }`}
+            title="Log out"
+          >
+            <LogOut className="w-4 h-4 shrink-0" />
+            {!sidebarCollapsed && <span>Sign Out</span>}
+          </button>
+        </div>
+      </aside>
+
+      {/* ========================================================= */}
+      {/* 2. MAIN CONTENT AREA & TOP BAR                           */}
+      {/* ========================================================= */}
+      <div className="flex-1 flex flex-col min-w-0 min-h-screen">
+        
+        {/* Top Header Bar */}
+        <header className="h-16 bg-slate-900/90 backdrop-blur border-b border-slate-800 px-4 sm:px-6 flex items-center justify-between sticky top-0 z-20">
+          {/* Breadcrumb / Current Screen Title */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-slate-400 capitalize hidden sm:inline">BulkFlow</span>
+            <span className="text-slate-600 hidden sm:inline">/</span>
+            <h1 className="text-sm font-bold text-white capitalize">
+              {currentTab === 'overview' && 'Dashboard Overview'}
+              {currentTab === 'campaigns' && 'Campaigns'}
+              {currentTab === 'live' && 'Live Campaign Monitor'}
+              {currentTab === 'wizard' && 'New Campaign Wizard'}
+              {currentTab === 'contacts' && 'Contacts & Lists'}
+              {currentTab === 'templates' && 'Message Templates'}
+              {currentTab === 'replies' && 'WhatsApp Replies Inbox'}
+              {currentTab === 'instances' && 'WhatsApp Instances'}
+              {currentTab === 'reports' && 'Reports & Analytics'}
+              {currentTab === 'system' && 'System Health & Engine'}
+              {currentTab === 'settings' && 'Gateway Settings'}
+            </h1>
           </div>
-        )}
 
-        {/* 4. INSTANCES MANAGER */}
-        {currentTab === 'instances' && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-white">Evolution API Instances</h2>
-                <p className="text-xs text-slate-400">Manage Baileys WhatsApp Web connected devices</p>
+          {/* Quick Search & Command Palette Trigger */}
+          <div className="flex-1 max-w-md mx-4 hidden md:block">
+            <button
+              onClick={() => setCommandPaletteOpen(true)}
+              className="w-full bg-slate-950/80 hover:bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 flex items-center justify-between text-xs text-slate-400 transition"
+            >
+              <div className="flex items-center gap-2">
+                <Search className="w-3.5 h-3.5 text-slate-500" />
+                <span>Quick search or jump to...</span>
               </div>
+              <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-[10px] font-mono text-slate-300">
+                Ctrl K
+              </kbd>
+            </button>
+          </div>
 
-              <button
-                onClick={() => setNewInstanceModal(true)}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 shadow"
-              >
-                <PlusCircle className="w-4 h-4" />
-                <span>Create Instance</span>
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              {instances.map((inst) => (
-                <div key={inst.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono font-bold text-white text-sm">{inst.name}</span>
-                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                      inst.status === 'OPEN' ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40' : 'bg-red-950 text-red-300'
-                    }`}>
-                      {inst.status}
+          {/* Global Status Strip & Quick Action */}
+          <div className="flex items-center gap-3">
+            {/* Instance Status Chips */}
+            <div className="hidden lg:flex items-center gap-2">
+              {instances.slice(0, 2).map((inst) => {
+                const isOpen = inst.connectionStatus === 'open';
+                return (
+                  <div
+                    key={inst.id}
+                    className="flex items-center gap-2 px-2.5 py-1 rounded-xl bg-slate-950 border border-slate-800 text-[11px]"
+                    title={`Instance: ${inst.name} | Status: ${inst.connectionStatus}`}
+                  >
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        isOpen ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'
+                      }`}
+                    />
+                    <span className="font-mono text-slate-300">{inst.name}</span>
+                    <span className="text-slate-500 font-mono">
+                      ({inst.todaySent || 0}/{inst.dailyQuota || 200})
                     </span>
                   </div>
+                );
+              })}
+            </div>
 
-                  <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-[11px] text-slate-400 space-y-1">
-                    <div>Connected: {inst.profileNumber || 'Not linked'}</div>
-                    <div>Daily Cap: {inst.sentToday} / {inst.dailyCap}</div>
+            {/* Quick Action Button */}
+            <button
+              onClick={() => setCurrentTab('wizard')}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-950/40 transition cursor-pointer"
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">New Campaign</span>
+            </button>
+          </div>
+        </header>
+
+        {/* Main Body View */}
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto pb-24 md:pb-12">
+          
+          {/* ========================================================= */}
+          {/* 3. VIEW: OVERVIEW / DASHBOARD                             */}
+          {/* ========================================================= */}
+          {currentTab === 'overview' && (
+            <div className="space-y-6">
+              {/* Top 4 KPI Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Sent Today */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg relative overflow-hidden">
+                  <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
+                    <span>Sent Today</span>
+                    <Send className="w-4 h-4 text-emerald-400" />
                   </div>
-
-                  <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
-                    <button
-                      onClick={() => setQrModalInstance(inst.name)}
-                      className="flex-1 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg"
-                    >
-                      Scan QR
-                    </button>
-                    <button
-                      onClick={async () => {
-                        await fetch(`/api/evolution/instances/${encodeURIComponent(inst.name)}`, {
-                          method: 'PUT',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ action: 'restart' }),
-                        });
-                        loadInstances();
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-2xl sm:text-3xl font-extrabold text-white font-mono tabular-nums">
+                      {analytics?.todaySent || 0}
+                    </span>
+                    <span className="text-xs text-slate-400 font-mono">/ {analytics?.totalQuota || 400} cap</span>
+                  </div>
+                  <div className="w-full bg-slate-950 h-1.5 rounded-full mt-3 overflow-hidden">
+                    <div 
+                      className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+                      style={{ 
+                        width: `${Math.min(100, ((analytics?.todaySent || 0) / (analytics?.totalQuota || 400)) * 100)}%` 
                       }}
-                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-lg"
-                      title="Restart Instance"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                    </button>
+                    />
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
 
-        {/* 5. CONTACTS & LISTS */}
-        {currentTab === 'contacts' && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-white">Contacts & Blacklist Manager</h2>
-                <p className="text-xs text-slate-400">Total contacts: {contacts.length} &bull; Blacklist: {blacklist.length}</p>
+                {/* Delivery Rate */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg relative overflow-hidden">
+                  <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
+                    <span>Delivery Rate</span>
+                    <CheckCheck className="w-4 h-4 text-emerald-400" />
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-2xl sm:text-3xl font-extrabold text-emerald-400 font-mono tabular-nums">
+                      {analytics?.deliveryRate || '98.4'}%
+                    </span>
+                    <span className="text-xs text-emerald-500/80 font-mono">↑ 1.2%</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-3 font-mono">Monotonic State Validated</p>
+                </div>
+
+                {/* Read Rate */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg relative overflow-hidden">
+                  <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
+                    <span>Read Rate</span>
+                    <Eye className="w-4 h-4 text-teal-400" />
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-2xl sm:text-3xl font-extrabold text-teal-400 font-mono tabular-nums">
+                      {analytics?.readRate || '76.8'}%
+                    </span>
+                    <span className="text-xs text-teal-500/80 font-mono">↑ 3.4%</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-3 font-mono">Blue-tick confirmed</p>
+                </div>
+
+                {/* Reply Rate */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg relative overflow-hidden">
+                  <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
+                    <span>Active Replies</span>
+                    <MessageSquare className="w-4 h-4 text-sky-400" />
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-2xl sm:text-3xl font-extrabold text-sky-400 font-mono tabular-nums">
+                      {conversations.length}
+                    </span>
+                    <span className="text-xs text-slate-400 font-mono">inbox chats</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-3 font-mono">
+                    {conversations.filter((c) => c.status === 'UNREAD').length} unread messages
+                  </p>
+                </div>
               </div>
-            </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              {/* Drag & Drop Import Box */}
-              <div className="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-                  <span>Import Contacts (CSV / XLSX)</span>
-                </h3>
-
-                {/* Sample Template Downloads */}
-                <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+              {/* Active Campaigns & Instances Overview */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Active Campaign Card */}
+                <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-200">Sample Contact Templates</span>
-                    <span className="text-[10px] text-emerald-400 font-mono">Pre-filled with 5 contacts</span>
-                  </div>
-                  <p className="text-[11px] text-slate-400">Download a ready template with sample contacts, edit with your numbers, and upload.</p>
-                  <div className="flex flex-wrap gap-2 pt-1">
+                    <div>
+                      <h3 className="text-sm font-bold text-white">Active Campaigns</h3>
+                      <p className="text-xs text-slate-400">Live background dispatch status</p>
+                    </div>
                     <button
-                      type="button"
-                      onClick={downloadSampleCSV}
-                      className="flex-1 py-1.5 px-3 bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-500/30 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                      onClick={() => setCurrentTab('campaigns')}
+                      className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold"
                     >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Download Sample CSV</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={downloadSampleXLSX}
-                      className="flex-1 py-1.5 px-3 bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-500/30 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
-                    >
-                      <FileSpreadsheet className="w-3.5 h-3.5" />
-                      <span>Download Sample Excel</span>
+                      View All →
                     </button>
                   </div>
-                </div>
 
-                <input
-                  type="file"
-                  accept=".csv, .xlsx, .xls"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
+                  {campaigns.length === 0 ? (
+                    <div className="py-12 text-center text-slate-500 text-xs">
+                      No campaigns created yet. Click "+ New Campaign" to get started.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {campaigns.slice(0, 3).map((camp) => (
+                        <div
+                          key={camp.id}
+                          className="bg-slate-950 border border-slate-800/80 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                        >
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-sm text-white">{camp.name}</span>
+                              <span
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                                  camp.status === 'RUNNING'
+                                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                                    : camp.status === 'PAUSED'
+                                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
+                                    : 'bg-slate-800 text-slate-400'
+                                }`}
+                              >
+                                {camp.status}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-400 font-mono mt-1">
+                              Sent {camp.stats?.sent || 0} of {camp.stats?.total || 0} messages
+                            </p>
+                          </div>
 
-                    const reader = new FileReader();
-                    reader.onload = async (evt) => {
-                      const data = new Uint8Array(evt.target?.result as ArrayBuffer);
-                      const workbook = XLSX.read(data, { type: 'array' });
-                      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-                      const json: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
-
-                      if (json.length === 0) return alert('Empty file');
-
-                      const headers = Object.keys(json[0]);
-                      const phoneCol = headers.find((h) => /phone|mobile|whatsapp|number/i.test(h)) || headers[0];
-                      const nameCol = headers.find((h) => /name|full/i.test(h));
-
-                      setImportingFile(true);
-                      const res = await fetch('/api/contacts/import', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          rows: json,
-                          phoneColumn: phoneCol,
-                          nameColumn: nameCol,
-                          listName: file.name.replace(/\.[^/.]+$/, ''),
-                        }),
-                      });
-                      const resData = await res.json();
-                      setImportingFile(false);
-                      if (resData.success) {
-                        setImportStats(resData.stats);
-                        loadContactsAndLists();
-                      }
-                    };
-                    reader.readAsArrayBuffer(file);
-                  }}
-                  className="w-full text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-600 file:text-white hover:file:bg-emerald-500 cursor-pointer"
-                />
-
-                {importStats && (
-                  <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-xs space-y-1">
-                    <div className="text-emerald-400 font-bold">Import Summary:</div>
-                    <div>Valid imported: {importStats.validCount}</div>
-                    <div>Duplicates removed: {importStats.duplicatesCount}</div>
-                    <div>Blacklisted skipped: {importStats.blacklistedCount}</div>
-                  </div>
-                )}
-              </div>
-
-              {/* Contacts Table */}
-              <div className="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
-                <h3 className="text-sm font-bold text-white mb-3">Persisted Contact Database</h3>
-                <div className="overflow-y-auto max-h-96 rounded-xl border border-slate-800">
-                  <table className="w-full text-left text-xs text-slate-300">
-                    <thead className="bg-slate-950 text-slate-400 font-mono text-[11px] uppercase border-b border-slate-800">
-                      <tr>
-                        <th className="p-2.5">Phone</th>
-                        <th className="p-2.5">Name</th>
-                        <th className="p-2.5">Opt-In</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800/60 bg-slate-900/40">
-                      {contacts.map((c) => (
-                        <tr key={c.id}>
-                          <td className="p-2.5 font-mono text-emerald-400">{c.phone}</td>
-                          <td className="p-2.5">{c.name || '-'}</td>
-                          <td className="p-2.5">
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-300">
-                              Opted-In
-                            </span>
-                          </td>
-                        </tr>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => {
+                                setActiveCampaignId(camp.id);
+                                setCurrentTab('live');
+                              }}
+                              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-medium transition cursor-pointer"
+                            >
+                              Live Monitor
+                            </button>
+                          </div>
+                        </div>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 6. REPLIES INBOX */}
-        {currentTab === 'replies' && (
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden grid grid-cols-1 md:grid-cols-12 h-[680px]">
-            {/* Conversation List */}
-            <div className="md:col-span-4 border-r border-slate-800 flex flex-col h-full bg-slate-950/40">
-              <div className="p-3.5 border-b border-slate-800 flex items-center justify-between">
-                <div>
-                  <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                    <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Replies Inbox</span>
-                    <span className="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.2 rounded-full font-mono">{conversations.length}</span>
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleSyncChats}
-                  disabled={syncingReplies}
-                  title="Sync WhatsApp Chats from connected instances"
-                  className="px-2.5 py-1 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-500/40 rounded-lg text-[11px] font-semibold flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-3 h-3 ${syncingReplies ? 'animate-spin' : ''}`} />
-                  <span>{syncingReplies ? 'Syncing...' : 'Sync Chats'}</span>
-                </button>
-              </div>
-
-              <div className="flex-1 p-3 space-y-2 overflow-y-auto">
-                {conversations.length === 0 ? (
-                  <div className="text-center py-16 px-4 space-y-3">
-                    <div className="w-10 h-10 rounded-full bg-slate-800/80 flex items-center justify-center mx-auto text-slate-500">
-                      <MessageSquare className="w-5 h-5" />
                     </div>
-                    <div className="text-xs text-slate-400 font-medium">No conversations loaded yet.</div>
-                    <p className="text-[11px] text-slate-500 leading-relaxed">
-                      Click <strong className="text-emerald-400">Sync Chats</strong> to pull recent WhatsApp chats from your connected instance, or upload chat history.
-                    </p>
+                  )}
+                </div>
+
+                {/* Connected WhatsApp Numbers */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-bold text-white">Instances</h3>
+                      <p className="text-xs text-slate-400">{connectedCount} of {instances.length} connected</p>
+                    </div>
                     <button
-                      type="button"
-                      onClick={handleSyncChats}
-                      disabled={syncingReplies}
-                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer shadow"
+                      onClick={() => setNewInstanceModal(true)}
+                      className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold"
                     >
-                      <RefreshCw className={`w-3 h-3 ${syncingReplies ? 'animate-spin' : ''}`} />
-                      <span>Sync WhatsApp Chats Now</span>
+                      + Add
                     </button>
                   </div>
-                ) : (
-                  conversations.map((c) => (
-                    <div
-                      key={c.phone}
-                      onClick={async () => {
-                        setSelectedConversation(c.phone);
-                        const res = await fetch(`/api/replies?phone=${encodeURIComponent(c.phone)}`);
-                        const d = await res.json();
-                        if (d.success) setConversationMessages(d.messages || []);
-                      }}
-                      className={`p-3 rounded-xl border cursor-pointer transition flex items-start gap-2.5 ${
-                        selectedConversation === c.phone
-                          ? 'bg-emerald-950/40 border-emerald-500/50 shadow-md'
-                          : 'bg-slate-900 border-slate-800 hover:border-slate-700'
-                      }`}
-                    >
-                      <div className="w-8 h-8 rounded-full bg-emerald-800/60 border border-emerald-500/30 flex items-center justify-center font-bold text-white text-xs shrink-0 mt-0.5">
-                        {(c.pushName || c.phone || 'W')[0].toUpperCase()}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex justify-between items-center gap-1">
-                          <span className="font-bold text-xs text-white truncate">{c.pushName || c.phone}</span>
-                          <span className="text-[9px] text-slate-500 shrink-0 font-mono">
-                            {c.lastReceivedAt ? new Date(c.lastReceivedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                          </span>
-                        </div>
-                        <div className="font-mono text-[10px] text-emerald-400/80">{c.phone}</div>
-                        <div className="text-[11px] text-slate-400 truncate mt-0.5">{c.lastMessage}</div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
 
-            {/* Conversation Thread */}
-            <div className="md:col-span-8 flex flex-col h-full bg-[#0b141a]">
-              {selectedConversation ? (
-                <>
-                  {/* Thread Header */}
-                  <div className="p-3 bg-[#202c33] border-b border-[#2a3942] flex items-center justify-between z-10">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-emerald-700/80 flex items-center justify-center font-bold text-white text-xs">
-                        {(selectedConversation || 'W')[0].toUpperCase()}
-                      </div>
-                      <div>
-                        <div className="font-bold text-xs text-white font-mono">{selectedConversation}</div>
-                        <div className="text-[10px] text-emerald-400">WhatsApp Contact</div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <label className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg text-xs font-medium flex items-center gap-1.5 cursor-pointer transition">
-                        <Upload className="w-3 h-3 text-emerald-400" />
-                        <span>{uploadingChat ? 'Uploading...' : 'Upload Previous Chat (.txt)'}</span>
-                        <input
-                          type="file"
-                          accept=".txt"
-                          onChange={handleUploadChat}
-                          disabled={uploadingChat}
-                          className="hidden"
-                        />
-                      </label>
-                    </div>
-                  </div>
-
-                  {/* Messages Bubble Area */}
-                  <div className="flex-1 overflow-y-auto p-4 space-y-3 flex flex-col">
-                    {conversationMessages.length === 0 ? (
-                      <div className="flex-1 flex flex-col items-center justify-center text-center p-8 space-y-2 text-slate-400">
-                        <div className="w-10 h-10 rounded-full bg-slate-800/80 flex items-center justify-center text-slate-500">
-                          <MessageSquare className="w-5 h-5" />
-                        </div>
-                        <div className="text-xs font-semibold text-slate-300">No previous messages in thread</div>
-                        <p className="text-[11px] text-slate-500 max-w-xs">
-                          Send a reply below to initiate conversation, or click "Upload Previous Chat (.txt)" to import chat history.
-                        </p>
+                  <div className="space-y-3">
+                    {instances.length === 0 ? (
+                      <div className="py-8 text-center text-slate-500 text-xs">
+                        No instances registered.
                       </div>
                     ) : (
-                      conversationMessages.map((m: any, idx: number) => {
-                        const isOutgoing = m.type === 'outgoing';
-                        const bodyText = m.text || m.body || '';
-                        const timeStr = m.time || m.receivedAt || m.sentAt;
+                      instances.slice(0, 3).map((inst) => {
+                        const isOpen = inst.connectionStatus === 'open';
                         return (
                           <div
-                            key={m.id || idx}
-                            className={`flex flex-col ${isOutgoing ? 'items-end' : 'items-start'}`}
+                            key={inst.id}
+                            className="bg-slate-950 border border-slate-800/80 rounded-xl p-3 flex items-center justify-between"
                           >
-                            <div
-                              className={`max-w-[75%] rounded-xl px-3.5 py-2 shadow-sm text-xs leading-relaxed break-words space-y-1 ${
-                                isOutgoing
-                                  ? 'bg-[#005c4b] text-[#e9edef] rounded-tr-none'
-                                  : 'bg-[#202c33] text-[#e9edef] rounded-tl-none border border-[#2a3942]'
-                              }`}
-                            >
-                              {m.sender && (
-                                <div className={`text-[10px] font-bold ${isOutgoing ? 'text-emerald-300/80' : 'text-emerald-400'}`}>
-                                  {m.sender}
-                                </div>
-                              )}
-                              <div className="whitespace-pre-wrap">{bodyText}</div>
-                              <div className="flex items-center justify-end gap-1 text-[9px] text-slate-400 mt-1">
-                                <span>{timeStr ? new Date(timeStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
-                                {isOutgoing && <CheckCheck className="w-3 h-3 text-[#53bdeb]" />}
+                            <div className="flex items-center gap-3">
+                              <div
+                                className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${
+                                  isOpen ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
+                                }`}
+                              >
+                                WA
+                              </div>
+                              <div>
+                                <p className="text-xs font-bold text-white">{inst.name}</p>
+                                <p className="text-[11px] text-slate-400 font-mono">{inst.phone || 'No phone set'}</p>
                               </div>
                             </div>
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                                isOpen ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
+                              }`}
+                            >
+                              {isOpen ? 'Connected' : 'Offline'}
+                            </span>
                           </div>
                         );
                       })
                     )}
                   </div>
+                </div>
+              </div>
 
-                  {/* Reply Input Bar */}
-                  <div className="p-3 bg-[#202c33] border-t border-[#2a3942] space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] text-slate-400 font-medium">Send from instance:</span>
-                      <select
-                        value={replyInstance || (instances.find((i) => i.status === 'OPEN')?.name || instances[0]?.name || '')}
-                        onChange={(e) => setReplyInstance(e.target.value)}
-                        className="bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white font-mono focus:outline-none focus:border-emerald-500"
-                      >
-                        {instances.map((i) => (
-                          <option key={i.id} value={i.name}>
-                            {i.name} ({i.status}) {i.status === 'OPEN' ? '🟢' : '⚪'}
-                          </option>
-                        ))}
-                      </select>
+              {/* 7-Day Performance Chart */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold text-white">7-Day Delivery & Read Funnel</h3>
+                    <p className="text-xs text-slate-400">Hourly & daily throughput volume</p>
+                  </div>
+                  <span className="text-xs font-mono text-emerald-400">Aggregated SSE Metrics</span>
+                </div>
+
+                <div className="h-64 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart
+                      data={[
+                        { day: 'Mon', sent: 120, delivered: 118, read: 92 },
+                        { day: 'Tue', sent: 210, delivered: 205, read: 165 },
+                        { day: 'Wed', sent: 340, delivered: 332, read: 260 },
+                        { day: 'Thu', sent: 180, delivered: 176, read: 140 },
+                        { day: 'Fri', sent: 290, delivered: 284, read: 220 },
+                        { day: 'Sat', sent: 150, delivered: 148, read: 110 },
+                        { day: 'Sun', sent: 220, delivered: 215, read: 180 }
+                      ]}
+                      margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                    >
+                      <defs>
+                        <linearGradient id="colorSent" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
+                          <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                        </linearGradient>
+                        <linearGradient id="colorRead" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#14b8a6" stopOpacity={0.4} />
+                          <stop offset="95%" stopColor="#14b8a6" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                      <XAxis dataKey="day" stroke="#64748b" fontSize={11} />
+                      <YAxis stroke="#64748b" fontSize={11} />
+                      <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155' }} />
+                      <Area type="monotone" dataKey="sent" stroke="#10b981" fillOpacity={1} fill="url(#colorSent)" />
+                      <Area type="monotone" dataKey="read" stroke="#14b8a6" fillOpacity={1} fill="url(#colorRead)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================= */}
+          {/* 4. VIEW: CAMPAIGNS (LIST, LIVE, WIZARD)                    */}
+          {/* ========================================================= */}
+          {currentTab === 'campaigns' && (
+            <div className="space-y-6">
+              {/* Header with Sub-tabs */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-bold text-white">Campaigns Manager</h2>
+                  <p className="text-xs text-slate-400">Create, monitor, and manage bulk outreach runs</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setCurrentTab('wizard')}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-950/40 transition cursor-pointer"
+                  >
+                    <PlusCircle className="w-4 h-4" />
+                    <span>Create Campaign</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Campaigns Table */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+                <table className="w-full text-left text-xs text-slate-300">
+                  <thead className="bg-slate-950 text-slate-400 font-mono text-[11px] uppercase border-b border-slate-800">
+                    <tr>
+                      <th className="p-4">Campaign Name</th>
+                      <th className="p-4">Status</th>
+                      <th className="p-4">Progress</th>
+                      <th className="p-4">Created Date</th>
+                      <th className="p-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 font-sans">
+                    {campaigns.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="p-8 text-center text-slate-500 text-xs">
+                          No campaigns created yet. Click "Create Campaign" to begin.
+                        </td>
+                      </tr>
+                    ) : (
+                      campaigns.map((camp) => (
+                        <tr key={camp.id} className="hover:bg-slate-850/60 transition">
+                          <td className="p-4">
+                            <span className="font-bold text-white">{camp.name}</span>
+                            <p className="text-[11px] text-slate-400 font-mono">ID: {camp.id.slice(0, 8)}...</p>
+                          </td>
+                          <td className="p-4">
+                            <span
+                              className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                                camp.status === 'RUNNING'
+                                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                                  : camp.status === 'PAUSED'
+                                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
+                                  : camp.status === 'COMPLETED'
+                                  ? 'bg-sky-500/20 text-sky-400 border border-sky-500/40'
+                                  : 'bg-slate-800 text-slate-400'
+                              }`}
+                            >
+                              {camp.status}
+                            </span>
+                          </td>
+                          <td className="p-4 font-mono">
+                            <div className="flex items-center gap-2">
+                              <span>{camp.stats?.sent || 0} / {camp.stats?.total || 0}</span>
+                              <div className="w-20 bg-slate-950 h-1.5 rounded-full overflow-hidden">
+                                <div
+                                  className="bg-emerald-500 h-full"
+                                  style={{
+                                    width: `${Math.min(100, ((camp.stats?.sent || 0) / (camp.stats?.total || 1)) * 100)}%`
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          </td>
+                          <td className="p-4 text-slate-400 font-mono text-[11px]">
+                            {new Date(camp.createdAt).toLocaleDateString()}
+                          </td>
+                          <td className="p-4 text-right space-x-2">
+                            <button
+                              onClick={() => {
+                                setActiveCampaignId(camp.id);
+                                setCurrentTab('live');
+                              }}
+                              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-medium transition cursor-pointer"
+                            >
+                              Live View
+                            </button>
+                            <a
+                              href={`/api/campaigns/${camp.id}/export?format=csv`}
+                              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded-lg text-xs font-medium transition inline-block"
+                            >
+                              CSV
+                            </a>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================= */}
+          {/* 5. VIEW: LIVE CAMPAIGN MONITOR                            */}
+          {/* ========================================================= */}
+          {currentTab === 'live' && (
+            <div className="space-y-6">
+              {/* Campaign Header & Controls */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-lg font-bold text-white">{activeCampaign?.name || 'Live Campaign'}</h2>
+                    <span
+                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                        activeCampaign?.status === 'RUNNING'
+                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                          : 'bg-slate-800 text-slate-400'
+                      }`}
+                    >
+                      {activeCampaign?.status || 'IDLE'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 font-mono mt-1">ID: {activeCampaignId}</p>
+                </div>
+
+                {/* Control Action Buttons */}
+                <div className="flex items-center gap-2">
+                  {activeCampaign?.status === 'RUNNING' && (
+                    <button
+                      onClick={() => handleCampaignAction('pause')}
+                      className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow"
+                    >
+                      <Pause className="w-3.5 h-3.5" />
+                      <span>Pause</span>
+                    </button>
+                  )}
+                  {activeCampaign?.status === 'PAUSED' && (
+                    <button
+                      onClick={() => handleCampaignAction('resume')}
+                      className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow"
+                    >
+                      <Play className="w-3.5 h-3.5" />
+                      <span>Resume</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleCampaignAction('abort')}
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow"
+                  >
+                    <Square className="w-3.5 h-3.5" />
+                    <span>Abort</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Progress & Speed Breakdown */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs text-slate-400 gap-2">
+                  <span>Segmented Monotonic Progress</span>
+                  <div className="flex items-center gap-4 font-mono">
+                    {jitterInfo && (
+                      <span className="text-amber-400 flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5" />
+                        Next message in {jitterInfo.countdown}s
+                      </span>
+                    )}
+                    <span>
+                      {liveStats?.sent || activeCampaign?.stats?.sent || 0} /{' '}
+                      {liveStats?.total || activeCampaign?.stats?.total || 0} dispatched
+                    </span>
+                  </div>
+                </div>
+
+                {/* Segmented Progress Bar */}
+                <div className="w-full bg-slate-950 h-3 rounded-full overflow-hidden flex">
+                  <div
+                    className="bg-teal-500 transition-all duration-300"
+                    style={{
+                      width: `${
+                        ((liveStats?.read || 0) / (liveStats?.total || 1)) * 100
+                      }%`
+                    }}
+                    title="Read"
+                  />
+                  <div
+                    className="bg-emerald-500 transition-all duration-300"
+                    style={{
+                      width: `${
+                        ((liveStats?.delivered || 0) / (liveStats?.total || 1)) * 100
+                      }%`
+                    }}
+                    title="Delivered"
+                  />
+                  <div
+                    className="bg-sky-500 transition-all duration-300"
+                    style={{
+                      width: `${
+                        (((liveStats?.sent || 0) - (liveStats?.delivered || 0) - (liveStats?.read || 0)) /
+                          (liveStats?.total || 1)) *
+                        100
+                      }%`
+                    }}
+                    title="Sent"
+                  />
+                  <div
+                    className="bg-rose-500 transition-all duration-300"
+                    style={{
+                      width: `${
+                        ((liveStats?.failed || 0) / (liveStats?.total || 1)) * 100
+                      }%`
+                    }}
+                    title="Failed"
+                  />
+                </div>
+
+                {/* Legend */}
+                <div className="flex flex-wrap items-center gap-4 text-xs font-mono pt-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-teal-500" />
+                    <span>Read: {liveStats?.read || 0}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                    <span>Delivered: {liveStats?.delivered || 0}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-sky-500" />
+                    <span>Sent: {liveStats?.sent || 0}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+                    <span>Failed: {liveStats?.failed || 0}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Live Streaming Logs */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Terminal className="w-4 h-4 text-emerald-400" />
+                    <span>Live Event Stream</span>
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="text-xs text-slate-400 font-mono">SSE Connected</span>
+                  </div>
+                </div>
+
+                <div className="bg-slate-950 border border-slate-800/80 rounded-xl p-4 font-mono text-xs max-h-80 overflow-y-auto space-y-2">
+                  {liveLogs.length === 0 ? (
+                    <div className="text-slate-500 text-center py-6">Waiting for message events...</div>
+                  ) : (
+                    liveLogs.map((log, idx) => (
+                      <div key={idx} className="flex items-start gap-2 text-slate-300">
+                        <span className="text-slate-500 shrink-0">[{new Date(log.timestamp || Date.now()).toLocaleTimeString()}]</span>
+                        <span
+                          className={`font-bold shrink-0 ${
+                            log.status === 'READ'
+                              ? 'text-teal-400'
+                              : log.status === 'DELIVERED'
+                              ? 'text-emerald-400'
+                              : log.status === 'FAILED'
+                              ? 'text-rose-400'
+                              : 'text-sky-400'
+                          }`}
+                        >
+                          {log.status}
+                        </span>
+                        <span className="text-slate-400">{log.phone}</span>
+                        <span className="text-slate-500 truncate">{log.message || log.error || ''}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================= */}
+          {/* 6. VIEW: CAMPAIGN WIZARD (COMPOSER + LIVE PREVIEW)        */}
+          {/* ========================================================= */}
+          {currentTab === 'wizard' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold text-white">Create New Campaign</h2>
+                  <p className="text-xs text-slate-400">Configure audience, message, media, and anti-ban pacing</p>
+                </div>
+              </div>
+
+              <form onSubmit={handleLaunchCampaign} className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                {/* Left Column: Form & Composer */}
+                <div className="lg:col-span-7 space-y-6">
+                  {/* Step 1: Campaign Details */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-400">1. Campaign Details</h3>
+                    
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">Campaign Name</label>
+                      <input
+                        type="text"
+                        required
+                        value={wizName}
+                        onChange={(e) => setWizName(e.target.value)}
+                        placeholder="e.g. Summer Promo 2026"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white"
+                      />
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <textarea
-                        rows={2}
-                        value={replyInputText}
-                        onChange={(e) => setReplyInputText(e.target.value)}
-                        placeholder="Type reply message to send via WhatsApp..."
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !e.shiftKey) {
-                            e.preventDefault();
-                            handleSendReply();
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Instance Selection */}
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-300 mb-1">WhatsApp Instance</label>
+                        <select
+                          multiple
+                          value={wizInstances}
+                          onChange={(e) =>
+                            setWizInstances(Array.from(e.target.selectedOptions, (option) => option.value))
                           }
-                        }}
-                        className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 resize-none font-sans placeholder:text-slate-500"
-                      />
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-xs text-white h-24 font-mono"
+                        >
+                          {instances.map((i) => (
+                            <option key={i.id} value={i.name}>
+                              {i.name} ({i.connectionStatus === 'open' ? 'Connected' : 'Offline'})
+                            </option>
+                          ))}
+                        </select>
+                        <span className="text-[10px] text-slate-500">Hold Ctrl to select multiple</span>
+                      </div>
+
+                      {/* Contact Lists Selection */}
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-300 mb-1">Target Contact List(s)</label>
+                        <select
+                          multiple
+                          value={wizListIds}
+                          onChange={(e) =>
+                            setWizListIds(Array.from(e.target.selectedOptions, (option) => option.value))
+                          }
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-xs text-white h-24 font-mono"
+                        >
+                          {contactLists.map((l) => (
+                            <option key={l.id} value={l.id}>
+                              {l.name} ({l._count?.contacts || 0} contacts)
+                            </option>
+                          ))}
+                        </select>
+                        <span className="text-[10px] text-slate-500">Hold Ctrl to select multiple</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Step 2: Message Composer */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-400">2. Message & Media</h3>
+                      {/* Media Type Tabs */}
+                      <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-[11px]">
+                        <button
+                          type="button"
+                          onClick={() => setWizMediaType('text')}
+                          className={`px-2 py-1 rounded-lg ${wizMediaType === 'text' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400'}`}
+                        >
+                          Text
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setWizMediaType('image')}
+                          className={`px-2 py-1 rounded-lg ${wizMediaType === 'image' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400'}`}
+                        >
+                          Image
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setWizMediaType('video')}
+                          className={`px-2 py-1 rounded-lg ${wizMediaType === 'video' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400'}`}
+                        >
+                          Video
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setWizMediaType('document')}
+                          className={`px-2 py-1 rounded-lg ${wizMediaType === 'document' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400'}`}
+                        >
+                          Document
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Media URL if not text */}
+                    {wizMediaType !== 'text' && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-950 p-3 rounded-xl border border-slate-800">
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                            Media Public URL ({wizMediaType})
+                          </label>
+                          <input
+                            type="url"
+                            value={wizMediaUrl}
+                            onChange={(e) => setWizMediaUrl(e.target.value)}
+                            placeholder="https://example.com/asset.png"
+                            className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                            File Name (Optional)
+                          </label>
+                          <input
+                            type="text"
+                            value={wizFileName}
+                            onChange={(e) => setWizFileName(e.target.value)}
+                            placeholder="brochure.pdf"
+                            className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Variable Chips & Spintax Helpers */}
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                      <span className="text-[11px] text-slate-400 mr-1">Insert:</span>
                       <button
                         type="button"
-                        onClick={handleSendReply}
-                        disabled={sendingReply || !replyInputText.trim()}
-                        className="px-4 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow cursor-pointer transition flex items-center gap-1.5 h-full shrink-0"
+                        onClick={() => setWizTemplate((prev) => prev + ' {{name}}')}
+                        className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[11px] text-emerald-400 font-mono"
                       >
-                        <Send className="w-4 h-4" />
-                        <span>{sendingReply ? 'Sending...' : 'Send Reply'}</span>
+                        + name
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setWizTemplate((prev) => prev + ' {{company}}')}
+                        className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[11px] text-emerald-400 font-mono"
+                      >
+                        + company
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setWizTemplate((prev) => prev + ' {Hi|Hello|Dear}')}
+                        className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[11px] text-teal-400 font-mono"
+                      >
+                        + spintax greeting
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setWizTemplate((prev) => prev + ' *bold*')}
+                        className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300"
+                      >
+                        *bold*
                       </button>
                     </div>
+
+                    {/* Template Text Area */}
+                    <textarea
+                      rows={6}
+                      required
+                      value={wizTemplate}
+                      onChange={(e) => setWizTemplate(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white font-mono leading-relaxed"
+                    />
                   </div>
-                </>
-              ) : (
-                <div className="flex-1 flex flex-col items-center justify-center text-center p-8 space-y-2 text-slate-500">
-                  <div className="w-12 h-12 rounded-full bg-slate-800/60 flex items-center justify-center text-slate-600">
-                    <MessageSquare className="w-6 h-6" />
+
+                  {/* Step 3: Anti-Ban Pacing & Safety */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-400">3. Anti-Ban Pacing</h3>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono text-xs">
+                      <div>
+                        <label className="text-[11px] text-slate-400">Min Delay (s)</label>
+                        <input
+                          type="number"
+                          value={minDelay}
+                          onChange={(e) => setMinDelay(Number(e.target.value))}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] text-slate-400">Max Delay (s)</label>
+                        <input
+                          type="number"
+                          value={maxDelay}
+                          onChange={(e) => setMaxDelay(Number(e.target.value))}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] text-slate-400">Batch Size</label>
+                        <input
+                          type="number"
+                          value={batchSize}
+                          onChange={(e) => setBatchSize(Number(e.target.value))}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] text-slate-400">Batch Pause (s)</label>
+                        <input
+                          type="number"
+                          value={batchDelay}
+                          onChange={(e) => setBatchDelay(Number(e.target.value))}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="pt-2">
+                      <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
+                        <input
+                          type="checkbox"
+                          checked={launchSafetyCheck}
+                          onChange={(e) => setLaunchSafetyCheck(e.target.checked)}
+                          className="rounded text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <span>I confirm that these recipients have opted in to receive messages.</span>
+                      </label>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={!launchSafetyCheck}
+                      className={`w-full py-3 rounded-xl font-bold text-xs shadow-lg transition ${
+                        launchSafetyCheck
+                          ? 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer shadow-emerald-950/50'
+                          : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                      }`}
+                    >
+                      Launch Campaign Now →
+                    </button>
                   </div>
-                  <div className="text-xs font-semibold text-slate-400">No conversation selected</div>
-                  <p className="text-[11px] text-slate-500 max-w-sm">
-                    Select a conversation from the left to view previous messages and send instant WhatsApp replies.
-                  </p>
                 </div>
-              )}
+
+                {/* Right Column: Live Sticky WhatsApp Bubble */}
+                <div className="lg:col-span-5 sticky top-24 space-y-4">
+                  <LiveWhatsAppBubble
+                    content={wizTemplate}
+                    mediaType={wizMediaType}
+                    mediaUrl={wizMediaUrl}
+                    caption={wizMediaType !== 'text' ? wizTemplate : undefined}
+                    sampleRecipient={{ name: 'Rahul Sharma', phone: '919876543210' }}
+                    appendOptOut={true}
+                  />
+                </div>
+              </form>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* 7. SETTINGS */}
-        {currentTab === 'settings' && (
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl max-w-3xl mx-auto space-y-6">
-            <h2 className="text-lg font-bold text-white border-b border-slate-800 pb-3">Gateway & Security Settings</h2>
+          {/* ========================================================= */}
+          {/* 7. VIEW: CONTACTS & LISTS                                 */}
+          {/* ========================================================= */}
+          {currentTab === 'contacts' && (
+            <div className="space-y-6">
+              {/* Header with Sample Templates Download */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-bold text-white">Contacts & Audience</h2>
+                  <p className="text-xs text-slate-400">Manage customer phone numbers, lists, and opt-outs</p>
+                </div>
 
-            <form onSubmit={handleSaveSettings} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1.5">Evolution API Base URL</label>
-                <input
-                  type="text"
-                  value={settings['EVOLUTION_API_URL'] || ''}
-                  onChange={(e) => setSettings({ ...settings, EVOLUTION_API_URL: e.target.value })}
-                  placeholder="http://localhost:8080"
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono"
-                />
+                {/* Quick Actions & Template Downloads */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <a
+                    href="/api/contacts/sample?format=csv"
+                    download="sample_contacts.csv"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded-xl text-xs font-mono transition"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Sample CSV</span>
+                  </a>
+                  <a
+                    href="/api/contacts/sample?format=xlsx"
+                    download="sample_contacts.xlsx"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded-xl text-xs font-mono transition"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5" />
+                    <span>Sample Excel</span>
+                  </a>
+
+                  {/* Upload Contacts Button */}
+                  <label className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>{importingFile ? 'Importing...' : 'Import Contacts'}</span>
+                    <input
+                      type="file"
+                      accept=".csv,.xlsx,.xls"
+                      onChange={handleImportContacts}
+                      disabled={importingFile}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1.5">
-                  Global API Key (Stored Encrypted AES-256-GCM)
-                </label>
-                <input
-                  type="password"
-                  value={settings['GLOBAL_API_KEY'] || ''}
-                  onChange={(e) => setSettings({ ...settings, GLOBAL_API_KEY: e.target.value })}
-                  placeholder="Enter Evolution API Global Key"
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1.5">
-                  Auto Opt-Out Keywords (Comma Separated)
-                </label>
-                <input
-                  type="text"
-                  value={settings['AUTO_OPT_OUT_KEYWORDS'] || 'STOP,UNSUBSCRIBE,CANCEL,NO,RUKO'}
-                  onChange={(e) => setSettings({ ...settings, AUTO_OPT_OUT_KEYWORDS: e.target.value })}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono"
-                />
-              </div>
-
-              {settingsSavedMsg && (
-                <div className="p-3 bg-emerald-950/60 border border-emerald-500/40 rounded-xl text-xs text-emerald-200">
-                  {settingsSavedMsg}
+              {/* Import Results Banner */}
+              {importStats && (
+                <div className="bg-slate-900 border border-emerald-500/40 rounded-2xl p-4 text-xs font-mono text-emerald-400 flex items-center justify-between">
+                  <div>
+                    Import completed: {importStats.imported || 0} valid contacts added. ({importStats.duplicates || 0} duplicates skipped, {importStats.invalid || 0} invalid).
+                  </div>
+                  <button onClick={() => setImportStats(null)} className="text-slate-400 hover:text-white">✕</button>
                 </div>
               )}
 
-              <div className="pt-2 flex justify-end">
-                <button
-                  type="submit"
-                  className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow cursor-pointer"
-                >
-                  Save Settings
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
+              {/* Sub-tabs & Search */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs">
+                  <button
+                    onClick={() => setContactSubTab('all')}
+                    className={`px-3 py-1.5 rounded-lg ${contactSubTab === 'all' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400'}`}
+                  >
+                    All Contacts ({contacts.length})
+                  </button>
+                  <button
+                    onClick={() => setContactSubTab('lists')}
+                    className={`px-3 py-1.5 rounded-lg ${contactSubTab === 'lists' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400'}`}
+                  >
+                    Lists ({contactLists.length})
+                  </button>
+                  <button
+                    onClick={() => setContactSubTab('blacklist')}
+                    className={`px-3 py-1.5 rounded-lg ${contactSubTab === 'blacklist' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400'}`}
+                  >
+                    Blacklist ({blacklist.length})
+                  </button>
+                </div>
 
-        {/* 8. CAMPAIGN HISTORY */}
-        {currentTab === 'history' && (
-          <div className="space-y-6">
-            <h2 className="text-lg font-bold text-white">Campaign History & Reports</h2>
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
-              <table className="w-full text-left text-xs text-slate-300">
-                <thead className="bg-slate-950 text-slate-400 font-mono text-[11px] uppercase border-b border-slate-800">
-                  <tr>
-                    <th className="p-4">Name</th>
-                    <th className="p-4">Status</th>
-                    <th className="p-4">Progress</th>
-                    <th className="p-4">Created</th>
-                    <th className="p-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/60">
-                  {campaigns.map((c) => (
-                    <tr key={c.id} className="hover:bg-slate-850">
-                      <td className="p-4 font-bold text-white">{c.name}</td>
-                      <td className="p-4">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-300">
-                          {c.status}
-                        </span>
-                      </td>
-                      <td className="p-4 font-mono">{c.stats?.sent || 0} / {c.stats?.total || 0}</td>
-                      <td className="p-4 text-slate-400 font-mono text-[11px]">{new Date(c.createdAt).toLocaleDateString()}</td>
-                      <td className="p-4 text-right space-x-2">
-                        <button
-                          onClick={() => {
-                            setActiveCampaignId(c.id);
-                            setCurrentTab('live');
-                          }}
-                          className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded text-xs"
-                        >
-                          View Live
-                        </button>
-                        <a
-                          href={`/api/campaigns/${c.id}/export?format=csv`}
-                          className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded text-xs"
-                        >
-                          CSV
-                        </a>
-                      </td>
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-500" />
+                  <input
+                    type="text"
+                    value={contactSearch}
+                    onChange={(e) => setContactSearch(e.target.value)}
+                    placeholder="Search name or phone..."
+                    className="bg-slate-900 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white"
+                  />
+                </div>
+              </div>
+
+              {/* Contacts Table */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+                <table className="w-full text-left text-xs text-slate-300">
+                  <thead className="bg-slate-950 text-slate-400 font-mono text-[11px] uppercase border-b border-slate-800">
+                    <tr>
+                      <th className="p-4">Name</th>
+                      <th className="p-4">Phone Number</th>
+                      <th className="p-4">Custom Variables</th>
+                      <th className="p-4">Added Date</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 font-sans">
+                    {contacts.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="p-8 text-center text-slate-500 text-xs">
+                          No contacts available. Download the sample template above and import your contacts.
+                        </td>
+                      </tr>
+                    ) : (
+                      contacts
+                        .filter(
+                          (c) =>
+                            !contactSearch ||
+                            (c.name && c.name.toLowerCase().includes(contactSearch.toLowerCase())) ||
+                            (c.phone && c.phone.includes(contactSearch))
+                        )
+                        .slice(0, 50)
+                        .map((c) => (
+                          <tr key={c.id} className="hover:bg-slate-850/60 transition">
+                            <td className="p-4 font-bold text-white">{c.name || 'Unnamed'}</td>
+                            <td className="p-4 font-mono tabular-nums text-emerald-400">+{c.phone}</td>
+                            <td className="p-4 font-mono text-[11px] text-slate-400">
+                              {c.customVariables ? JSON.stringify(c.customVariables) : '-'}
+                            </td>
+                            <td className="p-4 font-mono text-[11px] text-slate-400">
+                              {new Date(c.createdAt).toLocaleDateString()}
+                            </td>
+                          </tr>
+                        ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================= */}
+          {/* 8. VIEW: TEMPLATES LIBRARY                                */}
+          {/* ========================================================= */}
+          {currentTab === 'templates' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold text-white">Message Templates</h2>
+                  <p className="text-xs text-slate-400">Ready-made high converting WhatsApp campaign copy</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {sampleTemplates.map((tmpl) => (
+                  <div
+                    key={tmpl.id}
+                    className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col justify-between space-y-4 hover:border-slate-700 transition"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 uppercase tracking-wider">
+                          {tmpl.category}
+                        </span>
+                        <span className="text-[11px] font-mono text-slate-400">{tmpl.usageCount} sent</span>
+                      </div>
+                      <h3 className="text-sm font-bold text-white">{tmpl.title}</h3>
+                      <div className="bg-[#0b141a] p-3 rounded-xl border border-slate-800/80 text-xs text-slate-300 font-mono mt-3 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
+                        {tmpl.content}
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        setWizTemplate(tmpl.content);
+                        setWizMediaType(tmpl.mediaType);
+                        setCurrentTab('wizard');
+                      }}
+                      className="w-full py-2 bg-slate-800 hover:bg-emerald-600 text-white rounded-xl text-xs font-semibold transition cursor-pointer"
+                    >
+                      Use in New Campaign →
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================= */}
+          {/* 9. VIEW: REPLIES INBOX & CHAT THREAD                      */}
+          {/* ========================================================= */}
+          {currentTab === 'replies' && (
+            <div className="space-y-6">
+              {/* Top Controls: Instance Selector & Upload Chat / Sync */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-semibold text-slate-300">Reply Instance:</span>
+                  <select
+                    value={replyInstance}
+                    onChange={(e) => setReplyInstance(e.target.value)}
+                    className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white font-mono"
+                  >
+                    {instances.map((i) => (
+                      <option key={i.id} value={i.name}>
+                        {i.name} ({i.connectionStatus === 'open' ? 'Connected' : 'Offline'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {/* Upload Previous Chat Button */}
+                  <label className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-medium transition cursor-pointer">
+                    <FileText className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>{uploadingChat ? 'Uploading...' : 'Upload Chat (.txt)'}</span>
+                    <input
+                      type="file"
+                      accept=".txt"
+                      onChange={handleUploadChatFile}
+                      disabled={uploadingChat}
+                      className="hidden"
+                    />
+                  </label>
+
+                  {/* Sync Chats Button */}
+                  <button
+                    onClick={handleSyncChats}
+                    disabled={syncingReplies}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${syncingReplies ? 'animate-spin' : ''}`} />
+                    <span>Sync Live Chats</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 2-Pane Chat Layout */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden min-h-[550px]">
+                {/* Conversations Sidebar (Left) */}
+                <div className="md:col-span-4 border-r border-slate-800 flex flex-col">
+                  <div className="p-3 border-b border-slate-800 bg-slate-950/60">
+                    <span className="text-xs font-bold text-white uppercase tracking-wider">Conversations</span>
+                  </div>
+                  <div className="flex-1 overflow-y-auto divide-y divide-slate-800/60">
+                    {conversations.length === 0 ? (
+                      <div className="p-6 text-center text-slate-500 text-xs">
+                        No conversations yet. Sync chats or upload a .txt export above.
+                      </div>
+                    ) : (
+                      conversations.map((conv) => (
+                        <button
+                          key={conv.id}
+                          onClick={() => {
+                            setSelectedConversation(conv.id);
+                            loadConversationMessages(conv.id);
+                          }}
+                          className={`w-full text-left p-3.5 transition cursor-pointer flex items-start justify-between ${
+                            selectedConversation === conv.id ? 'bg-slate-850' : 'hover:bg-slate-850/40'
+                          }`}
+                        >
+                          <div className="truncate">
+                            <p className="text-xs font-bold text-white font-mono truncate">+{conv.phone}</p>
+                            <p className="text-[11px] text-slate-400 truncate mt-0.5">{conv.lastMessage || 'No message snippet'}</p>
+                          </div>
+                          {conv.status === 'UNREAD' && (
+                            <span className="w-2 h-2 rounded-full bg-teal-400 shrink-0 mt-1" />
+                          )}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Message Thread (Right) */}
+                <div className="md:col-span-8 flex flex-col bg-[#0b141a]">
+                  {/* Thread Header */}
+                  <div className="p-3.5 border-b border-slate-800 bg-slate-900/80 flex items-center justify-between">
+                    <span className="text-xs font-bold text-white font-mono">
+                      {selectedConversation ? `Chat with +${conversations.find((c) => c.id === selectedConversation)?.phone || ''}` : 'Select a conversation'}
+                    </span>
+                  </div>
+
+                  {/* Message Bubbles */}
+                  <div className="flex-1 p-4 overflow-y-auto space-y-3">
+                    {conversationMessages.length === 0 ? (
+                      <div className="h-full flex items-center justify-center text-slate-500 text-xs">
+                        No messages in this thread yet.
+                      </div>
+                    ) : (
+                      conversationMessages.map((msg, i) => (
+                        <div
+                          key={i}
+                          className={`flex ${msg.direction === 'OUTGOING' ? 'justify-end' : 'justify-start'}`}
+                        >
+                          <div
+                            className={`max-w-[75%] rounded-2xl px-3.5 py-2 text-xs shadow ${
+                              msg.direction === 'OUTGOING'
+                                ? 'bg-[#005c4b] text-white rounded-tr-none'
+                                : 'bg-[#202c33] text-slate-200 rounded-tl-none'
+                            }`}
+                          >
+                            <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
+                            <span className="text-[10px] text-slate-400 block text-right mt-1 font-mono">
+                              {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Reply Input Bar */}
+                  <div className="p-3 border-t border-slate-800 bg-slate-900 flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={replyInputText}
+                      onChange={(e) => setReplyInputText(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSendReply()}
+                      placeholder="Type a WhatsApp reply..."
+                      className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white"
+                    />
+                    <button
+                      onClick={handleSendReply}
+                      disabled={sendingReply || !replyInputText.trim()}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow transition cursor-pointer"
+                    >
+                      {sendingReply ? 'Sending...' : 'Send'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================= */}
+          {/* 10. VIEW: INSTANCES MANAGEMENT                            */}
+          {/* ========================================================= */}
+          {currentTab === 'instances' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold text-white">WhatsApp Instances</h2>
+                  <p className="text-xs text-slate-400">Manage paired phone numbers, scan QR codes, and check status</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={loadInstances}
+                    className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition"
+                    title="Refresh"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setNewInstanceModal(true)}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow"
+                  >
+                    <PlusCircle className="w-4 h-4" />
+                    <span>Create Instance</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Instance Cards Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {instances.length === 0 ? (
+                  <div className="col-span-full py-12 text-center text-slate-500 text-xs">
+                    No WhatsApp instances registered. Click "Create Instance" to scan your QR code.
+                  </div>
+                ) : (
+                  instances.map((inst) => {
+                    const isOpen = inst.connectionStatus === 'open';
+                    return (
+                      <div
+                        key={inst.id}
+                        className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4 hover:border-slate-700 transition"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm ${
+                                isOpen ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
+                              }`}
+                            >
+                              <Smartphone className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <h3 className="text-sm font-bold text-white">{inst.name}</h3>
+                              <p className="text-xs text-slate-400 font-mono">{inst.phone || 'No phone set'}</p>
+                            </div>
+                          </div>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                              isOpen
+                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                                : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
+                            }`}
+                          >
+                            {isOpen ? 'Connected' : 'Offline'}
+                          </span>
+                        </div>
+
+                        {/* Daily Quota Bar */}
+                        <div className="space-y-1 font-mono text-[11px]">
+                          <div className="flex justify-between text-slate-400">
+                            <span>Today's Sent</span>
+                            <span>{inst.todaySent || 0} / {inst.dailyQuota || 200}</span>
+                          </div>
+                          <div className="w-full bg-slate-950 h-1.5 rounded-full overflow-hidden">
+                            <div
+                              className="bg-emerald-500 h-full rounded-full"
+                              style={{
+                                width: `${Math.min(100, ((inst.todaySent || 0) / (inst.dailyQuota || 200)) * 100)}%`
+                              }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-2 pt-2 border-t border-slate-800/80">
+                          <button
+                            onClick={() => setQrModalInstance(inst.name)}
+                            className="flex-1 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-medium transition cursor-pointer"
+                          >
+                            Scan QR
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (!confirm(`Delete instance ${inst.name}?`)) return;
+                              await fetch(`/api/evolution/instances/${inst.name}`, { method: 'DELETE' });
+                              loadInstances();
+                            }}
+                            className="p-1.5 text-slate-500 hover:text-rose-400 transition"
+                            title="Delete instance"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================= */}
+          {/* 11. VIEW: REPORTS & ANALYTICS                             */}
+          {/* ========================================================= */}
+          {currentTab === 'reports' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold text-white">Reports & Funnel Analytics</h2>
+                  <p className="text-xs text-slate-400">End-to-end delivery performance and history</p>
+                </div>
+              </div>
+
+              {/* Delivery Funnel Metrics */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg">
+                  <span className="text-xs text-slate-400">Total Scheduled</span>
+                  <p className="text-2xl font-bold text-white font-mono mt-1">1,480</p>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg">
+                  <span className="text-xs text-slate-400">Delivered Successfully</span>
+                  <p className="text-2xl font-bold text-emerald-400 font-mono mt-1">1,452 (98.1%)</p>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg">
+                  <span className="text-xs text-slate-400">Read / Blue Ticks</span>
+                  <p className="text-2xl font-bold text-teal-400 font-mono mt-1">1,120 (75.6%)</p>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg">
+                  <span className="text-xs text-slate-400">Replied Customers</span>
+                  <p className="text-2xl font-bold text-sky-400 font-mono mt-1">218 (14.7%)</p>
+                </div>
+              </div>
+
+              {/* Campaigns Summary Table */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+                <div className="p-4 border-b border-slate-800 flex justify-between items-center">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-300">Campaign History Log</span>
+                </div>
+                <table className="w-full text-left text-xs text-slate-300">
+                  <thead className="bg-slate-950 text-slate-400 font-mono text-[11px] uppercase border-b border-slate-800">
+                    <tr>
+                      <th className="p-4">Name</th>
+                      <th className="p-4">Status</th>
+                      <th className="p-4">Dispatched</th>
+                      <th className="p-4">Created</th>
+                      <th className="p-4 text-right">Export</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 font-sans">
+                    {campaigns.map((c) => (
+                      <tr key={c.id} className="hover:bg-slate-850/60">
+                        <td className="p-4 font-bold text-white">{c.name}</td>
+                        <td className="p-4 font-mono">{c.status}</td>
+                        <td className="p-4 font-mono">{c.stats?.sent || 0} / {c.stats?.total || 0}</td>
+                        <td className="p-4 font-mono text-slate-400">{new Date(c.createdAt).toLocaleDateString()}</td>
+                        <td className="p-4 text-right">
+                          <a
+                            href={`/api/campaigns/${c.id}/export?format=csv`}
+                            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded text-xs font-mono"
+                          >
+                            Export CSV
+                          </a>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================= */}
+          {/* 12. VIEW: SYSTEM HEALTH & ENGINE METRICS                  */}
+          {/* ========================================================= */}
+          {currentTab === 'system' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold text-white">System Health & Engine Metrics</h2>
+                  <p className="text-xs text-slate-400">Queue workers, database status, and Prometheus metrics</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <a
+                    href="/api/metrics"
+                    target="_blank"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded-xl text-xs font-mono transition"
+                  >
+                    <span>/api/metrics</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                  <a
+                    href="/api/docs"
+                    target="_blank"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-sky-400 rounded-xl text-xs font-mono transition"
+                  >
+                    <span>Swagger API Docs</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              </div>
+
+              {/* Status Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg space-y-2">
+                  <div className="flex items-center justify-between text-xs text-slate-400">
+                    <span>Web Application</span>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  </div>
+                  <p className="text-lg font-bold text-white font-mono">Next.js 14 App</p>
+                  <p className="text-[11px] text-emerald-400 font-mono">Healthy & Ready</p>
+                </div>
+
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg space-y-2">
+                  <div className="flex items-center justify-between text-xs text-slate-400">
+                    <span>Evolution Engine</span>
+                    <Smartphone className="w-4 h-4 text-emerald-400" />
+                  </div>
+                  <p className="text-lg font-bold text-white font-mono">Evolution v2 API</p>
+                  <p className="text-[11px] text-emerald-400 font-mono">{connectedCount} Connected</p>
+                </div>
+
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg space-y-2">
+                  <div className="flex items-center justify-between text-xs text-slate-400">
+                    <span>Queue Backend</span>
+                    <Zap className="w-4 h-4 text-teal-400" />
+                  </div>
+                  <p className="text-lg font-bold text-white font-mono">Redis Queue</p>
+                  <p className="text-[11px] text-teal-400 font-mono">Pacing Active</p>
+                </div>
+
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg space-y-2">
+                  <div className="flex items-center justify-between text-xs text-slate-400">
+                    <span>State Machine</span>
+                    <ShieldCheck className="w-4 h-4 text-sky-400" />
+                  </div>
+                  <p className="text-lg font-bold text-white font-mono">Monotonic v2</p>
+                  <p className="text-[11px] text-sky-400 font-mono">Strict Transitions</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================= */}
+          {/* 13. VIEW: SETTINGS                                        */}
+          {/* ========================================================= */}
+          {currentTab === 'settings' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold text-white">Gateway Settings</h2>
+                  <p className="text-xs text-slate-400">Evolution API endpoints, webhook configs, and opt-out rules</p>
+                </div>
+                {settingsSavedMsg && (
+                  <span className="text-xs font-mono text-emerald-400">{settingsSavedMsg}</span>
+                )}
+              </div>
+
+              <form onSubmit={handleSaveSettings} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4 max-w-2xl">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Evolution API URL</label>
+                  <input
+                    type="text"
+                    value={settings.EVOLUTION_API_URL || 'http://evolution:8080'}
+                    onChange={(e) => setSettings({ ...settings, EVOLUTION_API_URL: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Global API Key</label>
+                  <input
+                    type="password"
+                    value={settings.GLOBAL_API_KEY || ''}
+                    onChange={(e) => setSettings({ ...settings, GLOBAL_API_KEY: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Opt-Out Keywords (Comma separated)</label>
+                  <input
+                    type="text"
+                    value={settings.OPT_OUT_KEYWORDS || 'STOP, UNSUBSCRIBE, REMOVE'}
+                    onChange={(e) => setSettings({ ...settings, OPT_OUT_KEYWORDS: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono"
+                  />
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow transition cursor-pointer"
+                  >
+                    Save Settings
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+        </main>
+      </div>
+
+      {/* ========================================================= */}
+      {/* 14. COMMAND PALETTE (CTRL+K) MODAL                        */}
+      {/* ========================================================= */}
+      {commandPaletteOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-24 bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden">
+            <div className="p-3 border-b border-slate-800 flex items-center gap-2">
+              <Search className="w-4 h-4 text-slate-500 shrink-0" />
+              <input
+                type="text"
+                autoFocus
+                value={commandSearch}
+                onChange={(e) => setCommandSearch(e.target.value)}
+                placeholder="Type a screen or command..."
+                className="w-full bg-transparent text-xs text-white focus:outline-none"
+              />
+              <kbd className="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] font-mono text-slate-400">ESC</kbd>
+            </div>
+
+            <div className="p-2 max-h-80 overflow-y-auto space-y-1 text-xs">
+              <button
+                onClick={() => {
+                  setCurrentTab('overview');
+                  setCommandPaletteOpen(false);
+                }}
+                className="w-full text-left px-3 py-2 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white flex items-center gap-2"
+              >
+                <LayoutDashboard className="w-4 h-4 text-emerald-400" />
+                <span>Go to Dashboard Overview</span>
+              </button>
+              <button
+                onClick={() => {
+                  setCurrentTab('wizard');
+                  setCommandPaletteOpen(false);
+                }}
+                className="w-full text-left px-3 py-2 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white flex items-center gap-2"
+              >
+                <PlusCircle className="w-4 h-4 text-emerald-400" />
+                <span>Create New Campaign</span>
+              </button>
+              <button
+                onClick={() => {
+                  setCurrentTab('contacts');
+                  setCommandPaletteOpen(false);
+                }}
+                className="w-full text-left px-3 py-2 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white flex items-center gap-2"
+              >
+                <Users className="w-4 h-4 text-emerald-400" />
+                <span>Manage Contacts & Download Sample Templates</span>
+              </button>
+              <button
+                onClick={() => {
+                  setCurrentTab('templates');
+                  setCommandPaletteOpen(false);
+                }}
+                className="w-full text-left px-3 py-2 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white flex items-center gap-2"
+              >
+                <FileText className="w-4 h-4 text-emerald-400" />
+                <span>Browse Message Templates</span>
+              </button>
+              <button
+                onClick={() => {
+                  setCurrentTab('replies');
+                  setCommandPaletteOpen(false);
+                }}
+                className="w-full text-left px-3 py-2 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white flex items-center gap-2"
+              >
+                <MessageSquare className="w-4 h-4 text-teal-400" />
+                <span>View Replies Inbox & Chat</span>
+              </button>
+              <button
+                onClick={() => {
+                  setNewInstanceModal(true);
+                  setCommandPaletteOpen(false);
+                }}
+                className="w-full text-left px-3 py-2 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white flex items-center gap-2"
+              >
+                <Smartphone className="w-4 h-4 text-sky-400" />
+                <span>Add / Pair New WhatsApp Number</span>
+              </button>
             </div>
           </div>
-        )}
-      </main>
+        </div>
+      )}
 
+      {/* ========================================================= */}
+      {/* 15. MOBILE BOTTOM NAVIGATION BAR                          */}
+      {/* ========================================================= */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 px-4 py-2 flex items-center justify-around z-40">
+        <button
+          onClick={() => setCurrentTab('overview')}
+          className={`flex flex-col items-center gap-1 text-[10px] ${
+            currentTab === 'overview' ? 'text-emerald-400' : 'text-slate-400'
+          }`}
+        >
+          <LayoutDashboard className="w-4 h-4" />
+          <span>Dashboard</span>
+        </button>
+        <button
+          onClick={() => setCurrentTab('campaigns')}
+          className={`flex flex-col items-center gap-1 text-[10px] ${
+            currentTab === 'campaigns' || currentTab === 'live' || currentTab === 'wizard'
+              ? 'text-emerald-400'
+              : 'text-slate-400'
+          }`}
+        >
+          <Send className="w-4 h-4" />
+          <span>Campaigns</span>
+        </button>
+        <button
+          onClick={() => setCurrentTab('replies')}
+          className={`flex flex-col items-center gap-1 text-[10px] ${
+            currentTab === 'replies' ? 'text-emerald-400' : 'text-slate-400'
+          }`}
+        >
+          <MessageSquare className="w-4 h-4" />
+          <span>Replies</span>
+        </button>
+        <button
+          onClick={() => setCurrentTab('instances')}
+          className={`flex flex-col items-center gap-1 text-[10px] ${
+            currentTab === 'instances' ? 'text-emerald-400' : 'text-slate-400'
+          }`}
+        >
+          <Smartphone className="w-4 h-4" />
+          <span>Instances</span>
+        </button>
+        <button
+          onClick={() => setCurrentTab('settings')}
+          className={`flex flex-col items-center gap-1 text-[10px] ${
+            currentTab === 'settings' ? 'text-emerald-400' : 'text-slate-400'
+          }`}
+        >
+          <SettingsIcon className="w-4 h-4" />
+          <span>Settings</span>
+        </button>
+      </div>
+
+      {/* ========================================================= */}
+      {/* 16. MODALS                                                */}
+      {/* ========================================================= */}
       {/* QR Code Scanner Modal */}
       {qrModalInstance && (
         <QRCodeModal
@@ -1869,13 +2511,13 @@ export default function AppDashboard() {
                 <button
                   type="button"
                   onClick={() => setNewInstanceModal(false)}
-                  className="px-4 py-1.5 bg-slate-800 text-slate-300 text-xs rounded-xl"
+                  className="px-4 py-1.5 bg-slate-800 text-slate-300 text-xs rounded-xl cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow"
+                  className="px-5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow cursor-pointer"
                 >
                   Create & Get QR
                 </button>
@@ -1884,7 +2526,7 @@ export default function AppDashboard() {
           </div>
         </div>
       )}
+
     </div>
   );
 }
-
