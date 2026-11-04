@@ -79,8 +79,9 @@ import QRCodeModal from '@/components/QRCodeModal';
 import MultiMessageRotationEditor from '@/components/MultiMessageRotationEditor';
 import CampaignVariantsLiveTab from '@/components/CampaignVariantsLiveTab';
 import { DistributionMode, RotationScope, VariantInput } from '@/lib/rotation';
+import { GuardrailsConsoleTab } from '@/components/GuardrailsConsoleTab';
 
-type TabType = 'overview' | 'campaigns' | 'live' | 'wizard' | 'contacts' | 'templates' | 'replies' | 'instances' | 'reports' | 'system' | 'settings';
+type TabType = 'overview' | 'campaigns' | 'live' | 'wizard' | 'contacts' | 'templates' | 'replies' | 'instances' | 'guardrails' | 'reports' | 'system' | 'settings';
 
 export default function AppDashboard() {
   const router = useRouter();
@@ -283,6 +284,14 @@ export default function AppDashboard() {
 
   // Fetch initial data
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tab = urlParams.get('tab');
+      if (tab) {
+        setCurrentTab(tab as TabType);
+      }
+    }
+
     fetch('/api/auth/me')
       .then((res) => {
         if (!res.ok) {
@@ -960,21 +969,34 @@ export default function AppDashboard() {
           </button>
 
           {/* Guardrails (Between Instances and Reports) */}
-          <Link
-            href="/guardrails"
-            className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition cursor-pointer text-slate-400 hover:text-white hover:bg-slate-850"
+          <button
+            onClick={() => {
+              setCurrentTab('guardrails');
+              if (typeof window !== 'undefined') {
+                window.history.replaceState(null, '', '/?tab=guardrails');
+              }
+            }}
+            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition cursor-pointer ${
+              currentTab === 'guardrails'
+                ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                : 'text-slate-400 hover:text-white hover:bg-slate-850'
+            }`}
             title="Anti-Ban Guardrails Settings"
           >
             <div className="flex items-center gap-3">
-              <Shield className="w-4 h-4 shrink-0 text-emerald-400" />
+              <Shield className="w-4 h-4 shrink-0" />
               {!sidebarCollapsed && <span>Guardrails</span>}
             </div>
             {!sidebarCollapsed && (
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+              <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full ${
+                currentTab === 'guardrails'
+                  ? 'bg-emerald-500/20 text-white font-bold'
+                  : 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400'
+              }`}>
                 Safe
               </span>
             )}
-          </Link>
+          </button>
 
           {/* Reports */}
           <button
@@ -1064,6 +1086,7 @@ export default function AppDashboard() {
               {currentTab === 'templates' && 'Message Templates'}
               {currentTab === 'replies' && 'WhatsApp Replies Inbox'}
               {currentTab === 'instances' && 'WhatsApp Instances'}
+              {currentTab === 'guardrails' && 'Anti-Ban Guardrails'}
               {currentTab === 'reports' && 'Reports & Analytics'}
               {currentTab === 'system' && 'System Health & Engine'}
               {currentTab === 'settings' && 'Gateway Settings'}
@@ -2565,6 +2588,13 @@ export default function AppDashboard() {
           )}
 
           {/* ========================================================= */}
+          {/* VIEW: ANTI-BAN GUARDRAILS                                 */}
+          {/* ========================================================= */}
+          {currentTab === 'guardrails' && (
+            <GuardrailsConsoleTab />
+          )}
+
+          {/* ========================================================= */}
           {/* 11. VIEW: REPORTS & ANALYTICS                             */}
           {/* ========================================================= */}
           {currentTab === 'reports' && (
@@ -2952,14 +2982,20 @@ export default function AppDashboard() {
                 <Smartphone className="w-4 h-4 text-sky-400" />
                 <span>Add / Pair New WhatsApp Number</span>
               </button>
-              <Link
-                href="/guardrails"
-                onClick={() => setCommandPaletteOpen(false)}
-                className="w-full text-left px-3 py-2 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white flex items-center gap-2"
+              <button
+                type="button"
+                onClick={() => {
+                  setCurrentTab('guardrails');
+                  if (typeof window !== 'undefined') {
+                    window.history.replaceState(null, '', '/?tab=guardrails');
+                  }
+                  setCommandPaletteOpen(false);
+                }}
+                className="w-full text-left px-3 py-2 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white flex items-center gap-2 cursor-pointer"
               >
                 <Shield className="w-4 h-4 text-emerald-400" />
                 <span>Configure Anti-Ban Guardrails (Pacing, Caps, Breakers)</span>
-              </Link>
+              </button>
             </div>
           </div>
         </div>
@@ -2999,7 +3035,12 @@ export default function AppDashboard() {
           <span>Replies</span>
         </button>
         <button
-          onClick={() => setCurrentTab('instances')}
+          onClick={() => {
+            setCurrentTab('instances');
+            if (typeof window !== 'undefined') {
+              window.history.replaceState(null, '', '/?tab=instances');
+            }
+          }}
           className={`flex flex-col items-center gap-1 text-[10px] ${
             currentTab === 'instances' ? 'text-emerald-400' : 'text-slate-400'
           }`}
@@ -3008,7 +3049,26 @@ export default function AppDashboard() {
           <span>Instances</span>
         </button>
         <button
-          onClick={() => setCurrentTab('settings')}
+          onClick={() => {
+            setCurrentTab('guardrails');
+            if (typeof window !== 'undefined') {
+              window.history.replaceState(null, '', '/?tab=guardrails');
+            }
+          }}
+          className={`flex flex-col items-center gap-1 text-[10px] ${
+            currentTab === 'guardrails' ? 'text-emerald-400 font-bold' : 'text-slate-400'
+          }`}
+        >
+          <Shield className="w-4 h-4" />
+          <span>Guardrails</span>
+        </button>
+        <button
+          onClick={() => {
+            setCurrentTab('settings');
+            if (typeof window !== 'undefined') {
+              window.history.replaceState(null, '', '/?tab=settings');
+            }
+          }}
           className={`flex flex-col items-center gap-1 text-[10px] ${
             currentTab === 'settings' ? 'text-emerald-400' : 'text-slate-400'
           }`}
