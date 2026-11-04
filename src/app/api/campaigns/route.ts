@@ -472,6 +472,9 @@ export async function POST(req: NextRequest) {
 
     // 6. If launch immediately, trigger campaign runner
     if (launchImmediately && !scheduledAt) {
+      if (body.overrideWindow !== false) {
+        campaignRunner.overrideWindow(campaign.id);
+      }
       campaignRunner.runCampaign(campaign.id).catch((err) => {
         logger.error({ err, campaignId: campaign.id }, 'Error launching campaign runner');
       });

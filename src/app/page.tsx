@@ -694,6 +694,7 @@ export default function AppDashboard() {
         batchSize,
         batchDelay,
         sendNow: !isScheduled,
+        overrideWindow: !isScheduled,
         scheduledAt: isScheduled && scheduleTime ? new Date(scheduleTime).toISOString() : undefined,
         distributionMode: wizDistributionMode,
         rotationScope: wizRotationScope,

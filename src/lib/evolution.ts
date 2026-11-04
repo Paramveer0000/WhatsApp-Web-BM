@@ -172,7 +172,24 @@ export class EvolutionClient {
   }
 
   static classifyError(status?: number, data?: any, originalMessage?: string): EvolutionError {
-    const msg = (data?.message || data?.error || originalMessage || 'Evolution API request failed').toString();
+    let cleanMsg = '';
+    if (Array.isArray(data?.message)) {
+      cleanMsg = data.message
+        .map((m: any) =>
+          typeof m === 'object' && m !== null
+            ? m.exists === false
+              ? `Phone ${m.number || m.jid || ''} is not registered on WhatsApp`
+              : JSON.stringify(m)
+            : String(m)
+        )
+        .join(', ');
+    } else if (typeof data?.message === 'string') {
+      cleanMsg = data.message;
+    } else if (data?.error) {
+      cleanMsg = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
+    }
+
+    const msg = cleanMsg || originalMessage || 'Evolution API request failed';
     const lower = msg.toLowerCase();
     const dataStr = JSON.stringify(data || '').toLowerCase();
     const combined = `${lower} ${dataStr}`;
@@ -194,7 +211,11 @@ export class EvolutionClient {
     }
     if (
       combined.includes('exists:false') ||
+      combined.includes('exists: false') ||
+      combined.includes('exists":false') ||
+      combined.includes('exists": false') ||
       combined.includes('is not on whatsapp') ||
+      combined.includes('not registered on whatsapp') ||
       combined.includes('invalid number') ||
       combined.includes('not on whatsapp')
     ) {

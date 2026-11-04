@@ -203,7 +203,16 @@ export class CampaignRunner {
             detail: { reason: windowCheck.reason },
           });
           const sleepMs = Math.min(windowCheck.sleepMs || 60000, 60000);
-          await new Promise((r) => setTimeout(r, sleepMs));
+          for (let s = 0; s < sleepMs; s += 500) {
+            if (
+              this.overrideWindowFlags.has(campaignId) ||
+              this.cancelFlags.get(campaignId) ||
+              this.pauseFlags.get(campaignId)
+            ) {
+              break;
+            }
+            await new Promise((r) => setTimeout(r, 500));
+          }
           continue;
         } else {
           // Clear halt reason once allowed window is reached or overridden
@@ -470,18 +479,29 @@ export class CampaignRunner {
             messageId,
           });
         } else {
-          consecutiveFailures++;
+          const isInvalidRecipient =
+            errorMessage.toLowerCase().includes('not registered on whatsapp') ||
+            errorMessage.toLowerCase().includes('not on whatsapp') ||
+            errorMessage.toLowerCase().includes('invalid number') ||
+            errorMessage.toLowerCase().includes('exists:false') ||
+            errorMessage.toLowerCase().includes('exists: false');
+
+          // Do not increment instance failure counter for recipient errors (contact not on WhatsApp)
+          if (!isInvalidRecipient) {
+            consecutiveFailures++;
+          }
+
           try {
             messagesCounter.inc({ status: 'FAILED', instance: activeInstance.name });
           } catch {}
 
-          if (recipient.attempts < recipient.maxAttempts) {
+          if (!isInvalidRecipient && recipient.attempts < recipient.maxAttempts) {
             await transitionMessage(recipient.id, 'SENDING', 'RETRY_WAIT', {
               lastError: errorMessage,
             });
           } else {
             await transitionMessage(recipient.id, 'SENDING', 'FAILED', {
-              lastError: errorMessage,
+              lastError: isInvalidRecipient ? `Phone number not registered on WhatsApp: ${recipient.phone}` : errorMessage,
               failedAt: new Date(),
             });
 
@@ -523,7 +543,9 @@ export class CampaignRunner {
           eventBus.emitLog(campaignId, {
             type: 'danger',
             status: 'FAILED',
-            message: `Send failed to ${recipient.phone}: ${errorMessage}`,
+            message: isInvalidRecipient
+              ? `Recipient ${recipient.phone} is not on WhatsApp (skipped)`
+              : `Send failed to ${recipient.phone}: ${errorMessage}`,
             recipientId: recipient.id,
             phone: recipient.phone,
           });
@@ -531,7 +553,7 @@ export class CampaignRunner {
           if (consecutiveFailures >= 5) {
             await this.triggerCircuitBreaker(
               campaignId,
-              `5 consecutive failures on instance "${activeInstance.name}"`
+              `5 consecutive connection failures on instance "${activeInstance.name}"`
             );
             return;
           }
