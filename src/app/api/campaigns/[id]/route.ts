@@ -39,8 +39,42 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const delivered = statusMap['DELIVERED'] || 0;
     const read = statusMap['READ'] || 0;
     const replied = statusMap['REPLIED'] || 0;
-    const failed = statusMap['FAILED'] || 0;
+    let failed = statusMap['FAILED'] || 0;
     const pending = (statusMap['PENDING'] || 0) + (statusMap['SENDING'] || 0);
+    const retryWait = statusMap['RETRY_WAIT'] || 0;
+
+    // Auto-reconcile completed campaigns where all remaining recipients were unregistered or exhausted
+    if (campaign.status === 'RUNNING' && pending === 0 && total > 0) {
+      if (retryWait > 0) {
+        const updated = await db.campaignRecipient.updateMany({
+          where: {
+            campaignId,
+            status: 'RETRY_WAIT',
+            OR: [
+              { lastError: { contains: 'not on whatsapp' } },
+              { lastError: { contains: 'not registered' } },
+              { lastError: { contains: 'exists' } },
+              { lastError: { contains: 'invalid number' } },
+              { attempts: { gte: 1 } },
+            ],
+          },
+          data: { status: 'FAILED', failedAt: new Date() },
+        });
+        failed += updated.count;
+      }
+
+      const unfinished = await db.campaignRecipient.count({
+        where: { campaignId, status: { in: ['PENDING', 'SENDING', 'QUEUED', 'RETRY_WAIT'] } },
+      });
+
+      if (unfinished === 0) {
+        await db.campaign.update({
+          where: { id: campaignId },
+          data: { status: 'COMPLETED', completedAt: new Date(), haltReason: null },
+        });
+        campaign.status = 'COMPLETED';
+      }
+    }
 
     // Compute Per-Variant Detailed Stats (Section 5)
     const variantStats = await Promise.all(
@@ -52,6 +86,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
             OR: [
               { variantId: v.id },
               { variantIndex: v.index },
+              { variantIndex: v.position - 1 },
+              { variantIndex: v.position },
             ],
           },
           _count: { _all: true },

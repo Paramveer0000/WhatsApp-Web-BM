@@ -229,7 +229,36 @@ export class CampaignRunner {
         });
 
         if (!recipient) {
-          // Check if any RETRY_WAIT or UNCERTAIN remain
+          // Check for any RETRY_WAIT candidates
+          const retryCandidate = await db.campaignRecipient.findFirst({
+            where: { campaignId, status: 'RETRY_WAIT' },
+            orderBy: { id: 'asc' },
+          });
+
+          if (retryCandidate) {
+            const errLower = (retryCandidate.lastError || '').toLowerCase();
+            const isNonRetryable =
+              errLower.includes('not on whatsapp') ||
+              errLower.includes('not registered') ||
+              errLower.includes('exists:false') ||
+              errLower.includes('exists: false') ||
+              errLower.includes('invalid number') ||
+              retryCandidate.attempts >= retryCandidate.maxAttempts;
+
+            if (isNonRetryable) {
+              await transitionMessage(retryCandidate.id, 'RETRY_WAIT', 'FAILED', {
+                lastError: retryCandidate.lastError || 'Phone number not registered on WhatsApp',
+                failedAt: new Date(),
+              });
+              continue;
+            } else {
+              // Requeue transient error candidate
+              await transitionMessage(retryCandidate.id, 'RETRY_WAIT', 'QUEUED');
+              continue;
+            }
+          }
+
+          // Check if any PENDING, QUEUED, or RETRY_WAIT remain
           const pendingRemaining = await db.campaignRecipient.count({
             where: { campaignId, status: { in: ['PENDING', 'QUEUED', 'RETRY_WAIT'] } },
           });
@@ -248,8 +277,8 @@ export class CampaignRunner {
             break;
           }
 
-          // Wait 5s for retries
-          await new Promise((r) => setTimeout(r, 5000));
+          // Wait 2s
+          await new Promise((r) => setTimeout(r, 2000));
           continue;
         }
 
