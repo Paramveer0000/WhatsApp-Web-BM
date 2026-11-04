@@ -161,12 +161,21 @@ export function GuardrailsConsoleTab() {
           scopeId,
           config: currentConfig,
           strictMode,
+          version,
           presetKey: selectedPreset,
           diffSummary: `Updated ${diffs.length} parameters`,
         }),
       });
-      const data = await res.json();
-      if (data.success) {
+
+      let data: any = {};
+      const responseText = await res.text();
+      try {
+        data = responseText ? JSON.parse(responseText) : {};
+      } catch (parseErr) {
+        data = { error: responseText || `HTTP ${res.status}: ${res.statusText}` };
+      }
+
+      if (res.ok && data.success) {
         setOriginalConfig(JSON.parse(JSON.stringify(currentConfig)));
         setVersion(data.version);
         setDiffDrawerOpen(false);
@@ -174,7 +183,7 @@ export function GuardrailsConsoleTab() {
         toast.success('Guardrails successfully applied & saved!', 'Guardrails Saved');
         setTimeout(() => setSaveSuccessMsg(''), 4000);
       } else {
-        toast.error(data.error || 'Failed to save guardrails', 'Save Error');
+        toast.error(data.error || `Failed to save guardrails (${res.status})`, 'Save Error');
       }
     } catch (err: any) {
       toast.error(`Save error: ${err.message}`, 'Save Error');

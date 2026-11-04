@@ -655,3 +655,4 @@ export const TwoLayerDistributionSchema = z.object({
   stickyConversations: z.boolean().default(true),
   allocationSeed: z.number().int().default(42),
 });
+

@@ -69,7 +69,7 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (user.role !== 'ADMIN') {
+    if (user.role?.toUpperCase() !== 'ADMIN') {
       return NextResponse.json(
         { error: 'Forbidden: Admin access required to modify anti-ban guardrails' },
         { status: 403 }
@@ -81,7 +81,7 @@ export async function PUT(req: NextRequest) {
     const scopeId = body.scopeId || '';
     const presetKey = body.presetKey || 'custom';
     const strictMode = Boolean(body.strictMode);
-    const expectedVersion = Number(body.version || 1);
+    const expectedVersion = body.version !== undefined && body.version !== null ? Number(body.version) : undefined;
     const diffSummary = body.diffSummary || 'Updated guardrail settings';
 
     // Validate with Zod
@@ -97,7 +97,7 @@ export async function PUT(req: NextRequest) {
       },
     });
 
-    if (existing && existing.version > expectedVersion) {
+    if (existing && expectedVersion !== undefined && existing.version > expectedVersion) {
       return NextResponse.json(
         {
           error: 'Concurrency Conflict: This profile was updated by another administrator. Please refresh and review changes.',
@@ -182,4 +182,9 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: err.message }, { status: 400 });
   }
 }
+
+export async function POST(req: NextRequest) {
+  return PUT(req);
+}
+
 
