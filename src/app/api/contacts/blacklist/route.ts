@@ -60,3 +60,42 @@ export async function POST(req: NextRequest) {
   }
 }
 
+export async function DELETE(req: NextRequest) {
+  try {
+    const user = await getSessionUser();
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
+    const phone = searchParams.get('phone');
+
+    if (!id && !phone) {
+      return NextResponse.json({ error: 'id or phone parameter is required' }, { status: 400 });
+    }
+
+    let item;
+    if (id) {
+      item = await db.blacklist.findUnique({ where: { id } });
+      if (item) {
+        await db.blacklist.delete({ where: { id } });
+        await db.contact.updateMany({
+          where: { phone: item.phone },
+          data: { isBlacklisted: false, blacklistReason: null },
+        });
+      }
+    } else if (phone) {
+      const norm = normalizePhone(phone);
+      const targetPhone = norm.isValid ? norm.formatted : phone;
+      await db.blacklist.deleteMany({ where: { phone: targetPhone } });
+      await db.contact.updateMany({
+        where: { phone: targetPhone },
+        data: { isBlacklisted: false, blacklistReason: null },
+      });
+    }
+
+    return NextResponse.json({ success: true, message: 'Removed from blacklist' });
+  } catch (err: any) {
+    logger.error({ err }, 'Error in DELETE /api/contacts/blacklist');
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}

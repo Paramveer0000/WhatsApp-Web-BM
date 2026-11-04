@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSessionUser } from '@/lib/auth';
 import { campaignRunner } from '@/lib/queue/campaign-runner';
+import { normalizePhone } from '@/lib/phone';
 import { logger } from '@/lib/logger';
 import {
   assignMessageRotation,
@@ -187,24 +188,99 @@ export async function POST(req: NextRequest) {
       }, { status: 400 });
     }
 
-    // 1. Gather all target recipients (from selected lists or direct array)
+    // 1. Gather all target recipients (from selected lists, all contacts, unassigned contacts, or direct numbers)
     const targetContactsMap = new Map<string, { id?: string; contactId?: string; phone: string; name?: string; customVariables?: any; listId?: string }>();
 
-    if (rawLists.length > 0) {
-      const listContacts = await db.listContact.findMany({
-        where: { listId: { in: rawLists } },
-        include: { contact: true },
-      });
+    const targetMode = body.targetMode || body.audienceMode; // 'all' | 'unassigned' | 'lists' | 'manual'
+    const hasAll = rawLists.includes('ALL_CONTACTS') || targetMode === 'all';
+    const hasUnassigned = rawLists.includes('UNASSIGNED_CONTACTS') || targetMode === 'unassigned';
+    const validListIds = rawLists.filter((id) => id !== 'ALL_CONTACTS' && id !== 'UNASSIGNED_CONTACTS');
 
-      for (const lc of listContacts) {
-        if (!lc.contact.isBlacklisted) {
-          targetContactsMap.set(lc.contact.phone, {
-            id: lc.contact.id,
-            contactId: lc.contact.id,
-            phone: lc.contact.phone,
-            name: lc.contact.name || undefined,
-            customVariables: lc.contact.customFields ? JSON.parse(lc.contact.customFields) : undefined,
-            listId: lc.listId,
+    if (hasAll) {
+      // Broadcast to ALL non-blacklisted contacts
+      const allContacts = await db.contact.findMany({
+        where: { isBlacklisted: false },
+      });
+      for (const c of allContacts) {
+        targetContactsMap.set(c.phone, {
+          id: c.id,
+          contactId: c.id,
+          phone: c.phone,
+          name: c.name || undefined,
+          customVariables: c.customFields ? JSON.parse(c.customFields) : undefined,
+        });
+      }
+    } else {
+      if (hasUnassigned) {
+        // Broadcast to unassigned contacts (contacts not in any list)
+        const unassignedContacts = await db.contact.findMany({
+          where: {
+            isBlacklisted: false,
+            lists: { none: {} },
+          },
+        });
+        for (const c of unassignedContacts) {
+          targetContactsMap.set(c.phone, {
+            id: c.id,
+            contactId: c.id,
+            phone: c.phone,
+            name: c.name || undefined,
+            customVariables: c.customFields ? JSON.parse(c.customFields) : undefined,
+          });
+        }
+      }
+
+      if (validListIds.length > 0) {
+        const listContacts = await db.listContact.findMany({
+          where: { listId: { in: validListIds } },
+          include: { contact: true },
+        });
+
+        for (const lc of listContacts) {
+          if (!lc.contact.isBlacklisted) {
+            targetContactsMap.set(lc.contact.phone, {
+              id: lc.contact.id,
+              contactId: lc.contact.id,
+              phone: lc.contact.phone,
+              name: lc.contact.name || undefined,
+              customVariables: lc.contact.customFields ? JSON.parse(lc.contact.customFields) : undefined,
+              listId: lc.listId,
+            });
+          }
+        }
+      }
+    }
+
+    // Direct manual phone numbers entered on the fly
+    const manualNumbersRaw = body.manualNumbers || body.manualContacts || [];
+    const manualList: string[] = Array.isArray(manualNumbersRaw)
+      ? manualNumbersRaw
+      : String(manualNumbersRaw)
+          .split(/[\n,;]+/)
+          .map((s: string) => s.trim())
+          .filter(Boolean);
+
+    for (const rawNum of manualList) {
+      if (!rawNum) continue;
+      const norm = normalizePhone(rawNum);
+      if (norm.isValid && !targetContactsMap.has(norm.formatted)) {
+        // Upsert contact so it's persisted in DB
+        const contact = await db.contact.upsert({
+          where: { phone: norm.formatted },
+          update: {},
+          create: {
+            phone: norm.formatted,
+            source: 'CAMPAIGN_MANUAL',
+            tags: JSON.stringify(['campaign-manual']),
+          },
+        });
+        if (!contact.isBlacklisted) {
+          targetContactsMap.set(norm.formatted, {
+            id: contact.id,
+            contactId: contact.id,
+            phone: contact.phone,
+            name: contact.name || undefined,
+            customVariables: contact.customFields ? JSON.parse(contact.customFields) : undefined,
           });
         }
       }

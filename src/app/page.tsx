@@ -61,7 +61,11 @@ import {
   X,
   Sliders,
   ListFilter,
-  UserPlus
+  UserPlus,
+  Pencil,
+  FolderPlus,
+  User,
+  List,
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -83,6 +87,7 @@ import { DistributionMode, RotationScope, VariantInput } from '@/lib/rotation';
 import { GuardrailsConsoleTab } from '@/components/GuardrailsConsoleTab';
 import { SystemLogsConsole } from '@/components/SystemLogsConsole';
 import { ManualAddContactModal } from '@/components/ManualAddContactModal';
+import { EditContactModal } from '@/components/EditContactModal';
 import { CreateTemplateModal } from '@/components/CreateTemplateModal';
 
 type TabType = 'overview' | 'campaigns' | 'live' | 'wizard' | 'contacts' | 'templates' | 'replies' | 'instances' | 'guardrails' | 'reports' | 'system' | 'settings';
@@ -128,6 +133,16 @@ export default function AppDashboard() {
   const [importStats, setImportStats] = useState<any>(null);
   const [showAddContactModal, setShowAddContactModal] = useState(false);
   const [contactSuccessMsg, setContactSuccessMsg] = useState('');
+  const [editingContact, setEditingContact] = useState<any>(null);
+  const [showEditContactModal, setShowEditContactModal] = useState(false);
+  const [showCreateListModal, setShowCreateListModal] = useState(false);
+  const [newListName, setNewListName] = useState('');
+  const [newListDesc, setNewListDesc] = useState('');
+  const [creatingList, setCreatingList] = useState(false);
+  const [showBlacklistModal, setShowBlacklistModal] = useState(false);
+  const [blacklistPhoneInput, setBlacklistPhoneInput] = useState('');
+  const [blacklistReasonInput, setBlacklistReasonInput] = useState('');
+  const [addingToBlacklist, setAddingToBlacklist] = useState(false);
 
   // Settings State
   const [settings, setSettings] = useState<Record<string, string>>({});
@@ -160,6 +175,8 @@ export default function AppDashboard() {
   const [wizName, setWizName] = useState(`Campaign-${Date.now().toString().slice(-4)}`);
   const [wizInstances, setWizInstances] = useState<string[]>([]);
   const [wizListIds, setWizListIds] = useState<string[]>([]);
+  const [wizAudienceMode, setWizAudienceMode] = useState<'lists' | 'all' | 'unassigned' | 'manual'>('lists');
+  const [wizManualNumbers, setWizManualNumbers] = useState('');
   const [wizTemplate, setWizTemplate] = useState(
     `{Hi|Hello|Dear} {name|Valued Customer},\n\nWe are pleased to share our newest updates with your team at *{company|your company}*!\n\nUse code: ~OLDCODE~ \`SPECIAL20\` for _20% off_ your order.\n\n{Best regards|Warm wishes},\nMarketing Team`
   );
@@ -576,8 +593,20 @@ export default function AppDashboard() {
   // Create Campaign
   const handleLaunchCampaign = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!wizName.trim() || wizInstances.length === 0 || wizListIds.length === 0) {
-      alert('Please fill in Campaign Name, select at least 1 Instance, and at least 1 Contact List');
+    if (!wizName.trim()) {
+      alert('Please enter a Campaign Name');
+      return;
+    }
+    if (wizInstances.length === 0) {
+      alert('Please select at least 1 WhatsApp Instance');
+      return;
+    }
+    if (wizAudienceMode === 'lists' && wizListIds.length === 0) {
+      alert('Please select at least 1 Contact List');
+      return;
+    }
+    if (wizAudienceMode === 'manual' && !wizManualNumbers.trim()) {
+      alert('Please enter at least one phone number in the manual box');
       return;
     }
 
@@ -585,7 +614,14 @@ export default function AppDashboard() {
       const payload: any = {
         name: wizName,
         instances: wizInstances,
-        contactListIds: wizListIds,
+        targetMode: wizAudienceMode,
+        contactListIds:
+          wizAudienceMode === 'all'
+            ? ['ALL_CONTACTS']
+            : wizAudienceMode === 'unassigned'
+            ? ['UNASSIGNED_CONTACTS']
+            : wizListIds,
+        manualNumbers: wizAudienceMode === 'manual' || wizManualNumbers.trim() ? wizManualNumbers.trim() : undefined,
         minDelay,
         maxDelay,
         batchSize,
@@ -1918,24 +1954,122 @@ export default function AppDashboard() {
                         <span className="text-[10px] text-slate-500">Hold Ctrl to select multiple</span>
                       </div>
 
-                      {/* Contact Lists Selection */}
+                      {/* Audience Selection */}
                       <div>
-                        <label className="block text-xs font-semibold text-slate-300 mb-1">Target Contact List(s)</label>
-                        <select
-                          multiple
-                          value={wizListIds}
-                          onChange={(e) =>
-                            setWizListIds(Array.from(e.target.selectedOptions, (option) => option.value))
-                          }
-                          className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-xs text-white h-24 font-mono"
-                        >
-                          {contactLists.map((l) => (
-                            <option key={l.id} value={l.id}>
-                              {l.name} ({l._count?.contacts || 0} contacts)
-                            </option>
-                          ))}
-                        </select>
-                        <span className="text-[10px] text-slate-500">Hold Ctrl to select multiple</span>
+                        <div className="flex flex-wrap items-center justify-between gap-1 mb-1.5">
+                          <label className="block text-xs font-semibold text-slate-300">Target Audience</label>
+                          <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[10px]">
+                            <button
+                              type="button"
+                              onClick={() => setWizAudienceMode('lists')}
+                              className={`px-2 py-0.5 rounded transition ${wizAudienceMode === 'lists' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
+                            >
+                              Lists ({contactLists.length})
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setWizAudienceMode('all')}
+                              className={`px-2 py-0.5 rounded transition ${wizAudienceMode === 'all' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
+                            >
+                              All Contacts ({contacts.length})
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setWizAudienceMode('unassigned')}
+                              className={`px-2 py-0.5 rounded transition ${wizAudienceMode === 'unassigned' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
+                            >
+                              Non-List
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setWizAudienceMode('manual')}
+                              className={`px-2 py-0.5 rounded transition ${wizAudienceMode === 'manual' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
+                            >
+                              Manual
+                            </button>
+                          </div>
+                        </div>
+
+                        {wizAudienceMode === 'lists' && (
+                          <div>
+                            <select
+                              multiple
+                              value={wizListIds}
+                              onChange={(e) =>
+                                setWizListIds(Array.from(e.target.selectedOptions, (option) => option.value))
+                              }
+                              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-xs text-white h-24 font-mono"
+                            >
+                              {contactLists.map((l) => (
+                                <option key={l.id} value={l.id}>
+                                  {l.name} ({l._count?.contacts || 0} contacts)
+                                </option>
+                              ))}
+                            </select>
+                            <div className="flex items-center justify-between text-[10px] text-slate-500 mt-1">
+                              <span>Hold Ctrl to multi-select</span>
+                              <button
+                                type="button"
+                                onClick={() => setWizListIds(contactLists.map((l) => l.id))}
+                                className="text-emerald-400 hover:underline"
+                              >
+                                Select All Lists
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {wizAudienceMode === 'all' && (
+                          <div className="p-3 bg-slate-950 border border-emerald-500/30 rounded-xl text-xs text-slate-300 flex items-center justify-between h-24">
+                            <div>
+                              <div className="font-bold text-white flex items-center gap-1.5 text-emerald-400">
+                                <Users className="w-4 h-4" />
+                                <span>All Database Contacts Selected</span>
+                              </div>
+                              <p className="text-[11px] text-slate-400 mt-1">
+                                Broadcast will target all {contacts.length} saved contacts across all lists and unassigned numbers.
+                              </p>
+                            </div>
+                            <div className="text-right font-mono text-emerald-400 font-bold text-lg px-2">
+                              {contacts.length}
+                            </div>
+                          </div>
+                        )}
+
+                        {wizAudienceMode === 'unassigned' && (
+                          <div className="p-3 bg-slate-950 border border-emerald-500/30 rounded-xl text-xs text-slate-300 flex items-center justify-between h-24">
+                            <div>
+                              <div className="font-bold text-white flex items-center gap-1.5 text-emerald-400">
+                                <User className="w-4 h-4" />
+                                <span>Non-List / Unassigned Contacts</span>
+                              </div>
+                              <p className="text-[11px] text-slate-400 mt-1">
+                                Broadcast will target all contacts not assigned to any specific list.
+                              </p>
+                            </div>
+                            <div className="text-right font-mono text-emerald-400 font-bold text-lg px-2">
+                              {Math.max(0, contacts.length - contactLists.reduce((sum, l) => sum + (l._count?.contacts || 0), 0))}
+                            </div>
+                          </div>
+                        )}
+
+                        {wizAudienceMode === 'manual' && (
+                          <div className="space-y-1">
+                            <textarea
+                              rows={3}
+                              value={wizManualNumbers}
+                              onChange={(e) => setWizManualNumbers(e.target.value)}
+                              placeholder="Enter numbers separated by comma or new line&#10;e.g. +919876543210, +919876543211"
+                              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-xs text-white font-mono h-24 resize-none"
+                            />
+                            <div className="flex items-center justify-between text-[10px] text-slate-500">
+                              <span>One per line or comma-separated</span>
+                              <span className="font-mono text-emerald-400">
+                                {wizManualNumbers.split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean).length} valid numbers
+                              </span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1965,9 +2099,15 @@ export default function AppDashboard() {
                     activePreviewVariantIndex={activePreviewVariantIndex}
                     onActivePreviewVariantIndexChange={setActivePreviewVariantIndex}
                     totalRecipientsCount={
-                      contactLists
-                        .filter((l) => wizListIds.includes(l.id))
-                        .reduce((acc, l) => acc + (l._count?.contacts || 0), 0) || 500
+                      wizAudienceMode === 'all'
+                        ? contacts.length
+                        : wizAudienceMode === 'unassigned'
+                        ? Math.max(0, contacts.length - contactLists.reduce((sum, l) => sum + (l._count?.contacts || 0), 0))
+                        : wizAudienceMode === 'manual'
+                        ? Math.max(1, wizManualNumbers.split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean).length)
+                        : (contactLists
+                            .filter((l) => wizListIds.includes(l.id))
+                            .reduce((acc, l) => acc + (l._count?.contacts || 0), 0) || contacts.length || 1)
                     }
                   />
 
@@ -2287,62 +2427,250 @@ export default function AppDashboard() {
                 </div>
               </div>
 
-              {/* Contacts Table */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
-                <table className="w-full text-left text-xs text-slate-300">
-                  <thead className="bg-slate-950 text-slate-400 font-mono text-[11px] uppercase border-b border-slate-800">
-                    <tr>
-                      <th className="p-4">Name</th>
-                      <th className="p-4">Phone Number</th>
-                      <th className="p-4">Custom Variables</th>
-                      <th className="p-4">Added Date</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/60 font-sans">
-                    {contacts.length === 0 ? (
+              {/* SUBTAB 1: ALL CONTACTS TABLE */}
+              {contactSubTab === 'all' && (
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+                  <table className="w-full text-left text-xs text-slate-300">
+                    <thead className="bg-slate-950 text-slate-400 font-mono text-[11px] uppercase border-b border-slate-800">
                       <tr>
-                        <td colSpan={4} className="p-8 text-center text-slate-500 text-xs">
-                          No contacts available. Download the sample template above and import your contacts.
-                        </td>
+                        <th className="p-4">Name</th>
+                        <th className="p-4">Phone Number</th>
+                        <th className="p-4">Custom Variables</th>
+                        <th className="p-4">Added Date</th>
+                        <th className="p-4 text-right">Actions</th>
                       </tr>
-                    ) : (
-                      contacts
-                        .filter(
-                          (c) =>
-                            !contactSearch ||
-                            (c.name && c.name.toLowerCase().includes(contactSearch.toLowerCase())) ||
-                            (c.phone && c.phone.includes(contactSearch))
-                        )
-                        .slice(0, 50)
-                        .map((c) => (
-                          <tr key={c.id} className="hover:bg-slate-850/60 transition">
-                            <td className="p-4 font-bold text-white">{c.name || 'Unnamed'}</td>
-                            <td className="p-4 font-mono tabular-nums text-emerald-400">+{c.phone}</td>
-                            <td className="p-4 font-mono text-[11px] text-slate-400">
-                              {(() => {
-                                const raw = c.customFields || c.customVariables;
-                                if (!raw) return '-';
-                                try {
-                                  const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-                                  return Object.entries(parsed)
-                                    .map(([k, v]) => `${k}: ${v}`)
-                                    .join(', ') || '-';
-                                } catch {
-                                  return String(raw);
-                                }
-                              })()}
-                            </td>
-                            <td className="p-4 font-mono text-[11px] text-slate-400">
-                              {new Date(c.createdAt).toLocaleDateString()}
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60 font-sans">
+                      {contacts.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="p-8 text-center text-slate-500 text-xs">
+                            No contacts available. Download the sample template above and import your contacts.
+                          </td>
+                        </tr>
+                      ) : (
+                        contacts
+                          .filter(
+                            (c) =>
+                              !contactSearch ||
+                              (c.name && c.name.toLowerCase().includes(contactSearch.toLowerCase())) ||
+                              (c.phone && c.phone.includes(contactSearch))
+                          )
+                          .slice(0, 50)
+                          .map((c) => (
+                            <tr key={c.id} className="hover:bg-slate-850/60 transition">
+                              <td className="p-4 font-bold text-white">{c.name || 'Unnamed'}</td>
+                              <td className="p-4 font-mono tabular-nums text-emerald-400">+{c.phone}</td>
+                              <td className="p-4 font-mono text-[11px] text-slate-400">
+                                {(() => {
+                                  const raw = c.customFields || c.customVariables;
+                                  if (!raw) return '-';
+                                  try {
+                                    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+                                    return Object.entries(parsed)
+                                      .map(([k, v]) => `${k}: ${v}`)
+                                      .join(', ') || '-';
+                                  } catch {
+                                    return String(raw);
+                                  }
+                                })()}
+                              </td>
+                              <td className="p-4 font-mono text-[11px] text-slate-400">
+                                {new Date(c.createdAt).toLocaleDateString()}
+                              </td>
+                              <td className="p-4 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    onClick={() => {
+                                      setEditingContact(c);
+                                      setShowEditContactModal(true);
+                                    }}
+                                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-emerald-400 transition"
+                                    title="Edit contact"
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      if (!confirm(`Delete contact ${c.name || c.phone}?`)) return;
+                                      await fetch(`/api/contacts/${c.id}`, { method: 'DELETE' });
+                                      loadContacts();
+                                      setContactSuccessMsg(`Contact deleted`);
+                                      setTimeout(() => setContactSuccessMsg(''), 3000);
+                                    }}
+                                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-950/60 text-slate-400 hover:text-rose-400 transition"
+                                    title="Delete contact"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* SUBTAB 2: LISTS MANAGEMENT */}
+              {contactSubTab === 'lists' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-bold text-white">Audience Lists</h3>
+                      <p className="text-xs text-slate-400">Organize contacts into custom target segments</p>
+                    </div>
+                    <button
+                      onClick={() => setShowCreateListModal(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow"
+                    >
+                      <FolderPlus className="w-3.5 h-3.5" />
+                      <span>+ Create List</span>
+                    </button>
+                  </div>
+
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+                    <table className="w-full text-left text-xs text-slate-300">
+                      <thead className="bg-slate-950 text-slate-400 font-mono text-[11px] uppercase border-b border-slate-800">
+                        <tr>
+                          <th className="p-4">List Name</th>
+                          <th className="p-4">Description</th>
+                          <th className="p-4">Contacts Count</th>
+                          <th className="p-4">Created Date</th>
+                          <th className="p-4 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/60 font-sans">
+                        {contactLists.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="p-8 text-center text-slate-500 text-xs">
+                              No contact lists created yet. Click "+ Create List" above to segment your audience.
                             </td>
                           </tr>
-                        ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                        ) : (
+                          contactLists.map((l) => (
+                            <tr key={l.id} className="hover:bg-slate-850/60 transition">
+                              <td className="p-4 font-bold text-white flex items-center gap-2">
+                                <FolderPlus className="w-4 h-4 text-emerald-400" />
+                                <span>{l.name}</span>
+                              </td>
+                              <td className="p-4 text-slate-400">{l.description || '-'}</td>
+                              <td className="p-4 font-mono">
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold">
+                                  {l._count?.contacts || 0} contacts
+                                </span>
+                              </td>
+                              <td className="p-4 font-mono text-[11px] text-slate-400">
+                                {new Date(l.createdAt).toLocaleDateString()}
+                              </td>
+                              <td className="p-4 text-right">
+                                <div className="flex items-center justify-end gap-2">
+                                  <button
+                                    onClick={() => {
+                                      setWizListIds([l.id]);
+                                      setWizAudienceMode('lists');
+                                      setCurrentTab('wizard');
+                                    }}
+                                    className="px-2.5 py-1 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-semibold transition"
+                                  >
+                                    Broadcast →
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      if (!confirm(`Delete list "${l.name}"? Contacts in this list will not be deleted.`)) return;
+                                      await fetch(`/api/contacts/lists/${l.id}`, { method: 'DELETE' });
+                                      loadContacts();
+                                      setContactSuccessMsg(`List "${l.name}" deleted.`);
+                                      setTimeout(() => setContactSuccessMsg(''), 3000);
+                                    }}
+                                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-950/60 text-slate-400 hover:text-rose-400 transition"
+                                    title="Delete list"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
 
-              {/* Manual Add Contact Modal */}
+              {/* SUBTAB 3: BLACKLIST MANAGEMENT */}
+              {contactSubTab === 'blacklist' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-bold text-white">Do-Not-Disturb / Blacklist</h3>
+                      <p className="text-xs text-slate-400">Blocked numbers will automatically be excluded from all broadcast campaigns</p>
+                    </div>
+                    <button
+                      onClick={() => setShowBlacklistModal(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition shadow"
+                    >
+                      <ShieldAlert className="w-3.5 h-3.5" />
+                      <span>+ Add to Blacklist</span>
+                    </button>
+                  </div>
+
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+                    <table className="w-full text-left text-xs text-slate-300">
+                      <thead className="bg-slate-950 text-slate-400 font-mono text-[11px] uppercase border-b border-slate-800">
+                        <tr>
+                          <th className="p-4">Phone Number</th>
+                          <th className="p-4">Reason</th>
+                          <th className="p-4">Source</th>
+                          <th className="p-4">Added Date</th>
+                          <th className="p-4 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/60 font-sans">
+                        {blacklist.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="p-8 text-center text-slate-500 text-xs">
+                              No blacklisted phone numbers. All contacts are eligible to receive broadcasts.
+                            </td>
+                          </tr>
+                        ) : (
+                          blacklist.map((b) => (
+                            <tr key={b.id} className="hover:bg-slate-850/60 transition">
+                              <td className="p-4 font-mono font-bold text-rose-400">+{b.phone}</td>
+                              <td className="p-4 text-slate-300">{b.reason || 'Manually added'}</td>
+                              <td className="p-4 font-mono text-[11px]">
+                                <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300">
+                                  {b.source || 'MANUAL'}
+                                </span>
+                              </td>
+                              <td className="p-4 font-mono text-[11px] text-slate-400">
+                                {new Date(b.createdAt).toLocaleDateString()}
+                              </td>
+                              <td className="p-4 text-right">
+                                <button
+                                  onClick={async () => {
+                                    if (!confirm(`Unblock +${b.phone}?`)) return;
+                                    await fetch(`/api/contacts/blacklist?id=${b.id}`, { method: 'DELETE' });
+                                    loadContacts();
+                                    setContactSuccessMsg(`+${b.phone} removed from blacklist.`);
+                                    setTimeout(() => setContactSuccessMsg(''), 3000);
+                                  }}
+                                  className="px-2.5 py-1 bg-slate-800 hover:bg-emerald-950/40 text-slate-300 hover:text-emerald-400 rounded-lg text-xs font-semibold transition"
+                                >
+                                  Unblock
+                                </button>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Modals */}
               <ManualAddContactModal
                 isOpen={showAddContactModal}
                 onClose={() => setShowAddContactModal(false)}
@@ -2353,6 +2681,181 @@ export default function AppDashboard() {
                 }}
                 availableLists={contactLists}
               />
+
+              <EditContactModal
+                isOpen={showEditContactModal}
+                onClose={() => {
+                  setShowEditContactModal(false);
+                  setEditingContact(null);
+                }}
+                contact={editingContact}
+                availableLists={contactLists}
+                onContactSaved={() => {
+                  loadContacts();
+                  setContactSuccessMsg('Contact updated successfully!');
+                  setTimeout(() => setContactSuccessMsg(''), 4000);
+                }}
+                onContactDeleted={() => {
+                  loadContacts();
+                  setContactSuccessMsg('Contact deleted successfully!');
+                  setTimeout(() => setContactSuccessMsg(''), 4000);
+                }}
+              />
+
+              {/* Create List Modal */}
+              {showCreateListModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+                  <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-5 space-y-4">
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                      <h3 className="text-base font-bold text-white flex items-center gap-2">
+                        <FolderPlus className="w-4 h-4 text-emerald-400" />
+                        <span>Create Contact List</span>
+                      </h3>
+                      <button onClick={() => setShowCreateListModal(false)} className="text-slate-400 hover:text-white">✕</button>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">List Name</label>
+                      <input
+                        type="text"
+                        value={newListName}
+                        onChange={(e) => setNewListName(e.target.value)}
+                        placeholder="e.g. VIP Customers, Leads Delhi"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white"
+                        autoFocus
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">Description (Optional)</label>
+                      <input
+                        type="text"
+                        value={newListDesc}
+                        onChange={(e) => setNewListDesc(e.target.value)}
+                        placeholder="e.g. High priority customers for discount broadcast"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white"
+                      />
+                    </div>
+                    <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => setShowCreateListModal(false)}
+                        className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        disabled={creatingList || !newListName.trim()}
+                        onClick={async () => {
+                          setCreatingList(true);
+                          try {
+                            const res = await fetch('/api/contacts/lists', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ name: newListName.trim(), description: newListDesc.trim() || undefined }),
+                            });
+                            if (!res.ok) {
+                              const d = await res.json();
+                              throw new Error(d.error || 'Failed to create list');
+                            }
+                            await loadContacts();
+                            setNewListName('');
+                            setNewListDesc('');
+                            setShowCreateListModal(false);
+                            setContactSuccessMsg('Contact list created successfully!');
+                            setTimeout(() => setContactSuccessMsg(''), 4000);
+                          } catch (err: any) {
+                            alert(err.message);
+                          } finally {
+                            setCreatingList(false);
+                          }
+                        }}
+                        className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition disabled:opacity-50"
+                      >
+                        {creatingList ? 'Creating...' : 'Create List'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Add Blacklist Modal */}
+              {showBlacklistModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+                  <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-5 space-y-4">
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                      <h3 className="text-base font-bold text-white flex items-center gap-2">
+                        <ShieldAlert className="w-4 h-4 text-rose-400" />
+                        <span>Add Number to Blacklist</span>
+                      </h3>
+                      <button onClick={() => setShowBlacklistModal(false)} className="text-slate-400 hover:text-white">✕</button>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">Phone Number</label>
+                      <input
+                        type="tel"
+                        value={blacklistPhoneInput}
+                        onChange={(e) => setBlacklistPhoneInput(e.target.value)}
+                        placeholder="e.g. +919876543210 or 9876543210"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono"
+                        autoFocus
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">Reason (Optional)</label>
+                      <input
+                        type="text"
+                        value={blacklistReasonInput}
+                        onChange={(e) => setBlacklistReasonInput(e.target.value)}
+                        placeholder="e.g. Requested opt-out via reply"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white"
+                      />
+                    </div>
+                    <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => setShowBlacklistModal(false)}
+                        className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        disabled={addingToBlacklist || !blacklistPhoneInput.trim()}
+                        onClick={async () => {
+                          setAddingToBlacklist(true);
+                          try {
+                            const res = await fetch('/api/contacts/blacklist', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                phone: blacklistPhoneInput.trim(),
+                                reason: blacklistReasonInput.trim() || undefined,
+                              }),
+                            });
+                            if (!res.ok) {
+                              const d = await res.json();
+                              throw new Error(d.error || 'Failed to blacklist number');
+                            }
+                            await loadContacts();
+                            setBlacklistPhoneInput('');
+                            setBlacklistReasonInput('');
+                            setShowBlacklistModal(false);
+                            setContactSuccessMsg('Phone number added to blacklist.');
+                            setTimeout(() => setContactSuccessMsg(''), 4000);
+                          } catch (err: any) {
+                            alert(err.message);
+                          } finally {
+                            setAddingToBlacklist(false);
+                          }
+                        }}
+                        className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition disabled:opacity-50"
+                      >
+                        {addingToBlacklist ? 'Adding...' : 'Add to Blacklist'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

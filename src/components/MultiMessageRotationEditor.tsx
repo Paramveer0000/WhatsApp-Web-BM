@@ -24,6 +24,11 @@ import {
   ChevronUp,
   ShieldCheck,
   RefreshCw,
+  Upload,
+  X,
+  Check,
+  Loader2,
+  Link,
 } from 'lucide-react';
 import {
   DistributionMode,
@@ -58,6 +63,192 @@ interface MultiMessageRotationEditorProps {
   activePreviewVariantIndex: number;
   onActivePreviewVariantIndexChange: (index: number) => void;
   totalRecipientsCount?: number;
+}
+
+function MediaUploadInput({
+  mediaType,
+  mediaUrl,
+  fileName,
+  onMediaUrlChange,
+  onFileNameChange,
+}: {
+  mediaType: string;
+  mediaUrl: string;
+  fileName: string;
+  onMediaUrlChange: (url: string) => void;
+  onFileNameChange: (name: string) => void;
+}) {
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const [useUrlMode, setUseUrlMode] = useState(false);
+
+  const acceptMap: Record<string, string> = {
+    image: 'image/png,image/jpeg,image/webp,image/gif',
+    video: 'video/mp4,video/quicktime,video/webm',
+    document: '.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv',
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    setUploadError('');
+
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: fd,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      onMediaUrlChange(data.base64 || data.url);
+      onFileNameChange(data.fileName || file.name);
+    } catch (err: any) {
+      setUploadError(err.message || 'Upload failed');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleRemove = () => {
+    onMediaUrlChange('');
+    onFileNameChange('');
+    setUploadError('');
+  };
+
+  if (useUrlMode) {
+    return (
+      <div className="space-y-2 bg-slate-950 p-3 rounded-xl border border-slate-800">
+        <div className="flex items-center justify-between">
+          <label className="text-[11px] font-semibold text-slate-300">
+            Media Public URL ({mediaType})
+          </label>
+          <button
+            type="button"
+            onClick={() => setUseUrlMode(false)}
+            className="text-[10px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-semibold"
+          >
+            <Upload className="w-3 h-3" />
+            <span>Switch to File Upload</span>
+          </button>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <input
+            type="url"
+            value={mediaUrl}
+            onChange={(e) => onMediaUrlChange(e.target.value)}
+            placeholder="https://example.com/asset.png"
+            className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
+          />
+          <input
+            type="text"
+            value={fileName}
+            onChange={(e) => onFileNameChange(e.target.value)}
+            placeholder="File name (Optional)"
+            className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white"
+          />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2 bg-slate-950 p-3.5 rounded-xl border border-slate-800">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-semibold text-slate-300 capitalize">
+          Attach {mediaType} File
+        </span>
+        <button
+          type="button"
+          onClick={() => setUseUrlMode(true)}
+          className="text-[10px] text-slate-400 hover:text-white flex items-center gap-1"
+        >
+          <Link className="w-3 h-3 text-slate-400" />
+          <span>Or enter public URL</span>
+        </button>
+      </div>
+
+      {uploadError && (
+        <div className="text-[11px] text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-1 rounded">
+          {uploadError}
+        </div>
+      )}
+
+      {mediaUrl ? (
+        <div className="flex items-center justify-between gap-3 bg-slate-900 p-2.5 rounded-xl border border-emerald-500/30">
+          <div className="flex items-center gap-3 min-w-0">
+            {mediaType === 'image' ? (
+              <img
+                src={mediaUrl}
+                alt="Uploaded thumbnail"
+                className="w-14 h-14 object-cover rounded-lg border border-slate-700 shrink-0 bg-slate-950"
+              />
+            ) : mediaType === 'video' ? (
+              <div className="w-14 h-14 rounded-lg bg-emerald-950/60 border border-emerald-500/30 flex items-center justify-center shrink-0 text-emerald-400">
+                <Video className="w-6 h-6" />
+              </div>
+            ) : (
+              <div className="w-14 h-14 rounded-lg bg-teal-950/60 border border-teal-500/30 flex items-center justify-center shrink-0 text-teal-400">
+                <FileText className="w-6 h-6" />
+              </div>
+            )}
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-white truncate max-w-[240px]">
+                {fileName || `${mediaType}_file`}
+              </p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                <span className="text-[10px] text-emerald-400 font-mono">Ready to broadcast</span>
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleRemove}
+            className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition shrink-0"
+            title="Remove media"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      ) : (
+        <label className="flex flex-col items-center justify-center border-2 border-dashed border-slate-700/80 hover:border-emerald-500/60 rounded-xl p-4 bg-slate-900/50 hover:bg-slate-900 cursor-pointer transition text-center group">
+          {isUploading ? (
+            <div className="flex items-center gap-2 text-emerald-400 text-xs py-2">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Uploading {mediaType}...</span>
+            </div>
+          ) : (
+            <>
+              <div className="w-9 h-9 rounded-full bg-emerald-500/10 group-hover:bg-emerald-500/20 text-emerald-400 flex items-center justify-center mb-1.5 transition">
+                <Upload className="w-4 h-4" />
+              </div>
+              <p className="text-xs font-semibold text-slate-200">
+                Click to upload <span className="capitalize">{mediaType}</span> or drag & drop
+              </p>
+              <p className="text-[10px] text-slate-400 mt-0.5">
+                {mediaType === 'image'
+                  ? 'PNG, JPG, WEBP, GIF up to 50MB'
+                  : mediaType === 'video'
+                  ? 'MP4, WebM up to 50MB'
+                  : 'PDF, DOC, XLSX, CSV up to 50MB'}
+              </p>
+            </>
+          )}
+          <input
+            type="file"
+            accept={acceptMap[mediaType] || '*/*'}
+            onChange={handleFileUpload}
+            disabled={isUploading}
+            className="hidden"
+          />
+        </label>
+      )}
+    </div>
+  );
 }
 
 export default function MultiMessageRotationEditor({
@@ -422,32 +613,15 @@ export default function MultiMessageRotationEditor({
             </div>
           </div>
 
-          {/* Media Attach Fields */}
+          {/* Media Attach & Upload */}
           {singleMediaType !== 'text' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-950 p-3 rounded-xl border border-slate-800">
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                  Media Public URL ({singleMediaType})
-                </label>
-                <input
-                  type="url"
-                  value={singleMediaUrl}
-                  onChange={(e) => onSingleMediaUrlChange(e.target.value)}
-                  placeholder="https://example.com/asset.png"
-                  className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-300 mb-1">File Name (Optional)</label>
-                <input
-                  type="text"
-                  value={singleFileName}
-                  onChange={(e) => onSingleFileNameChange(e.target.value)}
-                  placeholder="brochure.pdf"
-                  className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white"
-                />
-              </div>
-            </div>
+            <MediaUploadInput
+              mediaType={singleMediaType}
+              mediaUrl={singleMediaUrl}
+              fileName={singleFileName}
+              onMediaUrlChange={onSingleMediaUrlChange}
+              onFileNameChange={onSingleFileNameChange}
+            />
           )}
 
           {/* Variable chips */}
@@ -745,30 +919,13 @@ export default function MultiMessageRotationEditor({
                 </div>
 
                 {variants[editingCardIndex]!.mediaType && variants[editingCardIndex]!.mediaType !== 'text' && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-950 p-3 rounded-xl border border-slate-800">
-                    <div>
-                      <label className="block text-[11px] text-slate-400 mb-1">
-                        Media Public URL ({variants[editingCardIndex]!.mediaType})
-                      </label>
-                      <input
-                        type="url"
-                        value={variants[editingCardIndex]!.mediaUrl || ''}
-                        onChange={(e) => handleUpdateCard(editingCardIndex, { mediaUrl: e.target.value })}
-                        placeholder="https://example.com/asset.png"
-                        className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] text-slate-400 mb-1">File Name (Optional)</label>
-                      <input
-                        type="text"
-                        value={variants[editingCardIndex]!.fileName || ''}
-                        onChange={(e) => handleUpdateCard(editingCardIndex, { fileName: e.target.value })}
-                        placeholder="brochure.pdf"
-                        className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white"
-                      />
-                    </div>
-                  </div>
+                  <MediaUploadInput
+                    mediaType={variants[editingCardIndex]!.mediaType || 'image'}
+                    mediaUrl={variants[editingCardIndex]!.mediaUrl || ''}
+                    fileName={variants[editingCardIndex]!.fileName || ''}
+                    onMediaUrlChange={(url) => handleUpdateCard(editingCardIndex, { mediaUrl: url })}
+                    onFileNameChange={(name) => handleUpdateCard(editingCardIndex, { fileName: name })}
+                  />
                 )}
               </div>
 
