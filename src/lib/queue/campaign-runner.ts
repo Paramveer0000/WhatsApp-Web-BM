@@ -315,9 +315,9 @@ export class CampaignRunner {
 
         // 6. Select Variant & Render Message
         const variant =
-          campaign.variants.length > 0
-            ? campaign.variants[recipient.variantIndex % campaign.variants.length]!
-            : { content: 'Hello {{name}}', mediaType: 'text', mediaUrl: null, fileName: null, caption: null };
+          (recipient.variantId ? campaign.variants.find((v) => v.id === recipient.variantId) : null) ||
+          campaign.variants[recipient.variantIndex % campaign.variants.length] ||
+          { content: 'Hello {{name}}', mediaType: 'text', mediaUrl: null, fileName: null, caption: null };
 
         const seedKey = `${campaignId}_${recipient.id}_${recipient.phone}`;
         const finalMessage = renderMessage(

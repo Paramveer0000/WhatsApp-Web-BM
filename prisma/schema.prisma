@@ -133,6 +133,11 @@ model Campaign {
   timezone           String              @default("Asia/Kolkata")
   warmUpMode         Boolean             @default(false)
   rotationMode       String              @default("ROUND_ROBIN") // "ROUND_ROBIN" or "LEAST_USED"
+  distributionMode   String              @default("SINGLE")      // "SINGLE", "ROTATE", "RANDOM", "WEIGHTED"
+  rotationScope      String              @default("CAMPAIGN")    // "CAMPAIGN", "INSTANCE", "LIST"
+  shuffleAudience    Boolean             @default(false)
+  shuffleSeed        Int?
+  avoidRepeatContent Boolean             @default(true)
   riskScore          Int?                @default(0)
   riskFactors        String?             // JSON
   riskOverride       Boolean             @default(false)
@@ -161,30 +166,38 @@ model CampaignInstance {
 }
 
 model CampaignVariant {
-  id            String   @id @default(cuid())
-  campaignId    String
-  index         Int      @default(0)
-  label         String?  @default("Variant A")
-  content       String
-  mediaType     String?  @default("text")
-  mediaUrl      String?
-  fileName      String?
-  caption       String?
-  weightPercent Int      @default(100)
-  campaign      Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  id                 String              @id @default(cuid())
+  campaignId         String
+  index              Int                 @default(0)
+  position           Int                 @default(1)
+  label              String?             @default("Message 1")
+  content            String
+  mediaType          String?             @default("text")
+  mediaUrl           String?
+  fileName           String?
+  caption            String?
+  weightPercent      Int                 @default(100)
+  weight             Int?
+  contentHash        String?
+  similarityWarnings String?
+  isPaused           Boolean             @default(false)
+  campaign           Campaign            @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  recipients         CampaignRecipient[]
 }
 
 model CampaignRecipient {
-  id                 String    @id @default(cuid())
+  id                 String           @id @default(cuid())
   campaignId         String
   contactId          String?
   phone              String
   name               String?
-  customVariables    String?   // JSON
-  variantIndex       Int       @default(0)
-  status             String    @default("PENDING") // "PENDING", "QUEUED", "SENDING", "SENT", "DELIVERED", "READ", "FAILED", "RETRY_WAIT", "UNCERTAIN", "CANCELLED", "SKIPPED"
-  attempts           Int       @default(0)
-  maxAttempts        Int       @default(3)
+  customVariables    String?          // JSON
+  variantIndex       Int              @default(0)
+  variantId          String?
+  rotationIndex      Int?
+  status             String           @default("PENDING") // "PENDING", "QUEUED", "SENDING", "SENT", "DELIVERED", "READ", "FAILED", "RETRY_WAIT", "UNCERTAIN", "CANCELLED", "SKIPPED"
+  attempts           Int              @default(0)
+  maxAttempts        Int              @default(3)
   lastError          String?
   errorCode          String?
   queuedAt           DateTime?
@@ -199,12 +212,14 @@ model CampaignRecipient {
   remoteJid          String?
   renderedMessage    String?
   instanceUsed       String?
-  evaluationStatus   String?   @default("UNVERIFIED") // "VERIFIED_WA", "NOT_WA", "QUALITY_PASSED", "SPAM_FLAGGED"
-  qualityScore       Int?      @default(100)
-  campaign           Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  evaluationStatus   String?          @default("UNVERIFIED") // "VERIFIED_WA", "NOT_WA", "QUALITY_PASSED", "SPAM_FLAGGED"
+  qualityScore       Int?             @default(100)
+  campaign           Campaign         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  variant            CampaignVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
 
   @@unique([campaignId, phone])
   @@index([campaignId, status])
+  @@index([campaignId, variantId])
   @@index([phone])
   @@index([evolutionMessageId])
 }

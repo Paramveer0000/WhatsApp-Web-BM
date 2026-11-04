@@ -76,6 +76,9 @@ import {
 import * as XLSX from 'xlsx';
 import LiveWhatsAppBubble from '@/components/LiveWhatsAppBubble';
 import QRCodeModal from '@/components/QRCodeModal';
+import MultiMessageRotationEditor from '@/components/MultiMessageRotationEditor';
+import CampaignVariantsLiveTab from '@/components/CampaignVariantsLiveTab';
+import { DistributionMode, RotationScope, VariantInput } from '@/lib/rotation';
 
 type TabType = 'overview' | 'campaigns' | 'live' | 'wizard' | 'contacts' | 'templates' | 'replies' | 'instances' | 'reports' | 'system' | 'settings';
 
@@ -151,6 +154,56 @@ export default function AppDashboard() {
   const [isScheduled, setIsScheduled] = useState(false);
   const [scheduleTime, setScheduleTime] = useState('');
   const [launchSafetyCheck, setLaunchSafetyCheck] = useState(false);
+
+  // Multi-Message Rotation State (Section 1-3)
+  const [wizDistributionMode, setWizDistributionMode] = useState<DistributionMode>('SINGLE');
+  const [wizRotationScope, setWizRotationScope] = useState<RotationScope>('CAMPAIGN');
+  const [wizShuffleAudience, setWizShuffleAudience] = useState(false);
+  const [wizShuffleSeed, setWizShuffleSeed] = useState(42);
+  const [wizAvoidRepeatContent, setWizAvoidRepeatContent] = useState(true);
+  const [wizVariants, setWizVariants] = useState<VariantInput[]>([
+    {
+      position: 1,
+      label: 'Message 1 (Friendly)',
+      content: '{Hi|Hello|Dear} {name|Friend}! We are excited to announce our seasonal promotions for *{company|your company}*. Use code `SAVE20` for 20% off!',
+      mediaType: 'text',
+      mediaUrl: '',
+      fileName: '',
+      weight: 25,
+    },
+    {
+      position: 2,
+      label: 'Message 2 (Direct)',
+      content: 'Hello {name|there}: Enjoy 20% savings on all catalogue services this week using code `SAVE20`. Reply here if you need any assistance!',
+      mediaType: 'text',
+      mediaUrl: '',
+      fileName: '',
+      weight: 25,
+    },
+    {
+      position: 3,
+      label: 'Message 3 (Urgent)',
+      content: 'Reminder {name|Customer}: Limited-time exclusive discount available for your team. Apply voucher `SAVE20` before Sunday midnight!',
+      mediaType: 'text',
+      mediaUrl: '',
+      fileName: '',
+      weight: 25,
+    },
+    {
+      position: 4,
+      label: 'Message 4 (Value)',
+      content: 'Greetings {name|Partner}! Check out what is new with our product updates today. Redeem your 20% voucher `SAVE20` anytime this week.',
+      mediaType: 'text',
+      mediaUrl: '',
+      fileName: '',
+      weight: 25,
+    },
+  ]);
+  const [activePreviewVariantIndex, setActivePreviewVariantIndex] = useState(0);
+  const [previewRecipientNumber, setPreviewRecipientNumber] = useState(1);
+  const [liveActiveTab, setLiveActiveTab] = useState<'stream' | 'recipients' | 'variants'>('stream');
+  const [selectedVariantFilter, setSelectedVariantFilter] = useState('ALL');
+  const [liveVariantStats, setLiveVariantStats] = useState<any[]>([]);
 
   // Templates Library Mock
   const sampleTemplates = [
@@ -350,6 +403,7 @@ export default function AppDashboard() {
     if (!activeCampaignId || currentTab !== 'live') return;
 
     loadRecipients(activeCampaignId);
+    loadCampaignVariantStats(activeCampaignId);
 
     const eventSource = new EventSource(`/api/campaigns/${activeCampaignId}/stream`);
 
@@ -382,15 +436,69 @@ export default function AppDashboard() {
     };
   }, [activeCampaignId, currentTab]);
 
-  const loadRecipients = async (campaignId: string) => {
+  const loadRecipients = async (campaignId: string, variantFilter = selectedVariantFilter) => {
     try {
-      const res = await fetch(`/api/campaigns/${campaignId}/recipients?limit=100`);
+      const q = variantFilter && variantFilter !== 'ALL' ? `&variantId=${variantFilter}` : '';
+      const res = await fetch(`/api/campaigns/${campaignId}/recipients?limit=100${q}`);
       const data = await res.json();
       if (res.ok && data.recipients) {
         setRecipientsList(data.recipients);
       }
     } catch (err) {
       console.error('Error loading recipients:', err);
+    }
+  };
+
+  const loadCampaignVariantStats = async (campaignId: string) => {
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}`);
+      const data = await res.json();
+      if (res.ok && data.variantStats) {
+        setLiveVariantStats(data.variantStats);
+      }
+    } catch (err) {
+      console.error('Error loading variant stats:', err);
+    }
+  };
+
+  const handleToggleVariantPause = async (variantId: string, currentPaused: boolean) => {
+    if (!activeCampaignId) return;
+    const action = currentPaused ? 'resume' : 'pause';
+    const confirmMsg = currentPaused
+      ? 'Resume this message for future sends?'
+      : 'Pause this message? Remaining queued recipients will be redistributed across the other active messages.';
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      const res = await fetch(`/api/campaigns/${activeCampaignId}/variants/${variantId}/${action}`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Failed to ${action} message`);
+      alert(data.message || `Message updated successfully`);
+      loadCampaignVariantStats(activeCampaignId);
+      loadRecipients(activeCampaignId);
+    loadCampaignVariantStats(activeCampaignId);
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleSaveWinningTemplate = async (content: string, label: string) => {
+    try {
+      const name = prompt('Enter a template name:', `Winning Template - ${label}`);
+      if (!name) return;
+      const res = await fetch('/api/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, content, category: 'Top Performer' }),
+      });
+      if (res.ok) {
+        alert('Saved winning message to templates library!');
+      } else {
+        const d = await res.json();
+        alert(d.error || 'Failed to save template');
+      }
+    } catch (err: any) {
+      alert(err.message);
     }
   };
 
@@ -419,24 +527,44 @@ export default function AppDashboard() {
     }
 
     try {
+      const payload: any = {
+        name: wizName,
+        instances: wizInstances,
+        contactListIds: wizListIds,
+        minDelay,
+        maxDelay,
+        batchSize,
+        batchDelay,
+        sendNow: !isScheduled,
+        scheduledAt: isScheduled && scheduleTime ? new Date(scheduleTime).toISOString() : undefined,
+        distributionMode: wizDistributionMode,
+        rotationScope: wizRotationScope,
+        shuffleAudience: wizShuffleAudience,
+        shuffleSeed: wizShuffleSeed,
+        avoidRepeatContent: wizAvoidRepeatContent,
+      };
+
+      if (wizDistributionMode === 'SINGLE') {
+        payload.template = wizTemplate;
+        payload.mediaType = wizMediaType;
+        payload.mediaUrl = wizMediaUrl || undefined;
+        payload.fileName = wizFileName || undefined;
+      } else {
+        payload.variants = wizVariants.map((v, i) => ({
+          position: i + 1,
+          label: v.label,
+          content: v.content,
+          mediaType: v.mediaType || 'text',
+          mediaUrl: v.mediaUrl || undefined,
+          fileName: v.fileName || undefined,
+          weight: v.weight,
+        }));
+      }
+
       const res = await fetch('/api/campaigns', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: wizName,
-          instances: wizInstances,
-          contactListIds: wizListIds,
-          template: wizTemplate,
-          mediaType: wizMediaType,
-          mediaUrl: wizMediaUrl || undefined,
-          fileName: wizFileName || undefined,
-          minDelay,
-          maxDelay,
-          batchSize,
-          batchDelay,
-          sendNow: !isScheduled,
-          scheduledAt: isScheduled && scheduleTime ? new Date(scheduleTime).toISOString() : undefined,
-        })
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
@@ -1411,46 +1539,207 @@ export default function AppDashboard() {
                 </div>
               </div>
 
-              {/* Live Streaming Logs */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <Terminal className="w-4 h-4 text-emerald-400" />
-                    <span>Live Event Stream</span>
-                  </h3>
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                    <span className="text-xs text-slate-400 font-mono">SSE Connected</span>
+              {/* Live Sub-Tabs: Stream / Recipients / Multi-Message Variants (Section 5) */}
+              <div className="flex items-center gap-2 border-b border-slate-800 pb-3 text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setLiveActiveTab('stream')}
+                  className={`px-3.5 py-2 rounded-xl transition flex items-center gap-2 cursor-pointer ${
+                    liveActiveTab === 'stream'
+                      ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/40'
+                      : 'bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-850'
+                  }`}
+                >
+                  <Terminal className="w-4 h-4" />
+                  <span>Live Event Stream</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLiveActiveTab('recipients');
+                    if (activeCampaignId) loadRecipients(activeCampaignId);
+                  }}
+                  className={`px-3.5 py-2 rounded-xl transition flex items-center gap-2 cursor-pointer ${
+                    liveActiveTab === 'recipients'
+                      ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/40'
+                      : 'bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-850'
+                  }`}
+                >
+                  <Users className="w-4 h-4" />
+                  <span>Recipients Log</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLiveActiveTab('variants');
+                    if (activeCampaignId) loadCampaignVariantStats(activeCampaignId);
+                  }}
+                  className={`px-3.5 py-2 rounded-xl transition flex items-center gap-2 cursor-pointer ${
+                    liveActiveTab === 'variants'
+                      ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950/40'
+                      : 'bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-850'
+                  }`}
+                >
+                  <BarChart3 className="w-4 h-4" />
+                  <span>Variants Analytics</span>
+                </button>
+              </div>
+
+              {/* Tab 1: Live Streaming Logs */}
+              {liveActiveTab === 'stream' && (
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      <Terminal className="w-4 h-4 text-emerald-400" />
+                      <span>Live Event Stream</span>
+                    </h3>
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      <span className="text-xs text-slate-400 font-mono">SSE Connected</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-950 border border-slate-800/80 rounded-xl p-4 font-mono text-xs max-h-80 overflow-y-auto space-y-2">
+                    {liveLogs.length === 0 ? (
+                      <div className="text-slate-500 text-center py-6">Waiting for message events...</div>
+                    ) : (
+                      liveLogs.map((log, idx) => (
+                        <div key={idx} className="flex items-start gap-2 text-slate-300">
+                          <span className="text-slate-500 shrink-0">[{new Date(log.timestamp || Date.now()).toLocaleTimeString()}]</span>
+                          <span
+                            className={`font-bold shrink-0 ${
+                              log.status === 'READ'
+                                ? 'text-teal-400'
+                                : log.status === 'DELIVERED'
+                                ? 'text-emerald-400'
+                                : log.status === 'FAILED'
+                                ? 'text-rose-400'
+                                : 'text-sky-400'
+                            }`}
+                          >
+                            {log.status}
+                          </span>
+                          <span className="text-slate-400">{log.phone}</span>
+                          <span className="text-slate-500 truncate">{log.message || log.error || ''}</span>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
+              )}
 
-                <div className="bg-slate-950 border border-slate-800/80 rounded-xl p-4 font-mono text-xs max-h-80 overflow-y-auto space-y-2">
-                  {liveLogs.length === 0 ? (
-                    <div className="text-slate-500 text-center py-6">Waiting for message events...</div>
-                  ) : (
-                    liveLogs.map((log, idx) => (
-                      <div key={idx} className="flex items-start gap-2 text-slate-300">
-                        <span className="text-slate-500 shrink-0">[{new Date(log.timestamp || Date.now()).toLocaleTimeString()}]</span>
-                        <span
-                          className={`font-bold shrink-0 ${
-                            log.status === 'READ'
-                              ? 'text-teal-400'
-                              : log.status === 'DELIVERED'
-                              ? 'text-emerald-400'
-                              : log.status === 'FAILED'
-                              ? 'text-rose-400'
-                              : 'text-sky-400'
-                          }`}
-                        >
-                          {log.status}
-                        </span>
-                        <span className="text-slate-400">{log.phone}</span>
-                        <span className="text-slate-500 truncate">{log.message || log.error || ''}</span>
-                      </div>
-                    ))
-                  )}
+              {/* Tab 2: Recipients Table with M1/M2/M3 Rotation Badges (Section 5) */}
+              {liveActiveTab === 'recipients' && (
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl space-y-3 p-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                      <Users className="w-4 h-4 text-emerald-400" />
+                      <span>Audience Recipients & Rotation Assignments</span>
+                    </h3>
+
+                    {/* Filter by Variant */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-slate-400">Filter Message:</span>
+                      <select
+                        value={selectedVariantFilter}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setSelectedVariantFilter(val);
+                          if (activeCampaignId) loadRecipients(activeCampaignId, val);
+                        }}
+                        className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-white"
+                      >
+                        <option value="ALL">All Messages</option>
+                        {liveVariantStats.map((vs) => (
+                          <option key={vs.id} value={vs.id}>
+                            M{vs.position}: {vs.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-800 bg-slate-950/60 text-slate-400 font-mono text-[11px]">
+                          <th className="py-2.5 px-3">#</th>
+                          <th className="py-2.5 px-3">Message Variant</th>
+                          <th className="py-2.5 px-3">Phone</th>
+                          <th className="py-2.5 px-3">Name</th>
+                          <th className="py-2.5 px-3">Status</th>
+                          <th className="py-2.5 px-3">Sent Time</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/60 font-sans">
+                        {recipientsList.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="py-8 text-center text-slate-500">
+                              No recipients found matching criteria.
+                            </td>
+                          </tr>
+                        ) : (
+                          recipientsList.map((r, i) => {
+                            const variantNum = r.variant?.position || r.variantIndex + 1;
+                            const colors = [
+                              'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
+                              'bg-sky-500/20 text-sky-300 border-sky-500/40',
+                              'bg-purple-500/20 text-purple-300 border-purple-500/40',
+                              'bg-amber-500/20 text-amber-300 border-amber-500/40',
+                            ];
+                            const badgeColor = colors[(variantNum - 1) % colors.length] || colors[0];
+                            return (
+                              <tr key={r.id || i} className="hover:bg-slate-850/50 transition">
+                                <td className="py-2.5 px-3 font-mono text-slate-500">
+                                  {r.rotationIndex || i + 1}
+                                </td>
+                                <td className="py-2.5 px-3">
+                                  <span
+                                    className={`px-2 py-0.5 rounded-md text-[10px] font-bold font-mono border ${badgeColor}`}
+                                  >
+                                    M{variantNum}: {r.variant?.label || `Message ${variantNum}`}
+                                  </span>
+                                </td>
+                                <td className="py-2.5 px-3 font-mono text-slate-200">{r.phone}</td>
+                                <td className="py-2.5 px-3 text-slate-300">{r.name || '—'}</td>
+                                <td className="py-2.5 px-3">
+                                  <span
+                                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                                      r.status === 'SENT' || r.status === 'DELIVERED' || r.status === 'READ' || r.status === 'REPLIED'
+                                        ? 'bg-emerald-500/20 text-emerald-400'
+                                        : r.status === 'FAILED'
+                                        ? 'bg-rose-500/20 text-rose-400'
+                                        : 'bg-slate-800 text-slate-400'
+                                    }`}
+                                  >
+                                    {r.status}
+                                  </span>
+                                </td>
+                                <td className="py-2.5 px-3 font-mono text-[11px] text-slate-400">
+                                  {r.sentAt ? new Date(r.sentAt).toLocaleTimeString() : '—'}
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {/* Tab 3: Variants Analytics & Performance (Section 5) */}
+              {liveActiveTab === 'variants' && (
+                <CampaignVariantsLiveTab
+                  campaignId={activeCampaignId || ''}
+                  variantStats={liveVariantStats}
+                  onTogglePause={(vId, isPaused) => handleToggleVariantPause(vId, isPaused)}
+                  onSaveAsTemplate={handleSaveWinningTemplate}
+                  onRefresh={() => activeCampaignId && loadCampaignVariantStats(activeCampaignId)}
+                />
+              )}
             </div>
           )}
 
@@ -1528,115 +1817,36 @@ export default function AppDashboard() {
                     </div>
                   </div>
 
-                  {/* Step 2: Message Composer */}
-                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-400">2. Message & Media</h3>
-                      {/* Media Type Tabs */}
-                      <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-[11px]">
-                        <button
-                          type="button"
-                          onClick={() => setWizMediaType('text')}
-                          className={`px-2 py-1 rounded-lg ${wizMediaType === 'text' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400'}`}
-                        >
-                          Text
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setWizMediaType('image')}
-                          className={`px-2 py-1 rounded-lg ${wizMediaType === 'image' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400'}`}
-                        >
-                          Image
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setWizMediaType('video')}
-                          className={`px-2 py-1 rounded-lg ${wizMediaType === 'video' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400'}`}
-                        >
-                          Video
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setWizMediaType('document')}
-                          className={`px-2 py-1 rounded-lg ${wizMediaType === 'document' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400'}`}
-                        >
-                          Document
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Media URL if not text */}
-                    {wizMediaType !== 'text' && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-950 p-3 rounded-xl border border-slate-800">
-                        <div>
-                          <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                            Media Public URL ({wizMediaType})
-                          </label>
-                          <input
-                            type="url"
-                            value={wizMediaUrl}
-                            onChange={(e) => setWizMediaUrl(e.target.value)}
-                            placeholder="https://example.com/asset.png"
-                            className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                            File Name (Optional)
-                          </label>
-                          <input
-                            type="text"
-                            value={wizFileName}
-                            onChange={(e) => setWizFileName(e.target.value)}
-                            placeholder="brochure.pdf"
-                            className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white"
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Variable Chips & Spintax Helpers */}
-                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                      <span className="text-[11px] text-slate-400 mr-1">Insert:</span>
-                      <button
-                        type="button"
-                        onClick={() => setWizTemplate((prev) => prev + ' {{name}}')}
-                        className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[11px] text-emerald-400 font-mono"
-                      >
-                        + name
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setWizTemplate((prev) => prev + ' {{company}}')}
-                        className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[11px] text-emerald-400 font-mono"
-                      >
-                        + company
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setWizTemplate((prev) => prev + ' {Hi|Hello|Dear}')}
-                        className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[11px] text-teal-400 font-mono"
-                      >
-                        + spintax greeting
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setWizTemplate((prev) => prev + ' *bold*')}
-                        className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300"
-                      >
-                        *bold*
-                      </button>
-                    </div>
-
-                    {/* Template Text Area */}
-                    <textarea
-                      rows={6}
-                      required
-                      value={wizTemplate}
-                      onChange={(e) => setWizTemplate(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white font-mono leading-relaxed"
-                    />
-                  </div>
+                  {/* Step 2: Message Composer with Multi-Message Rotation (Section 1-3) */}
+                  <MultiMessageRotationEditor
+                    distributionMode={wizDistributionMode}
+                    onDistributionModeChange={setWizDistributionMode}
+                    rotationScope={wizRotationScope}
+                    onRotationScopeChange={setWizRotationScope}
+                    shuffleAudience={wizShuffleAudience}
+                    onShuffleAudienceChange={setWizShuffleAudience}
+                    shuffleSeed={wizShuffleSeed}
+                    onShuffleSeedChange={setWizShuffleSeed}
+                    avoidRepeatContent={wizAvoidRepeatContent}
+                    onAvoidRepeatContentChange={setWizAvoidRepeatContent}
+                    variants={wizVariants}
+                    onVariantsChange={setWizVariants}
+                    singleTemplate={wizTemplate}
+                    onSingleTemplateChange={setWizTemplate}
+                    singleMediaType={wizMediaType}
+                    onSingleMediaTypeChange={setWizMediaType}
+                    singleMediaUrl={wizMediaUrl}
+                    onSingleMediaUrlChange={setWizMediaUrl}
+                    singleFileName={wizFileName}
+                    onSingleFileNameChange={setWizFileName}
+                    activePreviewVariantIndex={activePreviewVariantIndex}
+                    onActivePreviewVariantIndexChange={setActivePreviewVariantIndex}
+                    totalRecipientsCount={
+                      contactLists
+                        .filter((l) => wizListIds.includes(l.id))
+                        .reduce((acc, l) => acc + (l._count?.contacts || 0), 0) || 500
+                    }
+                  />
 
                   {/* Step 3: Anti-Ban Pacing & Safety */}
                   <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
@@ -1736,14 +1946,105 @@ export default function AppDashboard() {
                   </div>
                 </div>
 
-                {/* Right Column: Live Sticky WhatsApp Bubble */}
+                {/* Right Column: Live Sticky WhatsApp Bubble & Rotation Preview */}
                 <div className="lg:col-span-5 sticky top-24 space-y-4">
+                  {/* Variant Preview Selector (Section 2) */}
+                  {wizDistributionMode !== 'SINGLE' && (
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3 shadow-xl">
+                      <div className="flex items-center justify-between text-xs text-slate-300">
+                        <span className="font-bold flex items-center gap-1.5 text-white">
+                          <Eye className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Previewing Variant in Device</span>
+                        </span>
+                        <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-mono">
+                          <span>Show as recipient #:</span>
+                          <input
+                            type="number"
+                            min={1}
+                            max={10000}
+                            value={previewRecipientNumber}
+                            onChange={(e) => {
+                              const n = Math.max(1, Number(e.target.value));
+                              setPreviewRecipientNumber(n);
+                              setActivePreviewVariantIndex((n - 1) % wizVariants.length);
+                            }}
+                            className="bg-slate-950 border border-slate-800 rounded px-2 py-0.5 text-xs text-white font-mono w-14 text-center"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Variant Tabs */}
+                      <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                        {wizVariants.map((v, i) => (
+                          <button
+                            key={v.position}
+                            type="button"
+                            onClick={() => {
+                              setActivePreviewVariantIndex(i);
+                              setPreviewRecipientNumber(i + 1);
+                            }}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer shrink-0 ${
+                              activePreviewVariantIndex === i
+                                ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-950/40'
+                                : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                            }`}
+                          >
+                            <span>M{v.position}</span>
+                            <span className="text-[10px] font-normal opacity-80 truncate max-w-[80px]">({v.label})</span>
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Content Exposure Estimate Summary (Section 7) */}
+                      <div className="bg-slate-950/70 p-2.5 rounded-xl border border-slate-800/80 text-[11px] text-slate-400 space-y-1 font-mono">
+                        <div className="flex items-center justify-between text-slate-300">
+                          <span>Max exposure per identical message:</span>
+                          <span className="text-emerald-400 font-bold">
+                            ~{Math.round(
+                              (contactLists
+                                .filter((l) => wizListIds.includes(l.id))
+                                .reduce((acc, l) => acc + (l._count?.contacts || 0), 0) || 500) /
+                                (wizVariants.length || 1)
+                            )}{' '}
+                            contacts
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-500">
+                          Strict sequence rotation divides identical content across {wizVariants.length} distinct texts. Spintax reduces identical text further.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   <LiveWhatsAppBubble
-                    content={wizTemplate}
-                    mediaType={wizMediaType}
-                    mediaUrl={wizMediaUrl}
-                    caption={wizMediaType !== 'text' ? wizTemplate : undefined}
-                    sampleRecipient={{ name: 'Rahul Sharma', phone: '919876543210' }}
+                    content={
+                      wizDistributionMode === 'SINGLE'
+                        ? wizTemplate
+                        : wizVariants[activePreviewVariantIndex]?.content || ''
+                    }
+                    mediaType={
+                      wizDistributionMode === 'SINGLE'
+                        ? wizMediaType
+                        : wizVariants[activePreviewVariantIndex]?.mediaType || 'text'
+                    }
+                    mediaUrl={
+                      wizDistributionMode === 'SINGLE'
+                        ? wizMediaUrl
+                        : wizVariants[activePreviewVariantIndex]?.mediaUrl || ''
+                    }
+                    caption={
+                      (wizDistributionMode === 'SINGLE'
+                        ? wizMediaType
+                        : wizVariants[activePreviewVariantIndex]?.mediaType) !== 'text'
+                        ? wizDistributionMode === 'SINGLE'
+                          ? wizTemplate
+                          : wizVariants[activePreviewVariantIndex]?.content
+                        : undefined
+                    }
+                    sampleRecipient={{
+                      name: previewRecipientNumber === 1 ? 'Rahul Sharma' : `Audience Contact #${previewRecipientNumber}`,
+                      phone: `9198765432${String(previewRecipientNumber).padStart(2, '0')}`,
+                    }}
                     appendOptOut={true}
                   />
                 </div>

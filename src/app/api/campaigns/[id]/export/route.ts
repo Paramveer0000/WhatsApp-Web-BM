@@ -26,6 +26,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
     const recipients = await db.campaignRecipient.findMany({
       where,
+      include: { variant: true },
       orderBy: { id: 'asc' },
     });
 
@@ -33,7 +34,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       Recipient_Name: r.name || '',
       Phone: r.phone,
       Status: r.status,
-      Variant_Index: r.variantIndex + 1,
+      variant_label: r.variant?.label || `Message ${r.variant?.position || r.variantIndex + 1}`,
+      variant_position: r.variant?.position || r.variantIndex + 1,
+      rotation_index: r.rotationIndex || r.variantIndex + 1,
       Instance_Used: r.instanceUsed || '',
       Sent_At: r.sentAt ? r.sentAt.toISOString() : '',
       Delivered_At: r.deliveredAt ? r.deliveredAt.toISOString() : '',
@@ -74,4 +77,3 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
-

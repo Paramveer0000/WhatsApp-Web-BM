@@ -733,6 +733,15 @@ export function calculateRiskScore(config: GuardrailConfig): {
     });
   }
 
+  // Section 6: Content Diversity
+  factors.push({
+    id: 'content-diversity',
+    label: 'Message diversity: 4 distinct messages (+12 safer)',
+    points: -12,
+    tip: 'Rotating distinct messages spreads content exposure and provides significant anti-ban protection',
+  });
+  score = Math.max(0, score - 12);
+
   // Clamp 0..100
   score = Math.max(0, Math.min(100, score));
 
@@ -843,6 +852,8 @@ export interface SimulationResult {
     isHumanPause: boolean;
     isBatchCooldown: boolean;
     isLongBreak: boolean;
+    assignedVariantLabel?: string;
+    assignedVariantPosition?: number;
   }[];
 }
 
@@ -967,6 +978,7 @@ export function simulatePacing(
 
     // Record sample of first 20
     if (i < 20) {
+      const variantPos = (i % 4) + 1;
       sampleFirst20.push({
         index: i + 1,
         timestamp: new Date(currentTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
@@ -974,6 +986,8 @@ export function simulatePacing(
         isHumanPause,
         isBatchCooldown,
         isLongBreak,
+        assignedVariantPosition: variantPos,
+        assignedVariantLabel: `Message ${variantPos}`,
       });
     }
 

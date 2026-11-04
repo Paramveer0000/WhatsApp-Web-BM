@@ -4,6 +4,16 @@ import { db } from '@/lib/db';
 import { getSessionUser } from '@/lib/auth';
 import { campaignRunner } from '@/lib/queue/campaign-runner';
 import { logger } from '@/lib/logger';
+import {
+  assignMessageRotation,
+  computeContentHash,
+  detectDuplicateVariants,
+  CampaignRotationSchema,
+  VariantInput,
+  RecipientInput,
+  DistributionMode,
+  RotationScope,
+} from '@/lib/rotation';
 
 export async function GET() {
   try {
@@ -93,6 +103,11 @@ export async function POST(req: NextRequest) {
       timezone = 'Asia/Kolkata',
       warmUpMode = false,
       rotationMode = 'ROUND_ROBIN',
+      distributionMode = 'SINGLE',
+      rotationScope = 'CAMPAIGN',
+      shuffleAudience = false,
+      shuffleSeed = null,
+      avoidRepeatContent = true,
     } = body;
 
     if (!name || !name.trim()) {
@@ -117,6 +132,54 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No matching WhatsApp instances found in database' }, { status: 400 });
     }
 
+    // Prepare & normalize variants
+    let normalizedVariants: VariantInput[] = [];
+    if (Array.isArray(variants) && variants.length > 0) {
+      normalizedVariants = variants.map((v: any, idx: number) => ({
+        position: v.position || idx + 1,
+        label: v.label || `Message ${idx + 1}`,
+        content: v.content || v.body || '',
+        mediaType: v.mediaType || 'text',
+        mediaUrl: v.mediaUrl || null,
+        fileName: v.fileName || null,
+        caption: v.caption || null,
+        weight: v.weight ?? v.weightPercent ?? Math.floor(100 / variants.length),
+        weightPercent: v.weightPercent ?? v.weight ?? Math.floor(100 / variants.length),
+        contentHash: computeContentHash(v.content || v.body || ''),
+      }));
+    } else {
+      normalizedVariants = [{
+        position: 1,
+        label: 'Message 1',
+        content: rawTemplate || 'Hello {name}',
+        mediaType: body.mediaType || 'text',
+        mediaUrl: body.mediaUrl || null,
+        fileName: body.fileName || null,
+        caption: body.caption || null,
+        weight: 100,
+        weightPercent: 100,
+        contentHash: computeContentHash(rawTemplate || 'Hello {name}'),
+      }];
+    }
+
+    // Validate variants using CampaignRotationSchema
+    const validatedRotation = CampaignRotationSchema.safeParse({
+      distributionMode: (distributionMode as DistributionMode) || 'SINGLE',
+      rotationScope: (rotationScope as RotationScope) || 'CAMPAIGN',
+      shuffleAudience: Boolean(shuffleAudience),
+      shuffleSeed: shuffleSeed ? Number(shuffleSeed) : null,
+      avoidRepeatContent: Boolean(avoidRepeatContent),
+      variants: normalizedVariants,
+    });
+
+    if (!validatedRotation.success) {
+      const errMsg = validatedRotation.error.errors.map((e) => e.message).join('; ');
+      return NextResponse.json({ error: errMsg }, { status: 400 });
+    }
+
+    // Detect duplicate variants (>85% similarity)
+    const duplicateWarnings = detectDuplicateVariants(normalizedVariants, 0.85);
+
     // Compliance Check: User must confirm opt-in consent
     if (!consentConfirmed) {
       return NextResponse.json({
@@ -125,7 +188,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 1. Gather all target recipients (from selected lists or direct array)
-    const targetContactsMap = new Map<string, { phone: string; name?: string; customVariables?: any }>();
+    const targetContactsMap = new Map<string, { id?: string; contactId?: string; phone: string; name?: string; customVariables?: any; listId?: string }>();
 
     if (rawLists.length > 0) {
       const listContacts = await db.listContact.findMany({
@@ -136,9 +199,12 @@ export async function POST(req: NextRequest) {
       for (const lc of listContacts) {
         if (!lc.contact.isBlacklisted) {
           targetContactsMap.set(lc.contact.phone, {
+            id: lc.contact.id,
+            contactId: lc.contact.id,
             phone: lc.contact.phone,
             name: lc.contact.name || undefined,
             customVariables: lc.contact.customFields ? JSON.parse(lc.contact.customFields) : undefined,
+            listId: lc.listId,
           });
         }
       }
@@ -147,7 +213,14 @@ export async function POST(req: NextRequest) {
     if (Array.isArray(recipients)) {
       for (const r of recipients) {
         if (r.phone && !targetContactsMap.has(r.phone)) {
-          targetContactsMap.set(r.phone, r);
+          targetContactsMap.set(r.phone, {
+            id: r.id || r.contactId,
+            contactId: r.contactId || r.id,
+            phone: r.phone,
+            name: r.name || undefined,
+            customVariables: r.customVariables || undefined,
+            listId: r.listId,
+          });
         }
       }
     }
@@ -173,6 +246,11 @@ export async function POST(req: NextRequest) {
         timezone,
         warmUpMode: Boolean(warmUpMode),
         rotationMode: rotationMode || 'ROUND_ROBIN',
+        distributionMode: validatedRotation.data.distributionMode,
+        rotationScope: validatedRotation.data.rotationScope,
+        shuffleAudience: validatedRotation.data.shuffleAudience,
+        shuffleSeed: validatedRotation.data.shuffleSeed,
+        avoidRepeatContent: validatedRotation.data.avoidRepeatContent,
         consentConfirmedAt: new Date(),
         scheduledAt,
         createdById: user.id,
@@ -189,42 +267,89 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 4. Create Variants (A/B testing or default wizard template)
-    const defaultVariants = variants.length > 0
-      ? variants
-      : [{
-          content: rawTemplate || 'Hello {name}',
-          mediaType: body.mediaType || 'text',
-          mediaUrl: body.mediaUrl || null,
-          fileName: body.fileName || null,
-          caption: body.caption || null,
-          weightPercent: 100,
-        }];
-
-    for (let i = 0; i < defaultVariants.length; i++) {
-      const v = defaultVariants[i];
-      await db.campaignVariant.create({
+    // 4. Create Variants
+    const createdVariants = [];
+    for (let i = 0; i < normalizedVariants.length; i++) {
+      const v = normalizedVariants[i]!;
+      const createdV = await db.campaignVariant.create({
         data: {
           campaignId: campaign.id,
           index: i,
+          position: v.position,
+          label: v.label,
           content: v.content,
           mediaType: v.mediaType || 'text',
           mediaUrl: v.mediaUrl || null,
           fileName: v.fileName || null,
           caption: v.caption || null,
           weightPercent: v.weightPercent || 100,
+          weight: v.weight,
+          contentHash: v.contentHash || computeContentHash(v.content),
+          similarityWarnings: duplicateWarnings.length > 0 ? JSON.stringify(duplicateWarnings) : null,
+          isPaused: false,
         },
+      });
+      createdVariants.push({
+        ...v,
+        id: createdV.id,
       });
     }
 
-    // 5. Insert Recipients (assigned variant round-robin or by weight)
-    const allContacts = Array.from(targetContactsMap.values());
-    const recipientData = allContacts.map((c, idx) => ({
-      campaignId: campaign.id,
+    // 5. Query recent message content hashes for contacts (past 30 days) if avoidRepeatContent is true
+    const previousContentHashes = new Map<string, Set<string>>();
+    if (validatedRotation.data.avoidRepeatContent) {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const phones = Array.from(targetContactsMap.keys());
+      const pastRecipients = await db.campaignRecipient.findMany({
+        where: {
+          phone: { in: phones.slice(0, 1000) }, // batch
+          status: { in: ['SENT', 'DELIVERED', 'READ', 'REPLIED'] },
+          sentAt: { gte: thirtyDaysAgo },
+          variantId: { not: null },
+        },
+        include: { variant: true },
+      });
+
+      for (const pr of pastRecipients) {
+        if (pr.variant?.contentHash) {
+          const set = previousContentHashes.get(pr.phone) || new Set<string>();
+          set.add(pr.variant.contentHash);
+          previousContentHashes.set(pr.phone, set);
+        }
+      }
+    }
+
+    // 6. Enqueue-Time Deterministic Assignment (Section 3)
+    const audienceList: RecipientInput[] = Array.from(targetContactsMap.values()).map((c, idx) => ({
+      id: `rec_${idx + 1}`,
+      contactId: c.contactId,
       phone: c.phone,
-      name: c.name || null,
-      customVariables: c.customVariables ? JSON.stringify(c.customVariables) : null,
-      variantIndex: idx % defaultVariants.length,
+      name: c.name,
+      customVariables: c.customVariables,
+      listId: c.listId,
+      instanceId: instanceRecords[idx % instanceRecords.length]?.id,
+    }));
+
+    const rotationResult = assignMessageRotation({
+      audience: audienceList,
+      variants: createdVariants,
+      distributionMode: validatedRotation.data.distributionMode,
+      rotationScope: validatedRotation.data.rotationScope,
+      shuffleAudience: validatedRotation.data.shuffleAudience,
+      shuffleSeed: validatedRotation.data.shuffleSeed ?? undefined,
+      campaignId: campaign.id,
+      previousContentHashes,
+      avoidRepeatContent: validatedRotation.data.avoidRepeatContent,
+    });
+
+    const recipientData = rotationResult.assignments.map((assigned) => ({
+      campaignId: campaign.id,
+      phone: assigned.phone,
+      name: assigned.name || null,
+      customVariables: assigned.customVariables ? JSON.stringify(assigned.customVariables) : null,
+      variantId: assigned.variantId || null,
+      variantIndex: assigned.variantIndex,
+      rotationIndex: assigned.rotationIndex,
       status: 'PENDING',
     }));
 
@@ -246,7 +371,7 @@ export async function POST(req: NextRequest) {
         details: JSON.stringify({
           campaignId: campaign.id,
           name: campaign.name,
-          recipientsCount: allContacts.length,
+          recipientsCount: audienceList.length,
           status: campaignStatus,
           scheduledAt: scheduledAt?.toISOString() || null,
         }),
@@ -263,7 +388,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       campaign,
-      totalRecipients: allContacts.length,
+      totalRecipients: audienceList.length,
     });
   } catch (err: any) {
     logger.error({ err }, 'Error creating campaign');

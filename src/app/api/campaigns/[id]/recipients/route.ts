@@ -13,6 +13,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const { searchParams } = new URL(req.url);
     const status = searchParams.get('status') || 'ALL';
     const search = searchParams.get('search') || '';
+    const variantFilter = searchParams.get('variantId') || searchParams.get('variant') || '';
     const page = parseInt(searchParams.get('page') || '1', 10);
     const limit = parseInt(searchParams.get('limit') || '50', 10);
     const skip = (page - 1) * limit;
@@ -23,19 +24,32 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       where.status = status.toUpperCase();
     }
 
-    if (search) {
+    if (variantFilter && variantFilter !== 'ALL') {
       where.OR = [
-        { phone: { contains: search } },
-        { name: { contains: search } },
+        { variantId: variantFilter },
+        { variantIndex: parseInt(variantFilter, 10) || -1 },
+      ];
+    }
+
+    if (search) {
+      where.AND = [
+        ...(where.AND || []),
+        {
+          OR: [
+            { phone: { contains: search } },
+            { name: { contains: search } },
+          ],
+        },
       ];
     }
 
     const [recipients, total] = await Promise.all([
       db.campaignRecipient.findMany({
         where,
+        include: { variant: true },
         skip,
         take: limit,
-        orderBy: { id: 'asc' },
+        orderBy: { rotationIndex: 'asc' },
       }),
       db.campaignRecipient.count({ where }),
     ]);
@@ -55,4 +69,3 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
-
