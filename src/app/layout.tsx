@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import ClientSafetyProvider from '@/components/ClientSafetyProvider';
 
 export const metadata: Metadata = {
   title: 'WhatsApp Campaign Manager - Evolution API v2',
@@ -14,9 +15,10 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className="bg-slate-950 text-slate-100 min-h-screen antialiased selection:bg-emerald-500 selection:text-white">
-        {children}
+        <ClientSafetyProvider>
+          {children}
+        </ClientSafetyProvider>
       </body>
     </html>
   );
 }
-

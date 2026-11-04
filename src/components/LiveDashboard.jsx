@@ -18,6 +18,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { toast } from '@/lib/toast';
 
 export default function LiveDashboard({
   campaignId,
@@ -178,7 +179,7 @@ export default function LiveDashboard({
         loadCampaignDetails();
       }
     } catch (err) {
-      alert(`Action failed: ${err.message}`);
+      toast.error(Action failed: \);
     } finally {
       setActionLoading(false);
     }

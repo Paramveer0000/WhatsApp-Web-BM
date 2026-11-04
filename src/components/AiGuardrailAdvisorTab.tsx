@@ -23,6 +23,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { GuardrailConfig } from '@/lib/guardrails/types';
+import { toast } from '@/lib/toast';
 
 interface AiGuardrailAdvisorTabProps {
   scope: 'global' | 'instance' | 'campaign';
@@ -92,12 +93,13 @@ export function AiGuardrailAdvisorTab({
       const data = await res.json();
       if (data.success) {
         setAnalysisModalOpen(false);
+        toast.success('Advisor analysis completed successfully!', 'AI Advisor');
         await loadRuns();
       } else {
-        alert(data.error || 'Analysis failed');
+        toast.error(data.error || 'Analysis failed', 'AI Advisor Error');
       }
     } catch (e: any) {
-      alert(`Error running advisor analysis: ${e.message}`);
+      toast.error(`Error running advisor analysis: ${e.message}`, 'AI Advisor Error');
     } finally {
       setAnalyzing(false);
     }
@@ -122,12 +124,13 @@ export function AiGuardrailAdvisorTab({
       });
       const data = await res.json();
       if (data.success && data.draftConfig) {
+        toast.success(`Applied ${data.appliedCount} AI recommendations to draft!`, 'Advisor Applied');
         onApplyDraft(data.draftConfig, `Applied ${data.appliedCount} AI Advisor recommendations`);
       } else {
-        alert(data.error || 'Failed to generate draft configuration');
+        toast.error(data.error || 'Failed to generate draft configuration', 'Apply Failed');
       }
     } catch (e: any) {
-      alert(`Apply failed: ${e.message}`);
+      toast.error(`Apply failed: ${e.message}`, 'Apply Error');
     } finally {
       setApplyingDraft(false);
     }

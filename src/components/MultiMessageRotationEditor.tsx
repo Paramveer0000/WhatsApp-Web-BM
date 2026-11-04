@@ -38,6 +38,7 @@ import {
   calculateJaccardSimilarity,
 } from '@/lib/rotation';
 import { countSpintaxVariations } from '@/lib/spintax';
+import { toast } from '@/lib/toast';
 
 interface MultiMessageRotationEditorProps {
   distributionMode: DistributionMode;
@@ -358,7 +359,7 @@ export default function MultiMessageRotationEditor({
   // Remove variant
   const handleRemoveVariant = (index: number) => {
     if (variants.length <= 2) {
-      alert('Multi-message campaigns require at least 2 message variants.');
+      toast.warning('Multi-message campaigns require at least 2 message variants.');
       return;
     }
     const filtered = variants.filter((_, i) => i !== index).map((v, i) => ({
@@ -375,7 +376,7 @@ export default function MultiMessageRotationEditor({
   // Duplicate variant
   const handleDuplicateVariant = (index: number) => {
     if (variants.length >= 20) {
-      alert('Maximum 20 message variants allowed.');
+      toast.warning('Maximum 20 message variants allowed.');
       return;
     }
     const source = variants[index]!;
@@ -463,7 +464,7 @@ export default function MultiMessageRotationEditor({
       setEditingCardIndex(0);
       onActivePreviewVariantIndexChange(0);
     } catch (err: any) {
-      alert(err.message || 'Error generating variations');
+      toast.error(err.message || 'Error generating variations', 'AI Generation Failed');
     } finally {
       setIsGenerating(false);
     }

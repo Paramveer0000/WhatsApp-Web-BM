@@ -33,6 +33,7 @@ import {
   AlertCircle,
   FileText
 } from 'lucide-react';
+import { toast } from '@/lib/toast';
 import { 
   ResponsiveContainer, 
   AreaChart, 
@@ -170,12 +171,13 @@ export function GuardrailsConsoleTab() {
         setVersion(data.version);
         setDiffDrawerOpen(false);
         setSaveSuccessMsg('Guardrails successfully applied & saved!');
+        toast.success('Guardrails successfully applied & saved!', 'Guardrails Saved');
         setTimeout(() => setSaveSuccessMsg(''), 4000);
       } else {
-        alert(data.error || 'Failed to save guardrails');
+        toast.error(data.error || 'Failed to save guardrails', 'Save Error');
       }
     } catch (err: any) {
-      alert(`Save error: ${err.message}`);
+      toast.error(`Save error: ${err.message}`, 'Save Error');
     } finally {
       setSaving(false);
     }
@@ -196,9 +198,12 @@ export function GuardrailsConsoleTab() {
       const data = await res.json();
       if (data.success) {
         setSimResult(data.simulation);
+        toast.success('Guardrails pacing simulation completed!', 'Simulation Ready');
+      } else {
+        toast.error(data.error || 'Simulation failed', 'Simulation Error');
       }
     } catch (err: any) {
-      alert(`Simulation failed: ${err.message}`);
+      toast.error(`Simulation failed: ${err.message}`, 'Simulation Error');
     } finally {
       setRunningSim(false);
     }
@@ -238,12 +243,12 @@ export function GuardrailsConsoleTab() {
       if (data.success) {
         await loadGuardrails(scope, scopeId);
         setActiveTab('config');
-        alert(`Successfully rolled back to Version ${verNum}`);
+        toast.success(`Successfully rolled back to Version ${verNum}`, 'Version Restored');
       } else {
-        alert(data.error || 'Restore failed');
+        toast.error(data.error || 'Restore failed', 'Restore Error');
       }
     } catch (e: any) {
-      alert(e.message);
+      toast.error(e.message, 'Restore Error');
     }
   };
 
@@ -253,6 +258,7 @@ export function GuardrailsConsoleTab() {
     dl.setAttribute('href', dataStr);
     dl.setAttribute('download', `guardrail-${scope}-${scopeId || 'global'}-v${version}.json`);
     dl.click();
+    toast.success('Guardrails JSON exported successfully!');
   };
 
   const handleImportJson = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -264,9 +270,9 @@ export function GuardrailsConsoleTab() {
         const parsed = JSON.parse(evt.target?.result as string);
         setCurrentConfig(parsed);
         setSelectedPreset('custom');
-        alert('Guardrails configuration loaded into editor. Review and click Save Changes to persist.');
+        toast.success('Guardrails configuration loaded into editor. Review and click Save Changes to persist.', 'Config Imported');
       } catch (err: any) {
-        alert('Invalid JSON guardrails file: ' + err.message);
+        toast.error('Invalid JSON guardrails file: ' + err.message, 'Import Error');
       }
     };
     reader.readAsText(file);

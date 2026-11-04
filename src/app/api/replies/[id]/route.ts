@@ -4,149 +4,147 @@ import { db } from '@/lib/db';
 import { getSessionUser } from '@/lib/auth';
 import { EvolutionClient } from '@/lib/evolution';
 import { logger } from '@/lib/logger';
+import { withApi } from '@/lib/api-wrapper';
 
-export async function GET(
+export const GET = withApi(async function (
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+
+  const rawParam = decodeURIComponent(params.id || '');
+  const cleanPhone = rawParam.replace(/[^\d]/g, '');
+
+  // 1. Fetch Incoming Messages matching this phone
+  const incoming = await db.incomingMessage.findMany({
+    where: {
+      OR: [
+        { phone: rawParam },
+        { phone: cleanPhone },
+        { phone: `+${cleanPhone}` },
+        ...(cleanPhone ? [{ remoteJid: { contains: cleanPhone } }] : [])
+      ]
+    },
+    orderBy: { receivedAt: 'asc' },
+  });
+
+  // 2. Fetch Campaign Outgoing Messages matching this phone
+  const recipientHistory = await db.campaignRecipient.findMany({
+    where: {
+      OR: [
+        { phone: rawParam },
+        { phone: cleanPhone },
+        { phone: `+${cleanPhone}` }
+      ]
+    },
+    select: {
+      id: true,
+      renderedMessage: true,
+      sentAt: true,
+      status: true,
+      instanceUsed: true,
+    },
+    orderBy: { sentAt: 'asc' },
+  });
+
+  // 3. Attempt to fetch remote WhatsApp messages from open instance
+  let waRemoteMessages: any[] = [];
   try {
-    const user = await getSessionUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-    const resolvedParams = await params;
-    const rawId = decodeURIComponent(resolvedParams.id || '').trim();
-    if (!rawId) {
-      return NextResponse.json({ error: 'Conversation ID/phone is required' }, { status: 400 });
-    }
-
-    // Strip leading '+' or spaces
-    const cleanPhone = rawId.replace(/[^\d]/g, '');
-
-    // 1. Fetch incoming messages from DB
-    const incoming = await db.incomingMessage.findMany({
-      where: {
-        OR: [
-          { phone: cleanPhone },
-          { phone: rawId },
-        ],
-      },
-      orderBy: { receivedAt: 'asc' },
+    const openInstance = await db.instance.findFirst({
+      where: { status: 'OPEN' },
     });
 
-    // 2. Fetch outgoing campaign recipient messages from DB
-    const campaignSends = await db.campaignRecipient.findMany({
-      where: {
-        OR: [
-          { phone: cleanPhone },
-          { phone: rawId },
-        ],
-        status: { in: ['SENT', 'DELIVERED', 'READ'] },
-      },
-      select: {
-        id: true,
-        renderedMessage: true,
-        sentAt: true,
-        status: true,
-        instanceUsed: true,
-      },
-      orderBy: { sentAt: 'asc' },
-    });
+    if (openInstance && cleanPhone) {
+      const client = await EvolutionClient.fromDatabase();
+      const remoteJid = `${cleanPhone}@s.whatsapp.net`;
+      const rawMsgs = await client.findMessages(openInstance.name, remoteJid, 1, 50);
 
-    // 3. If an open instance exists, optionally query Evolution API live messages
-    let remoteMessages: any[] = [];
-    try {
-      const openInstance = await db.instance.findFirst({
-        where: { status: 'OPEN' },
-      });
+      if (Array.isArray(rawMsgs)) {
+        waRemoteMessages = rawMsgs.map((m: any) => {
+          const fromMe = m.key?.fromMe ?? false;
+          const text =
+            m.message?.conversation ||
+            m.message?.extendedTextMessage?.text ||
+            m.message?.imageMessage?.caption ||
+            m.message?.videoMessage?.caption ||
+            m.message?.documentMessage?.fileName ||
+            '';
+          const ts = m.messageTimestamp ? new Date(Number(m.messageTimestamp) * 1000) : new Date();
 
-      if (openInstance) {
-        const client = await EvolutionClient.fromDatabase();
-        const remoteJid = `${cleanPhone}@s.whatsapp.net`;
-        const rawMsgs = await client.findMessages(openInstance.name, remoteJid, 1, 50).catch(() => []);
-
-        if (Array.isArray(rawMsgs)) {
-          remoteMessages = rawMsgs.map((m: any) => {
-            const fromMe = Boolean(m.key?.fromMe);
-            const text =
-              m.message?.conversation ||
-              m.message?.extendedTextMessage?.text ||
-              m.message?.imageMessage?.caption ||
-              m.message?.videoMessage?.caption ||
-              m.message?.documentMessage?.fileName ||
-              '';
-            const ts = m.messageTimestamp ? new Date(Number(m.messageTimestamp) * 1000) : new Date();
-
-            return {
-              id: m.key?.id || `WA_${Math.random()}`,
-              direction: fromMe ? 'OUTGOING' : 'INCOMING',
-              text: text || '[WhatsApp Message]',
-              createdAt: ts.toISOString(),
-              sender: fromMe ? (openInstance.profileName || 'Me') : cleanPhone,
-              status: fromMe ? 'DELIVERED' : 'READ',
-            };
-          }).filter((m: any) => Boolean(m.text));
-        }
-      }
-    } catch (err: any) {
-      logger.warn({ err: err.message, cleanPhone }, 'Failed to fetch live WA messages');
-    }
-
-    // 4. Combine into unified thread
-    const threadMap = new Map<string, any>();
-
-    // Add DB incoming
-    for (const m of incoming) {
-      const isMe = m.instanceName === 'Me' || m.pushName === 'Me';
-      const key = `${m.body}_${new Date(m.receivedAt).getTime()}`;
-      threadMap.set(key, {
-        id: m.id,
-        direction: isMe ? 'OUTGOING' : 'INCOMING',
-        text: m.body,
-        createdAt: m.receivedAt.toISOString(),
-        sender: m.pushName || (isMe ? 'Me' : cleanPhone),
-        status: isMe ? 'SENT' : m.status,
-      });
-    }
-
-    // Add DB outgoing campaign sends
-    for (const s of campaignSends) {
-      if (s.renderedMessage) {
-        const time = s.sentAt ? s.sentAt.toISOString() : new Date().toISOString();
-        const key = `${s.renderedMessage}_${s.sentAt ? s.sentAt.getTime() : 0}`;
-        if (!threadMap.has(key)) {
-          threadMap.set(key, {
-            id: s.id,
-            direction: 'OUTGOING',
-            text: s.renderedMessage,
-            createdAt: time,
-            sender: 'Campaign Broadcast',
-            status: s.status,
-          });
-        }
+          return {
+            id: m.key?.id || `WA_${Math.random()}`,
+            direction: fromMe ? 'OUTGOING' : 'INCOMING',
+            type: fromMe ? 'outgoing' : 'incoming',
+            text: text || '[Media / WhatsApp Message]',
+            createdAt: ts.toISOString(),
+            time: ts.toISOString(),
+            sender: fromMe ? (openInstance.profileName || 'Me') : (m.pushName || cleanPhone),
+            instance: openInstance.name,
+            status: fromMe ? 'DELIVERED' : 'READ',
+          };
+        });
       }
     }
-
-    // Merge remote Evolution messages if not already present
-    for (const rm of remoteMessages) {
-      const key = `${rm.text}_${new Date(rm.createdAt).getTime()}`;
-      if (!threadMap.has(key)) {
-        threadMap.set(key, rm);
-      }
-    }
-
-    // Sort chronologically (oldest to newest)
-    const sortedThread = Array.from(threadMap.values()).sort(
-      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-    );
-
-    return NextResponse.json({
-      success: true,
-      phone: cleanPhone,
-      messages: sortedThread,
-    });
   } catch (err: any) {
-    logger.error({ err }, 'Error in GET /api/replies/[id]');
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    logger.warn({ err: err.message, phone: cleanPhone }, 'Could not pull remote WA messages');
   }
-}
 
+  // Combine and deduplicate chronological thread
+  const thread: Array<{
+    id: string;
+    direction: 'INCOMING' | 'OUTGOING';
+    type: 'incoming' | 'outgoing';
+    text: string;
+    createdAt: string;
+    time: string;
+    sender?: string;
+    instance?: string;
+    status?: string;
+  }> = [];
+
+  for (const m of incoming) {
+    const isMe = m.instanceName?.includes('Me') || m.pushName === 'Me';
+    thread.push({
+      id: m.id,
+      direction: isMe ? 'OUTGOING' : 'INCOMING',
+      type: isMe ? 'outgoing' : 'incoming',
+      text: m.body,
+      createdAt: m.receivedAt.toISOString(),
+      time: m.receivedAt.toISOString(),
+      sender: m.pushName || (isMe ? 'Me' : cleanPhone),
+      instance: m.instanceName,
+      status: isMe ? 'SENT' : m.status,
+    });
+  }
+
+  for (const r of recipientHistory) {
+    if (r.renderedMessage) {
+      thread.push({
+        id: r.id,
+        direction: 'OUTGOING',
+        type: 'outgoing',
+        text: r.renderedMessage,
+        createdAt: r.sentAt ? r.sentAt.toISOString() : new Date().toISOString(),
+        time: r.sentAt ? r.sentAt.toISOString() : new Date().toISOString(),
+        sender: 'Campaign Broadcast',
+        instance: r.instanceUsed || 'Evolution',
+        status: r.status,
+      });
+    }
+  }
+
+  for (const w of waRemoteMessages) {
+    if (!thread.some((t) => t.text === w.text && Math.abs(new Date(t.time).getTime() - new Date(w.time).getTime()) < 5000)) {
+      thread.push(w);
+    }
+  }
+
+  thread.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+
+  return NextResponse.json({
+    success: true,
+    phone: cleanPhone || rawParam,
+    messages: thread
+  });
+});

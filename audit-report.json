@@ -1,0 +1,202 @@
+[
+  {
+    "page": "Contacts & Audience",
+    "selector": "button:has-text(\"Import Contacts\")",
+    "label": "Import Contacts",
+    "tag": "button",
+    "result": "OK",
+    "details": "Repaired: Migrated to api.upload with automatic PapaParse/XLSX fallback, withApi wrapper returning structured JSON, and eliminated SyntaxError: No number after minus sign."
+  },
+  {
+    "page": "Contacts & Audience",
+    "selector": "table tbody tr button[title=\"Edit contact\"]",
+    "label": "Edit Contact",
+    "tag": "button",
+    "result": "OK",
+    "details": "Implemented EditContactModal with PUT /api/contacts/[id] and field validation."
+  },
+  {
+    "page": "Contacts & Audience",
+    "selector": "table tbody tr button[title=\"Delete contact\"]",
+    "label": "Delete Contact",
+    "tag": "button",
+    "result": "OK",
+    "details": "Connected to DELETE /api/contacts/[id] with confirmation and toast notification."
+  },
+  {
+    "page": "Contacts & Audience",
+    "selector": "button:has-text(\"+ Add Contact\")",
+    "label": "+ Add Contact",
+    "tag": "button",
+    "result": "OK",
+    "details": "Implemented ManualAddContactModal with phone validation and list assignment."
+  },
+  {
+    "page": "Contacts & Audience",
+    "selector": "button:has-text(\"+ Create List\")",
+    "label": "Create List",
+    "tag": "button",
+    "result": "OK",
+    "details": "Connected to POST /api/contacts/lists with name uniqueness handling."
+  },
+  {
+    "page": "Contacts & Audience",
+    "selector": "button:has-text(\"Add to Blacklist\")",
+    "label": "Add to Blacklist",
+    "tag": "button",
+    "result": "OK",
+    "details": "Connected to POST /api/contacts/blacklist with reason and automatic broadcast filtering."
+  },
+  {
+    "page": "Message Templates",
+    "selector": "button:has-text(\"+ Create Template\")",
+    "label": "Create Template",
+    "tag": "button",
+    "result": "OK",
+    "details": "Implemented CreateTemplateModal with POST /api/templates and live preview."
+  },
+  {
+    "page": "Message Templates",
+    "selector": "button[title=\"Delete custom template\"]",
+    "label": "Delete Custom Template",
+    "tag": "button",
+    "result": "OK",
+    "details": "Implemented DELETE /api/templates/[id] route handler."
+  },
+  {
+    "page": "Message Templates",
+    "selector": "button:has-text(\"Use in New Campaign →\")",
+    "label": "Use in New Campaign",
+    "tag": "button",
+    "result": "OK",
+    "details": "Preloads template and switches to Campaign Wizard."
+  },
+  {
+    "page": "Replies Inbox",
+    "selector": "div.conversations button",
+    "label": "Conversation Thread Selector",
+    "tag": "button",
+    "result": "OK",
+    "details": "Implemented missing GET /api/replies/[id] route handler returning unified message thread."
+  },
+  {
+    "page": "Replies Inbox",
+    "selector": "button:has-text(\"Send\")",
+    "label": "Send WhatsApp Reply",
+    "tag": "button",
+    "result": "OK",
+    "details": "Implemented missing POST /api/replies/[id]/send route handler dispatching through Evolution API."
+  },
+  {
+    "page": "Replies Inbox",
+    "selector": "button:has-text(\"Sync Live Chats\")",
+    "label": "Sync Live Chats",
+    "tag": "button",
+    "result": "OK",
+    "details": "Connected to POST /api/replies with active instance connection status check."
+  },
+  {
+    "page": "WhatsApp Instances",
+    "selector": "button:has-text(\"Create Instance\")",
+    "label": "Create Instance",
+    "tag": "button",
+    "result": "OK",
+    "details": "Connected to POST /api/evolution/instances with live QR trigger."
+  },
+  {
+    "page": "WhatsApp Instances",
+    "selector": "button:has-text(\"Scan QR\")",
+    "label": "Scan QR Modal Trigger",
+    "tag": "button",
+    "result": "OK",
+    "details": "Opens QRCodeModal with real-time polling until connection state turns OPEN."
+  },
+  {
+    "page": "WhatsApp Instances",
+    "selector": "button[title=\"Refresh\"]",
+    "label": "Refresh Instances",
+    "tag": "button",
+    "result": "OK",
+    "details": "Actively probes Evolution connectionState so instances never falsely show Offline."
+  },
+  {
+    "page": "New Campaign Wizard",
+    "selector": "button:has-text(\"Auto-Generate 12 Variations\")",
+    "label": "Auto-Generate 12 Variations",
+    "tag": "button",
+    "result": "OK",
+    "details": "Calls /api/ai/variations to generate 12 diverse AI marketing angles from 1 base message (13 total)."
+  },
+  {
+    "page": "New Campaign Wizard",
+    "selector": "label:has-text(\"Click to upload Image\")",
+    "label": "Upload Media / Image File",
+    "tag": "button",
+    "result": "OK",
+    "details": "Supports drag & drop and file picker via POST /api/upload with thumbnail preview."
+  },
+  {
+    "page": "New Campaign Wizard",
+    "selector": "button:has-text(\"Launch Campaign Broadcast Now\")",
+    "label": "Launch Campaign",
+    "tag": "button",
+    "result": "OK",
+    "details": "Validates audience, rotation parameters, and dispatches to queue with loading state."
+  },
+  {
+    "page": "Live Campaign Dashboard",
+    "selector": "button:has-text(\"Pause Campaign\")",
+    "label": "Pause Campaign",
+    "tag": "button",
+    "result": "OK",
+    "details": "Dispatches POST /api/campaigns/[id]/pause and updates SSE status."
+  },
+  {
+    "page": "Live Campaign Dashboard",
+    "selector": "button:has-text(\"Resume Campaign\")",
+    "label": "Resume Campaign",
+    "tag": "button",
+    "result": "OK",
+    "details": "Dispatches POST /api/campaigns/[id]/resume."
+  },
+  {
+    "page": "Live Campaign Dashboard",
+    "selector": "button:has-text(\"Abort Broadcast\")",
+    "label": "Abort Campaign",
+    "tag": "button",
+    "result": "OK",
+    "details": "Guarded by confirmation, stops worker immediately."
+  },
+  {
+    "page": "Guardrails Console",
+    "selector": "button:has-text(\"Save Changes\")",
+    "label": "Save Guardrails",
+    "tag": "button",
+    "result": "OK",
+    "details": "Saves versioned configuration with toast notification."
+  },
+  {
+    "page": "Guardrails Console",
+    "selector": "button:has-text(\"Run Simulation\")",
+    "label": "Simulate Pacing",
+    "tag": "button",
+    "result": "OK",
+    "details": "Runs anti-ban simulator and displays interval histograms."
+  },
+  {
+    "page": "System Diagnostics",
+    "selector": "button:has-text(\"Reconcile Out-of-Sync\")",
+    "label": "Reconcile Recipients",
+    "tag": "button",
+    "result": "OK",
+    "details": "Queries pending recipients against Evolution state."
+  },
+  {
+    "page": "Settings",
+    "selector": "button:has-text(\"Save Settings\")",
+    "label": "Save Application Settings",
+    "tag": "button",
+    "result": "OK",
+    "details": "Saves Evolution API credentials and system configurations."
+  }
+]

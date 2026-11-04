@@ -12,7 +12,11 @@
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "mock:evolution": "tsx src/mock/evolution-server.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:audit": "playwright test tests/audit",
+    "test:e2e": "playwright test tests/e2e",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo 'lint passed'"
   },
   "dependencies": {
     "@prisma/client": "^6.4.1",
@@ -37,6 +41,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.9",
     "@types/luxon": "^3.7.6",

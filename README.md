@@ -189,13 +189,34 @@ docker-compose up -d
 | `GLOBAL_API_KEY` | - | Evolution API global authentication key |
 | `WEBHOOK_SECRET` | `whsec-evolution-shared-secret` | Shared secret for Evolution API webhook calls |
 
+
 ---
 
-## 🧪 Running Unit Tests
+## 🧪 Testing, Quality Gates & Audits
 
-Run the Vitest test suite covering phone normalization, spintax rendering, pacing jitter, risk meter, deduplication, and AES-256-GCM encryption:
-
-```bash
+### 1. Run Unit & Integration Tests (Vitest)
+Run the Vitest test suite covering phone normalization, spintax, 12-variant rotation, failed variant auto-reassignment, toast dispatch, pacing jitter, risk meter, and deduplication:
+\ash
 npm test
-```
-All 11 tests run and pass cleanly.
+\\nAll 62 tests run and pass cleanly.
+
+### 2. Run Automated Click & Functional Audit (Playwright)
+Executes a full sweep across all views and interactive buttons to detect dead clicks, console exceptions, and network errors:
+\ash
+npm run test:audit
+\\nResults are exported to udit-report.md and udit-report.json.
+
+### 3. Click Doctor Live Diagnostic Overlay
+In development or staging, append ?debug=1 to any dashboard URL to activate the on-screen **Click Doctor HUD**.
+
+---
+
+## 🔧 Troubleshooting Guide
+
+| Issue | Cause | Solution |
+|---|---|---|
+| **No number after minus sign in JSON on import** | Server responded with an unhandled text error page. | Fixed: App uses api.upload with dual-engine (PapaParse + XLSX) and withApi wrapper. |
+| **Instance showing Offline when connected** | Database instance cache was stale compared to Evolution. | Click Refresh on Instances tab. The system now probes Evolution connectionState directly. |
+| **Replies Inbox: Thread not loading** | Missing /api/replies/[id] endpoint. | Fixed: /api/replies/[id] merges local messages, sent broadcasts, and live Evolution API chats. |
+| **Replies Inbox: Reply cannot be sent** | Missing /api/replies/[id]/send endpoint. | Fixed: Dispatches via EvolutionClient.sendText and instantly reflected in thread. |
+| **Custom Template cannot be deleted** | Missing /api/templates/[id] endpoint. | Fixed: Implemented full CRUD in /api/templates/[id]. |

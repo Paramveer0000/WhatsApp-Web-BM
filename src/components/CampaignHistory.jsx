@@ -12,6 +12,7 @@ import {
   PlusCircle,
   RefreshCw
 } from 'lucide-react';
+import { toast } from '@/lib/toast';
 
 export default function CampaignHistory({
   onSelectCampaign,
@@ -50,9 +51,12 @@ export default function CampaignHistory({
       const data = await res.json();
       if (data.success) {
         setCampaigns(prev => prev.filter(c => c.id !== id));
+        toast.success(`Campaign "${name}" deleted successfully.`);
+      } else {
+        toast.error(data.error || 'Failed to delete campaign');
       }
     } catch (err) {
-      alert(`Delete failed: ${err.message}`);
+      toast.error(`Delete failed: ${err.message}`);
     }
   };
 
@@ -213,4 +217,3 @@ export default function CampaignHistory({
     </div>
   );
 }
-

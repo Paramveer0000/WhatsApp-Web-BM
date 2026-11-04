@@ -89,6 +89,8 @@ import { SystemLogsConsole } from '@/components/SystemLogsConsole';
 import { ManualAddContactModal } from '@/components/ManualAddContactModal';
 import { EditContactModal } from '@/components/EditContactModal';
 import { CreateTemplateModal } from '@/components/CreateTemplateModal';
+import { toast } from '@/lib/toast';
+import { api } from '@/lib/api';
 
 type TabType = 'overview' | 'campaigns' | 'live' | 'wizard' | 'contacts' | 'templates' | 'replies' | 'instances' | 'guardrails' | 'reports' | 'system' | 'settings';
 
@@ -545,12 +547,11 @@ export default function AppDashboard() {
       const res = await fetch(`/api/campaigns/${activeCampaignId}/variants/${variantId}/${action}`, { method: 'POST' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `Failed to ${action} message`);
-      alert(data.message || `Message updated successfully`);
+      toast.success(data.message || `Message ${action}d successfully`);
       loadCampaignVariantStats(activeCampaignId);
       loadRecipients(activeCampaignId);
-    loadCampaignVariantStats(activeCampaignId);
     } catch (err: any) {
-      alert(err.message);
+      toast.error(err.message);
     }
   };
 
@@ -564,13 +565,13 @@ export default function AppDashboard() {
         body: JSON.stringify({ name, content, category: 'Top Performer' }),
       });
       if (res.ok) {
-        alert('Saved winning message to templates library!');
+        toast.success('Saved winning message to templates library!');
       } else {
         const d = await res.json();
-        alert(d.error || 'Failed to save template');
+        toast.error(d.error || 'Failed to save template');
       }
     } catch (err: any) {
-      alert(err.message);
+      toast.error(err.message);
     }
   };
 
@@ -580,13 +581,14 @@ export default function AppDashboard() {
     try {
       const res = await fetch(`/api/campaigns/${activeCampaignId}/${action}`, { method: 'POST' });
       if (res.ok) {
+        toast.success(`Campaign ${action}d successfully`);
         loadCampaigns();
       } else {
         const d = await res.json();
-        alert(d.error || `Failed to ${action} campaign`);
+        toast.error(d.error || `Failed to ${action} campaign`);
       }
     } catch (err: any) {
-      alert(err.message);
+      toast.error(err.message);
     }
   };
 
@@ -594,19 +596,19 @@ export default function AppDashboard() {
   const handleLaunchCampaign = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!wizName.trim()) {
-      alert('Please enter a Campaign Name');
+      toast.warning('Please enter a Campaign Name');
       return;
     }
     if (wizInstances.length === 0) {
-      alert('Please select at least 1 WhatsApp Instance');
+      toast.warning('Please select at least 1 WhatsApp Instance');
       return;
     }
     if (wizAudienceMode === 'lists' && wizListIds.length === 0) {
-      alert('Please select at least 1 Contact List');
+      toast.warning('Please select at least 1 Contact List');
       return;
     }
     if (wizAudienceMode === 'manual' && !wizManualNumbers.trim()) {
-      alert('Please enter at least one phone number in the manual box');
+      toast.warning('Please enter at least one phone number in the manual box');
       return;
     }
 
@@ -663,14 +665,15 @@ export default function AppDashboard() {
 
       await loadCampaigns();
       if (isScheduled) {
-        alert(`Campaign "${wizName}" scheduled successfully for automatic execution at ${new Date(scheduleTime).toLocaleString()}!`);
+        toast.success(`Campaign "${wizName}" scheduled for automatic execution at ${new Date(scheduleTime).toLocaleString()}`, 'Campaign Scheduled');
         setCurrentTab('campaigns');
       } else {
+        toast.success(`Campaign "${wizName}" launched successfully!`, 'Campaign Running');
         setActiveCampaignId(data.campaign.id);
         setCurrentTab('live');
       }
     } catch (err: any) {
-      alert(err.message);
+      toast.error(err.message, 'Launch Failed');
     }
   };
 
@@ -687,18 +690,17 @@ export default function AppDashboard() {
       formData.append('file', file);
       formData.append('listName', `Import-${new Date().toLocaleDateString()}`);
 
-      const res = await fetch('/api/contacts/import', {
-        method: 'POST',
-        body: formData
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to import contacts');
+      const data = await api.upload('/api/contacts/import', formData, { silent: true });
+      if (!data.success && data.error) {
+        throw new Error(typeof data.error === 'string' ? data.error : data.error?.message || 'Failed to import contacts');
+      }
 
       setImportStats(data);
+      const count = data.imported ?? data.stats?.validCount ?? 0;
+      toast.success(`Successfully imported ${count} contacts!`, 'Import Completed');
       loadContacts();
     } catch (err: any) {
-      alert(err.message);
+      toast.error(err.message || 'Failed to import contacts', 'Import Error');
     } finally {
       setImportingFile(false);
       if (e.target) e.target.value = '';
@@ -711,20 +713,16 @@ export default function AppDashboard() {
     if (!newInstanceName.trim()) return;
 
     try {
-      const res = await fetch('/api/evolution/instances', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instanceName: newInstanceName.trim() })
-      });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error || 'Failed to create instance');
+      const d = await api.post('/api/evolution/instances', { instanceName: newInstanceName.trim() }, { silent: true });
+      if (!d.success && d.error) throw new Error(typeof d.error === 'string' ? d.error : d.error.message || 'Failed to create instance');
 
       setNewInstanceModal(false);
       setQrModalInstance(newInstanceName.trim());
       setNewInstanceName('');
+      toast.success(`Instance "${newInstanceName.trim()}" created! Scan QR code to connect.`, 'Instance Created');
       loadInstances();
     } catch (err: any) {
-      alert(err.message);
+      toast.error(err.message, 'Instance Creation Failed');
     }
   };
 
@@ -733,21 +731,17 @@ export default function AppDashboard() {
     if (!replyInputText.trim() || !selectedConversation) return;
     setSendingReply(true);
     try {
-      const res = await fetch(`/api/replies/${encodeURIComponent(selectedConversation)}/send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text: replyInputText.trim(),
-          instanceName: replyInstance || undefined,
-        })
-      });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error || 'Failed to send reply');
+      const d = await api.post(`/api/replies/${encodeURIComponent(selectedConversation)}/send`, {
+        text: replyInputText.trim(),
+        instanceName: replyInstance || undefined,
+      }, { silent: true });
+      if (!d.success && d.error) throw new Error(typeof d.error === 'string' ? d.error : d.error.message || 'Failed to send reply');
 
       setReplyInputText('');
+      toast.success('Reply sent successfully!', 'WhatsApp Message Sent');
       loadConversationMessages(selectedConversation);
     } catch (err: any) {
-      alert(err.message);
+      toast.error(err.message, 'Reply Failed');
     } finally {
       setSendingReply(false);
     }
@@ -756,22 +750,17 @@ export default function AppDashboard() {
   // Sync Chats from WhatsApp
   const handleSyncChats = async () => {
     if (!replyInstance) {
-      alert('Please select an instance to sync chats from');
+      toast.warning('Please select an instance to sync chats from');
       return;
     }
     setSyncingReplies(true);
     try {
-      const res = await fetch('/api/replies', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instanceName: replyInstance })
-      });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error || 'Failed to sync chats');
-      alert(`Sync completed! ${d.syncedChats || 0} chats synced.`);
+      const d = await api.post('/api/replies', { instanceName: replyInstance }, { silent: true });
+      if (!d.success && d.error) throw new Error(typeof d.error === 'string' ? d.error : d.error.message || 'Failed to sync chats');
+      toast.success(`Sync completed! ${d.syncedChats || 0} chats synced.`, 'Chats Synced');
       loadConversations();
     } catch (err: any) {
-      alert(err.message);
+      toast.error(err.message, 'Sync Failed');
     } finally {
       setSyncingReplies(false);
     }
@@ -786,16 +775,12 @@ export default function AppDashboard() {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const res = await fetch('/api/replies/upload-chat', {
-        method: 'POST',
-        body: formData
-      });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error || 'Failed to upload chat file');
-      alert(`Chat history parsed successfully! Imported ${d.importedMessages || 0} messages.`);
+      const d = await api.upload('/api/replies/upload-chat', formData, { silent: true });
+      if (!d.success && d.error) throw new Error(typeof d.error === 'string' ? d.error : d.error.message || 'Failed to upload chat file');
+      toast.success(`Chat history parsed successfully! Imported ${d.importedMessages || 0} messages.`, 'Chat Imported');
       loadConversations();
     } catch (err: any) {
-      alert(err.message);
+      toast.error(err.message, 'Upload Failed');
     } finally {
       setUploadingChat(false);
     }
@@ -805,20 +790,12 @@ export default function AppDashboard() {
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ settings })
-      });
-      if (res.ok) {
-        setSettingsSavedMsg('Settings saved successfully!');
-        setTimeout(() => setSettingsSavedMsg(''), 3000);
-      } else {
-        const d = await res.json();
-        alert(d.error || 'Failed to save settings');
-      }
+      await api.post('/api/settings', { settings }, { silent: true });
+      setSettingsSavedMsg('Settings saved successfully!');
+      toast.success('Settings saved successfully!');
+      setTimeout(() => setSettingsSavedMsg(''), 3000);
     } catch (err: any) {
-      alert(err.message);
+      toast.error(err.message, 'Settings Error');
     }
   };
 
@@ -826,26 +803,18 @@ export default function AppDashboard() {
     e.preventDefault();
     setSavingAiSettings(true);
     try {
-      const res = await fetch('/api/v1/settings/ai', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          apiKey: aiApiKey.trim() || undefined,
-          defaultModel: aiModel,
-          monthlySpendCapUsd: aiSpendCap,
-        }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setAiApiKey('');
-        loadSettings();
-        setSettingsSavedMsg('AI Guardrail Advisor settings saved!');
-        setTimeout(() => setSettingsSavedMsg(''), 3000);
-      } else {
-        alert(data.error || 'Failed to save AI settings');
-      }
+      await api.put('/api/v1/settings/ai', {
+        apiKey: aiApiKey.trim() || undefined,
+        defaultModel: aiModel,
+        monthlySpendCapUsd: aiSpendCap,
+      }, { silent: true });
+      setAiApiKey('');
+      loadSettings();
+      setSettingsSavedMsg('AI Guardrail Advisor settings saved!');
+      toast.success('AI Guardrail Advisor settings saved!');
+      setTimeout(() => setSettingsSavedMsg(''), 3000);
     } catch (err: any) {
-      alert(err.message);
+      toast.error(err.message, 'AI Settings Error');
     } finally {
       setSavingAiSettings(false);
     }
@@ -2764,7 +2733,7 @@ export default function AppDashboard() {
                             setContactSuccessMsg('Contact list created successfully!');
                             setTimeout(() => setContactSuccessMsg(''), 4000);
                           } catch (err: any) {
-                            alert(err.message);
+                            toast.error(err.message, 'List Error');
                           } finally {
                             setCreatingList(false);
                           }
@@ -2843,7 +2812,7 @@ export default function AppDashboard() {
                             setContactSuccessMsg('Phone number added to blacklist.');
                             setTimeout(() => setContactSuccessMsg(''), 4000);
                           } catch (err: any) {
-                            alert(err.message);
+                            toast.error(err.message, 'List Error');
                           } finally {
                             setAddingToBlacklist(false);
                           }
