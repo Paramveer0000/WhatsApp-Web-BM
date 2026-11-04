@@ -40,7 +40,12 @@ import {
   Terminal,
   Zap,
   Layers,
-  ArrowRight
+  ArrowRight,
+  Image as ImageIcon,
+  Video,
+  FileText,
+  Upload,
+  CheckCheck
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -111,6 +116,8 @@ export default function AppDashboard() {
   const [wizFileName, setWizFileName] = useState('');
   const [replyInstance, setReplyInstance] = useState('');
   const [sendingReply, setSendingReply] = useState(false);
+  const [syncingReplies, setSyncingReplies] = useState(false);
+  const [uploadingChat, setUploadingChat] = useState(false);
   const [wizMinDelay, setWizMinDelay] = useState(12);
   const [wizMaxDelay, setWizMaxDelay] = useState(25);
   const [wizSimulateTyping, setWizSimulateTyping] = useState(true);
@@ -317,6 +324,97 @@ export default function AppDashboard() {
     } finally {
       setSendingReply(false);
     }
+  };
+
+  const handleSyncChats = async () => {
+    setSyncingReplies(true);
+    try {
+      const res = await fetch('/api/replies?sync=true');
+      const d = await res.json();
+      if (d.success) {
+        setConversations(d.conversations || []);
+        alert(`Synced ${d.conversations?.length || 0} WhatsApp conversations!`);
+      } else {
+        alert(d.error || 'Sync failed');
+      }
+    } catch (err: any) {
+      alert('Sync failed: ' + err.message);
+    } finally {
+      setSyncingReplies(false);
+    }
+  };
+
+  const handleUploadChat = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedConversation) return;
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      const content = evt.target?.result as string;
+      if (!content) return;
+
+      const lines = content.split(/\r?\n/);
+      const parsed: Array<{ date: string; sender: string; text: string; isMe: boolean }> = [];
+      const lineRegex = /^(?:\[?(\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}[,\s]+\d{1,2}:\d{1,2}(?::\d{1,2})?(?:\s*[AaPp][Mm])?)\]?)[ -]+([^:]+):\s*(.+)$/;
+
+      let currentMsg: { date: string; sender: string; text: string; isMe: boolean } | null = null;
+
+      for (const line of lines) {
+        const match = line.match(lineRegex);
+        if (match) {
+          if (currentMsg) parsed.push(currentMsg);
+          const rawDate = match[1];
+          const rawSender = match[2].trim();
+          const rawText = match[3].trim();
+          const isMe =
+            /^(you|me|admin|system|bulkflow)/i.test(rawSender) ||
+            rawSender.toLowerCase() === (currentUser?.name || '').toLowerCase();
+
+          currentMsg = {
+            date: new Date(rawDate).toISOString(),
+            sender: rawSender,
+            text: rawText,
+            isMe,
+          };
+        } else if (currentMsg && line.trim()) {
+          currentMsg.text += '\n' + line.trim();
+        }
+      }
+      if (currentMsg) parsed.push(currentMsg);
+
+      if (parsed.length === 0) {
+        alert('Could not parse any messages from this file. Please ensure it is a valid WhatsApp exported .txt chat file.');
+        return;
+      }
+
+      setUploadingChat(true);
+      try {
+        const res = await fetch('/api/replies/upload-chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phone: selectedConversation,
+            messages: parsed,
+          }),
+        });
+        const d = await res.json();
+        if (d.success) {
+          alert(`Successfully uploaded ${d.count} previous chat messages!`);
+          const threadRes = await fetch(`/api/replies?phone=${encodeURIComponent(selectedConversation)}`);
+          const threadData = await threadRes.json();
+          if (threadData.success) {
+            setConversationMessages(threadData.messages || []);
+          }
+        } else {
+          alert(d.error || 'Failed to save uploaded chat');
+        }
+      } catch (err: any) {
+        alert('Upload failed: ' + err.message);
+      } finally {
+        setUploadingChat(false);
+      }
+    };
+    reader.readAsText(file);
   };
 
   // Campaign Control
@@ -1021,25 +1119,129 @@ export default function AppDashboard() {
               </div>
 
               {/* Step 3: Message Composer & Live Preview */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pt-2">
-                <div className="lg:col-span-7 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                      Message Template & Spintax
-                    </label>
-                    <span className="text-[11px] text-emerald-400">Tag fallback supported: <code>{'{name|Valued Customer}'}</code></span>
-                  </div>
-
-                  <textarea
-                    rows={8}
-                    value={wizTemplate}
-                    onChange={(e) => setWizTemplate(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white font-mono leading-relaxed focus:outline-none focus:border-emerald-500"
-                  />
+              <div className="space-y-4 pt-2">
+                {/* Media Format Selector */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider mr-1">
+                    Message Type:
+                  </span>
+                  {(['text', 'image', 'video', 'document'] as const).map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setWizMediaType(t)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold uppercase transition flex items-center gap-1.5 cursor-pointer ${
+                        wizMediaType === t
+                          ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-950/40'
+                          : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                      }`}
+                    >
+                      {t === 'text' && <MessageSquare className="w-3.5 h-3.5" />}
+                      {t === 'image' && <ImageIcon className="w-3.5 h-3.5" />}
+                      {t === 'video' && <Video className="w-3.5 h-3.5" />}
+                      {t === 'document' && <FileText className="w-3.5 h-3.5" />}
+                      <span>{t}</span>
+                    </button>
+                  ))}
                 </div>
 
-                <div className="lg:col-span-5">
-                  <LiveWhatsAppBubble content={wizTemplate} sampleRecipient={{ name: 'Rahul Sharma', phone: '919876543210' }} />
+                {/* Media Inputs (if not text) */}
+                {wizMediaType !== 'text' && (
+                  <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-3">
+                    <div className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-2">
+                      <Zap className="w-3.5 h-3.5" />
+                      <span>{wizMediaType.toUpperCase()} Media Attachment Settings</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                          Upload {wizMediaType.toUpperCase()} File:
+                        </label>
+                        <input
+                          type="file"
+                          accept={
+                            wizMediaType === 'image'
+                              ? 'image/*'
+                              : wizMediaType === 'video'
+                              ? 'video/mp4,video/quicktime,video/webm'
+                              : '.pdf,.doc,.docx,.xls,.xlsx,.zip'
+                          }
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            if (wizMediaType === 'document' && !wizFileName) {
+                              setWizFileName(file.name);
+                            }
+                            const reader = new FileReader();
+                            reader.onload = (evt) => {
+                              const result = evt.target?.result as string;
+                              if (result) setWizMediaUrl(result);
+                            };
+                            reader.readAsDataURL(file);
+                          }}
+                          className="w-full text-xs text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-600 file:text-white hover:file:bg-emerald-500 cursor-pointer"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                          Or Direct Media Public URL:
+                        </label>
+                        <input
+                          type="text"
+                          value={wizMediaUrl.startsWith('data:') ? '[Local file loaded]' : wizMediaUrl}
+                          onChange={(e) => setWizMediaUrl(e.target.value)}
+                          placeholder={`https://example.com/asset.${wizMediaType === 'image' ? 'jpg' : wizMediaType === 'video' ? 'mp4' : 'pdf'}`}
+                          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+
+                      {wizMediaType === 'document' && (
+                        <div className="sm:col-span-2">
+                          <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                            Document Display Filename:
+                          </label>
+                          <input
+                            type="text"
+                            value={wizFileName}
+                            onChange={(e) => setWizFileName(e.target.value)}
+                            placeholder="e.g. Catalog_Product_Guide_2026.pdf"
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                  <div className="lg:col-span-7 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                        {wizMediaType === 'text' ? 'Message Template & Spintax' : 'Media Caption & Spintax'}
+                      </label>
+                      <span className="text-[11px] text-emerald-400">Tag fallback supported: <code>{'{name|Valued Customer}'}</code></span>
+                    </div>
+
+                    <textarea
+                      rows={8}
+                      value={wizTemplate}
+                      onChange={(e) => setWizTemplate(e.target.value)}
+                      placeholder={wizMediaType === 'text' ? 'Type message body...' : 'Type caption for this media...'}
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white font-mono leading-relaxed focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+
+                  <div className="lg:col-span-5">
+                    <LiveWhatsAppBubble
+                      content={wizTemplate}
+                      mediaType={wizMediaType}
+                      mediaUrl={wizMediaUrl}
+                      caption={wizTemplate}
+                      sampleRecipient={{ name: 'Rahul Sharma', phone: '919876543210' }}
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -1196,6 +1398,33 @@ export default function AppDashboard() {
                   <span>Import Contacts (CSV / XLSX)</span>
                 </h3>
 
+                {/* Sample Template Downloads */}
+                <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-200">Sample Contact Templates</span>
+                    <span className="text-[10px] text-emerald-400 font-mono">Pre-filled with 5 contacts</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">Download a ready template with sample contacts, edit with your numbers, and upload.</p>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={downloadSampleCSV}
+                      className="flex-1 py-1.5 px-3 bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-500/30 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Download Sample CSV</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={downloadSampleXLSX}
+                      className="flex-1 py-1.5 px-3 bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-500/30 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                    >
+                      <FileSpreadsheet className="w-3.5 h-3.5" />
+                      <span>Download Sample Excel</span>
+                    </button>
+                  </div>
+                </div>
+
                 <input
                   type="file"
                   accept=".csv, .xlsx, .xls"
@@ -1283,86 +1512,213 @@ export default function AppDashboard() {
 
         {/* 6. REPLIES INBOX */}
         {currentTab === 'replies' && (
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden grid grid-cols-1 md:grid-cols-12 h-[600px]">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden grid grid-cols-1 md:grid-cols-12 h-[680px]">
             {/* Conversation List */}
-            <div className="md:col-span-4 border-r border-slate-800 p-4 space-y-2 overflow-y-auto">
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Replies Inbox</h3>
-              {conversations.length === 0 ? (
-                <div className="text-xs text-slate-500 italic py-12 text-center">No incoming replies received yet.</div>
-              ) : (
-                conversations.map((c) => (
-                  <div
-                    key={c.phone}
-                    onClick={async () => {
-                      setSelectedConversation(c.phone);
-                      const res = await fetch(`/api/replies?phone=${c.phone}`);
-                      const d = await res.json();
-                      if (d.success) setConversationMessages(d.messages || []);
-                    }}
-                    className={`p-3 rounded-xl border cursor-pointer transition ${
-                      selectedConversation === c.phone ? 'bg-slate-850 border-emerald-500/50' : 'bg-slate-950 border-slate-800 hover:border-slate-700'
-                    }`}
-                  >
-                    <div className="flex justify-between items-center">
-                      <span className="font-bold text-xs text-white font-mono">{c.phone}</span>
-                      {c.isOptOut && <span className="text-[10px] bg-red-950 text-red-300 px-1.5 py-0.2 rounded font-bold">OPT-OUT</span>}
+            <div className="md:col-span-4 border-r border-slate-800 flex flex-col h-full bg-slate-950/40">
+              <div className="p-3.5 border-b border-slate-800 flex items-center justify-between">
+                <div>
+                  <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                    <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Replies Inbox</span>
+                    <span className="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.2 rounded-full font-mono">{conversations.length}</span>
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSyncChats}
+                  disabled={syncingReplies}
+                  title="Sync WhatsApp Chats from connected instances"
+                  className="px-2.5 py-1 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-500/40 rounded-lg text-[11px] font-semibold flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3 h-3 ${syncingReplies ? 'animate-spin' : ''}`} />
+                  <span>{syncingReplies ? 'Syncing...' : 'Sync Chats'}</span>
+                </button>
+              </div>
+
+              <div className="flex-1 p-3 space-y-2 overflow-y-auto">
+                {conversations.length === 0 ? (
+                  <div className="text-center py-16 px-4 space-y-3">
+                    <div className="w-10 h-10 rounded-full bg-slate-800/80 flex items-center justify-center mx-auto text-slate-500">
+                      <MessageSquare className="w-5 h-5" />
                     </div>
-                    <div className="text-[11px] text-slate-400 truncate mt-1">{c.lastMessage}</div>
+                    <div className="text-xs text-slate-400 font-medium">No conversations loaded yet.</div>
+                    <p className="text-[11px] text-slate-500 leading-relaxed">
+                      Click <strong className="text-emerald-400">Sync Chats</strong> to pull recent WhatsApp chats from your connected instance, or upload chat history.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleSyncChats}
+                      disabled={syncingReplies}
+                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer shadow"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${syncingReplies ? 'animate-spin' : ''}`} />
+                      <span>Sync WhatsApp Chats Now</span>
+                    </button>
                   </div>
-                ))
-              )}
+                ) : (
+                  conversations.map((c) => (
+                    <div
+                      key={c.phone}
+                      onClick={async () => {
+                        setSelectedConversation(c.phone);
+                        const res = await fetch(`/api/replies?phone=${encodeURIComponent(c.phone)}`);
+                        const d = await res.json();
+                        if (d.success) setConversationMessages(d.messages || []);
+                      }}
+                      className={`p-3 rounded-xl border cursor-pointer transition flex items-start gap-2.5 ${
+                        selectedConversation === c.phone
+                          ? 'bg-emerald-950/40 border-emerald-500/50 shadow-md'
+                          : 'bg-slate-900 border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="w-8 h-8 rounded-full bg-emerald-800/60 border border-emerald-500/30 flex items-center justify-center font-bold text-white text-xs shrink-0 mt-0.5">
+                        {(c.pushName || c.phone || 'W')[0].toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex justify-between items-center gap-1">
+                          <span className="font-bold text-xs text-white truncate">{c.pushName || c.phone}</span>
+                          <span className="text-[9px] text-slate-500 shrink-0 font-mono">
+                            {c.lastReceivedAt ? new Date(c.lastReceivedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                          </span>
+                        </div>
+                        <div className="font-mono text-[10px] text-emerald-400/80">{c.phone}</div>
+                        <div className="text-[11px] text-slate-400 truncate mt-0.5">{c.lastMessage}</div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
 
             {/* Conversation Thread */}
-            <div className="md:col-span-8 flex flex-col p-4">
+            <div className="md:col-span-8 flex flex-col h-full bg-[#0b141a]">
               {selectedConversation ? (
                 <>
-                  <div className="border-b border-slate-800 pb-2 mb-3 font-mono font-bold text-sm text-emerald-400">
-                    Conversation: {selectedConversation}
-                  </div>
-
-                  <div className="flex-1 overflow-y-auto space-y-2 p-2">
-                    {conversationMessages.map((m) => (
-                      <div key={m.id} className="p-3 bg-slate-850 rounded-xl max-w-md text-xs border border-slate-800 space-y-1">
-                        <div className="text-slate-200">{m.body}</div>
-                        <div className="text-[10px] text-slate-500 text-right">{new Date(m.receivedAt).toLocaleTimeString()}</div>
+                  {/* Thread Header */}
+                  <div className="p-3 bg-[#202c33] border-b border-[#2a3942] flex items-center justify-between z-10">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-full bg-emerald-700/80 flex items-center justify-center font-bold text-white text-xs">
+                        {(selectedConversation || 'W')[0].toUpperCase()}
                       </div>
-                    ))}
+                      <div>
+                        <div className="font-bold text-xs text-white font-mono">{selectedConversation}</div>
+                        <div className="text-[10px] text-emerald-400">WhatsApp Contact</div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <label className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg text-xs font-medium flex items-center gap-1.5 cursor-pointer transition">
+                        <Upload className="w-3 h-3 text-emerald-400" />
+                        <span>{uploadingChat ? 'Uploading...' : 'Upload Previous Chat (.txt)'}</span>
+                        <input
+                          type="file"
+                          accept=".txt"
+                          onChange={handleUploadChat}
+                          disabled={uploadingChat}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
                   </div>
 
-                  {/* Manual Reply Input */}
-                  <div className="pt-3 border-t border-slate-800 flex gap-2">
-                    <input
-                      type="text"
-                      value={replyInputText}
-                      onChange={(e) => setReplyInputText(e.target.value)}
-                      placeholder="Type reply to send via WhatsApp..."
-                      className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none"
-                    />
-                    <button
-                      onClick={async () => {
-                        if (!replyInputText.trim() || !instances[0]) return;
-                        await fetch('/api/replies', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            phone: selectedConversation,
-                            text: replyInputText,
-                            instanceName: instances[0].name,
-                          }),
-                        });
-                        setReplyInputText('');
-                        alert('Reply sent!');
-                      }}
-                      className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow cursor-pointer"
-                    >
-                      Send Reply
-                    </button>
+                  {/* Messages Bubble Area */}
+                  <div className="flex-1 overflow-y-auto p-4 space-y-3 flex flex-col">
+                    {conversationMessages.length === 0 ? (
+                      <div className="flex-1 flex flex-col items-center justify-center text-center p-8 space-y-2 text-slate-400">
+                        <div className="w-10 h-10 rounded-full bg-slate-800/80 flex items-center justify-center text-slate-500">
+                          <MessageSquare className="w-5 h-5" />
+                        </div>
+                        <div className="text-xs font-semibold text-slate-300">No previous messages in thread</div>
+                        <p className="text-[11px] text-slate-500 max-w-xs">
+                          Send a reply below to initiate conversation, or click "Upload Previous Chat (.txt)" to import chat history.
+                        </p>
+                      </div>
+                    ) : (
+                      conversationMessages.map((m: any, idx: number) => {
+                        const isOutgoing = m.type === 'outgoing';
+                        const bodyText = m.text || m.body || '';
+                        const timeStr = m.time || m.receivedAt || m.sentAt;
+                        return (
+                          <div
+                            key={m.id || idx}
+                            className={`flex flex-col ${isOutgoing ? 'items-end' : 'items-start'}`}
+                          >
+                            <div
+                              className={`max-w-[75%] rounded-xl px-3.5 py-2 shadow-sm text-xs leading-relaxed break-words space-y-1 ${
+                                isOutgoing
+                                  ? 'bg-[#005c4b] text-[#e9edef] rounded-tr-none'
+                                  : 'bg-[#202c33] text-[#e9edef] rounded-tl-none border border-[#2a3942]'
+                              }`}
+                            >
+                              {m.sender && (
+                                <div className={`text-[10px] font-bold ${isOutgoing ? 'text-emerald-300/80' : 'text-emerald-400'}`}>
+                                  {m.sender}
+                                </div>
+                              )}
+                              <div className="whitespace-pre-wrap">{bodyText}</div>
+                              <div className="flex items-center justify-end gap-1 text-[9px] text-slate-400 mt-1">
+                                <span>{timeStr ? new Date(timeStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
+                                {isOutgoing && <CheckCheck className="w-3 h-3 text-[#53bdeb]" />}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Reply Input Bar */}
+                  <div className="p-3 bg-[#202c33] border-t border-[#2a3942] space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-slate-400 font-medium">Send from instance:</span>
+                      <select
+                        value={replyInstance || (instances.find((i) => i.status === 'OPEN')?.name || instances[0]?.name || '')}
+                        onChange={(e) => setReplyInstance(e.target.value)}
+                        className="bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white font-mono focus:outline-none focus:border-emerald-500"
+                      >
+                        {instances.map((i) => (
+                          <option key={i.id} value={i.name}>
+                            {i.name} ({i.status}) {i.status === 'OPEN' ? '🟢' : '⚪'}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <textarea
+                        rows={2}
+                        value={replyInputText}
+                        onChange={(e) => setReplyInputText(e.target.value)}
+                        placeholder="Type reply message to send via WhatsApp..."
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handleSendReply();
+                          }
+                        }}
+                        className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 resize-none font-sans placeholder:text-slate-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSendReply}
+                        disabled={sendingReply || !replyInputText.trim()}
+                        className="px-4 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow cursor-pointer transition flex items-center gap-1.5 h-full shrink-0"
+                      >
+                        <Send className="w-4 h-4" />
+                        <span>{sendingReply ? 'Sending...' : 'Send Reply'}</span>
+                      </button>
+                    </div>
                   </div>
                 </>
               ) : (
-                <div className="flex-1 flex items-center justify-center text-xs text-slate-500 italic">
-                  Select a contact on the left to review incoming conversation.
+                <div className="flex-1 flex flex-col items-center justify-center text-center p-8 space-y-2 text-slate-500">
+                  <div className="w-12 h-12 rounded-full bg-slate-800/60 flex items-center justify-center text-slate-600">
+                    <MessageSquare className="w-6 h-6" />
+                  </div>
+                  <div className="text-xs font-semibold text-slate-400">No conversation selected</div>
+                  <p className="text-[11px] text-slate-500 max-w-sm">
+                    Select a conversation from the left to view previous messages and send instant WhatsApp replies.
+                  </p>
                 </div>
               )}
             </div>

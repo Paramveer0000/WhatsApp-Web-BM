@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { renderMessage, formatWhatsAppToHtml, countSpintaxVariations } from '@/lib/spintax';
-import { Smartphone, RefreshCw, CheckCheck, Video, Phone, MoreVertical } from 'lucide-react';
+import { Smartphone, RefreshCw, CheckCheck, Video, Phone, MoreVertical, FileText, Image as ImageIcon, Play } from 'lucide-react';
 
 interface Props {
   content: string;
@@ -92,14 +92,45 @@ export default function LiveWhatsAppBubble({
           {/* WhatsApp Sent Bubble */}
           <div className="self-end max-w-[85%] bg-[#005c4b] text-[#e9edef] rounded-lg rounded-tr-none px-3 py-2 shadow-md text-xs leading-relaxed break-words border border-[#005c4b]/50 space-y-2">
             {mediaType && mediaType !== 'text' && (
-              <div className="rounded-lg overflow-hidden bg-emerald-950/40 p-2 border border-emerald-500/20 text-center text-slate-300">
-                {mediaType === 'image' && mediaUrl ? (
-                  <img src={mediaUrl} alt="media preview" className="rounded max-h-48 object-cover mx-auto" />
-                ) : (
-                  <div className="font-mono text-[11px] uppercase py-2">
-                    [{mediaType.toUpperCase()} ATTACHMENT: {mediaUrl ? 'Attached' : 'Upload file'}]
+              <div className="rounded-lg overflow-hidden bg-emerald-950/40 p-2 border border-emerald-500/20 text-slate-300">
+                {mediaType === 'image' && (
+                  mediaUrl ? (
+                    <img src={mediaUrl} alt="media preview" className="rounded max-h-48 object-cover mx-auto" />
+                  ) : (
+                    <div className="py-8 flex flex-col items-center justify-center text-slate-400 gap-1 bg-[#121b22] rounded">
+                      <ImageIcon className="w-8 h-8 text-emerald-400" />
+                      <span className="text-[10px] font-mono">[IMAGE ATTACHMENT]</span>
+                    </div>
+                  )
+                )}
+
+                {mediaType === 'video' && (
+                  mediaUrl ? (
+                    <video src={mediaUrl} controls className="rounded max-h-48 w-full object-cover" />
+                  ) : (
+                    <div className="py-8 flex flex-col items-center justify-center text-slate-400 gap-1 bg-[#121b22] rounded relative">
+                      <div className="w-10 h-10 rounded-full bg-emerald-700/80 flex items-center justify-center text-white shadow">
+                        <Play className="w-5 h-5 ml-0.5" />
+                      </div>
+                      <span className="text-[10px] font-mono mt-1">[VIDEO ATTACHMENT]</span>
+                    </div>
+                  )
+                )}
+
+                {mediaType === 'document' && (
+                  <div className="p-3 bg-[#121b22] rounded-lg border border-slate-700/50 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-red-950/80 border border-red-500/40 flex items-center justify-center text-red-300">
+                      <FileText className="w-6 h-6" />
+                    </div>
+                    <div className="flex-1 min-w-0 text-left">
+                      <div className="text-xs font-bold text-white truncate">
+                        {mediaUrl && !mediaUrl.startsWith('data:') ? mediaUrl.split('/').pop() : 'Document_Attachment.pdf'}
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-mono">PDF Document &bull; 1.2 MB</div>
+                    </div>
                   </div>
                 )}
+
                 {captionHtml && (
                   <div className="mt-2 text-left" dangerouslySetInnerHTML={{ __html: captionHtml }} />
                 )}

@@ -288,7 +288,42 @@ export class EvolutionClient {
     return Array.isArray(res) ? res : (res?.numbers || []);
   }
 
-  // 4. Circuit Breaker Helper
+  // 5. Chat & History Retrieval
+  async findChats(instanceName: string): Promise<any[]> {
+    try {
+      const res = await this.request(`/chat/findChats/${encodeURIComponent(instanceName)}`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      return Array.isArray(res) ? res : (res?.chats || []);
+    } catch (e: any) {
+      logger.warn({ err: e.message, instanceName }, 'findChats failed');
+      return [];
+    }
+  }
+
+  async findMessages(instanceName: string, remoteJid: string, page = 1, offset = 50): Promise<any[]> {
+    try {
+      const res = await this.request(`/chat/findMessages/${encodeURIComponent(instanceName)}`, {
+        method: 'POST',
+        body: JSON.stringify({
+          where: {
+            key: {
+              remoteJid,
+            },
+          },
+          page,
+          offset,
+        }),
+      });
+      return Array.isArray(res) ? res : (res?.messages?.records || res?.records || []);
+    } catch (e: any) {
+      logger.warn({ err: e.message, instanceName, remoteJid }, 'findMessages failed');
+      return [];
+    }
+  }
+
+  // 6. Circuit Breaker Helper
   static isCircuitBreakerError(error: any): boolean {
     if (!error) return false;
     if (error.status === 401 || error.status === 403) return true;
