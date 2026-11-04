@@ -66,60 +66,81 @@ export class EvolutionClient {
   async request<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const ep = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
 
-    const candidateHosts = [this.apiUrl];
+    const candidateHosts: string[] = [];
+    const pushHost = (h: string) => {
+      const trimmed = (h || '').replace(/\/+$/, '');
+      if (trimmed && !candidateHosts.includes(trimmed)) candidateHosts.push(trimmed);
+    };
+
+    pushHost(this.apiUrl);
     if (this.apiUrl.includes('evolution-api:8080')) {
-      candidateHosts.push(this.apiUrl.replace('evolution-api:8080', 'evolution:8080'));
+      pushHost(this.apiUrl.replace('evolution-api:8080', 'evolution:8080'));
+      pushHost(this.apiUrl.replace('evolution-api:8080', 'whatsapp_evolution_api:8080'));
     } else if (this.apiUrl.includes('evolution:8080')) {
-      candidateHosts.push(this.apiUrl.replace('evolution:8080', 'evolution-api:8080'));
+      pushHost(this.apiUrl.replace('evolution:8080', 'evolution-api:8080'));
+      pushHost(this.apiUrl.replace('evolution:8080', 'whatsapp_evolution_api:8080'));
     }
+    pushHost('http://evolution:8080');
+    pushHost('http://evolution-api:8080');
+    pushHost('http://whatsapp_evolution_api:8080');
 
     let lastError: any;
-    for (const host of candidateHosts) {
-      const url = `${host}${ep}`;
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 15000);
 
-      try {
-        logger.debug({ url, method: options.method || 'GET' }, 'Evolution API request');
+    // Try up to 2 passes with a brief pause between rounds if all hosts failed initially
+    for (let round = 1; round <= 2; round++) {
+      for (const host of candidateHosts) {
+        const url = `${host}${ep}`;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 12000);
 
-        const response = await fetch(url, {
-          ...options,
-          headers: {
-            ...this.getHeaders(),
-            ...(options.headers as Record<string, string> || {}),
-          },
-          signal: controller.signal,
-        });
+        try {
+          logger.debug({ url, method: options.method || 'GET', round }, 'Evolution API request');
 
-        const contentType = response.headers.get('content-type') || '';
-        let data: any;
+          const response = await fetch(url, {
+            ...options,
+            headers: {
+              ...this.getHeaders(),
+              ...(options.headers as Record<string, string> || {}),
+            },
+            signal: controller.signal,
+          });
 
-        if (contentType.includes('application/json')) {
-          data = await response.json();
-        } else {
-          const text = await response.text();
-          try {
-            data = JSON.parse(text);
-          } catch {
-            data = { text };
+          const contentType = response.headers.get('content-type') || '';
+          let data: any;
+
+          if (contentType.includes('application/json')) {
+            data = await response.json();
+          } else {
+            const text = await response.text();
+            try {
+              data = JSON.parse(text);
+            } catch {
+              data = { text };
+            }
           }
-        }
 
-        if (!response.ok) {
-          const msg = (data && (data.message || data.error || JSON.stringify(data))) || `HTTP ${response.status}: ${response.statusText}`;
-          const err: any = new Error(msg);
-          err.status = response.status;
-          err.data = data;
-          throw err;
-        }
+          if (!response.ok) {
+            const msg = (data && (data.message || data.error || JSON.stringify(data))) || `HTTP ${response.status}: ${response.statusText}`;
+            const err: any = new Error(msg);
+            err.status = response.status;
+            err.data = data;
+            throw err;
+          }
 
-        this.apiUrl = host;
-        return data as T;
-      } catch (err: any) {
-        lastError = err;
-        if (err.status) throw err;
-      } finally {
-        clearTimeout(timeout);
+          this.apiUrl = host;
+          return data as T;
+        } catch (err: any) {
+          lastError = err;
+          // If server returned an HTTP error code (e.g. 400 Bad Request, 401 Unauthorized), don't retry other hosts
+          if (err.status) throw err;
+        } finally {
+          clearTimeout(timeout);
+        }
+      }
+
+      if (round === 1) {
+        // Brief 1.5s pause before second attempt in case container is completing healthcheck or boot
+        await new Promise((resolve) => setTimeout(resolve, 1500));
       }
     }
 

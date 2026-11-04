@@ -80,9 +80,10 @@ export async function POST(req: NextRequest) {
       result = await client.createInstance(instanceName, true);
     } catch (err: any) {
       logger.error({ err, apiUrl: client.getApiUrl() }, 'Evolution API createInstance failed');
+      const statusCode = err.status || 502;
       return NextResponse.json({
-        error: `Could not connect to Evolution API (${client.getApiUrl()}): ${err.message}. If the container was just started, please wait 10 seconds for it to finish booting.`,
-      }, { status: 502 });
+        error: `Could not connect to Evolution API (${client.getApiUrl()}): ${err.message}. If Dokploy is still deploying or restarting the container, please wait a moment.`,
+      }, { status: statusCode });
     }
 
     // Save instance to DB
