@@ -27,3 +27,4 @@ describe('Automatic & Scheduled Campaign Execution (Cron/Worker)', () => {
     expect(campaignRunner.isCampaignActive('non-existent-campaign')).toBe(false);
   });
 });
+

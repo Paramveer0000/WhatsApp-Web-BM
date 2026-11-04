@@ -32,7 +32,16 @@ import {
   Eye,
   Calendar,
   AlertCircle,
-  FileText
+  FileText,
+  LayoutDashboard,
+  Users,
+  MessageSquare,
+  Smartphone,
+  BarChart3,
+  Settings as SettingsIcon,
+  LogOut,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -72,6 +81,8 @@ export default function GuardrailsPage() {
   const [userRole, setUserRole] = useState<'ADMIN' | 'OPERATOR'>('ADMIN');
 
   // UI State
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
@@ -102,6 +113,11 @@ export default function GuardrailsPage() {
 
   // Load instances, campaigns, and guardrail settings
   useEffect(() => {
+    fetch('/api/auth/me')
+      .then((r) => r.json())
+      .then((d) => d?.user && setCurrentUser(d.user))
+      .catch(() => {});
+
     fetch('/api/evolution/instances')
       .then((r) => r.json())
       .then((d) => d.instances && setInstances(d.instances))
@@ -114,6 +130,11 @@ export default function GuardrailsPage() {
 
     loadGuardrails(scope, scopeId);
   }, []);
+
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    window.location.href = '/login';
+  };
 
   const loadGuardrails = async (newScope: 'global' | 'instance' | 'campaign', newScopeId: string) => {
     setLoading(true);
@@ -300,7 +321,180 @@ export default function GuardrailsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0b141a] text-slate-100 flex flex-col font-sans selection:bg-emerald-500/30 selection:text-emerald-300">
+    <div className="min-h-screen bg-[#0b141a] text-slate-100 flex flex-col md:flex-row font-sans selection:bg-emerald-500/30 selection:text-emerald-300">
+      
+      {/* ========================================================= */}
+      {/* LEFT SIDEBAR (DESKTOP)                                    */}
+      {/* ========================================================= */}
+      <aside 
+        className={`bg-slate-900 border-r border-slate-800 flex flex-col shrink-0 transition-all duration-300 z-30 sticky top-0 h-screen ${
+          sidebarCollapsed ? 'w-[72px]' : 'w-64'
+        } hidden md:flex`}
+      >
+        {/* Brand Header */}
+        <div className="h-16 px-4 border-b border-slate-800 flex items-center justify-between">
+          <div className="flex items-center gap-3 overflow-hidden">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-700 flex items-center justify-center text-white shadow-lg shadow-emerald-950/50 shrink-0">
+              <Send className="w-5 h-5 -rotate-12 translate-x-0.5" />
+            </div>
+            {!sidebarCollapsed && (
+              <div className="truncate">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-sm tracking-tight text-white">BulkFlow</span>
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+                    v2.0
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400 truncate">WhatsApp Gateway</p>
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {sidebarCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+          </button>
+        </div>
+
+        {/* Navigation Items */}
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+          {/* Dashboard */}
+          <Link
+            href="/?tab=overview"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-850 transition"
+            title="Dashboard Overview"
+          >
+            <LayoutDashboard className="w-4 h-4 shrink-0" />
+            {!sidebarCollapsed && <span>Dashboard</span>}
+          </Link>
+
+          {/* Campaigns */}
+          <Link
+            href="/?tab=campaigns"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-850 transition"
+            title="Campaigns"
+          >
+            <Send className="w-4 h-4 shrink-0" />
+            {!sidebarCollapsed && <span>Campaigns</span>}
+          </Link>
+
+          {/* Contacts */}
+          <Link
+            href="/?tab=contacts"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-850 transition"
+            title="Contacts & Lists"
+          >
+            <Users className="w-4 h-4 shrink-0" />
+            {!sidebarCollapsed && <span>Contacts</span>}
+          </Link>
+
+          {/* Templates */}
+          <Link
+            href="/?tab=templates"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-850 transition"
+            title="Message Templates"
+          >
+            <FileText className="w-4 h-4 shrink-0" />
+            {!sidebarCollapsed && <span>Templates</span>}
+          </Link>
+
+          {/* Replies */}
+          <Link
+            href="/?tab=replies"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-850 transition"
+            title="Replies & Chat"
+          >
+            <MessageSquare className="w-4 h-4 shrink-0" />
+            {!sidebarCollapsed && <span>Replies</span>}
+          </Link>
+
+          {/* Instances */}
+          <Link
+            href="/?tab=instances"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-850 transition"
+            title="WhatsApp Instances"
+          >
+            <Smartphone className="w-4 h-4 shrink-0" />
+            {!sidebarCollapsed && <span>Instances</span>}
+          </Link>
+
+          {/* Guardrails (ACTIVE ON THIS PAGE) */}
+          <Link
+            href="/guardrails"
+            className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold bg-emerald-600 text-white shadow-md shadow-emerald-950/40 transition cursor-pointer"
+            title="Anti-Ban Guardrails Settings"
+          >
+            <div className="flex items-center gap-3">
+              <Shield className="w-4 h-4 shrink-0" />
+              {!sidebarCollapsed && <span>Guardrails</span>}
+            </div>
+            {!sidebarCollapsed && (
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 font-bold">
+                Active
+              </span>
+            )}
+          </Link>
+
+          {/* Reports */}
+          <Link
+            href="/?tab=reports"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-850 transition"
+            title="Reports & Analytics"
+          >
+            <BarChart3 className="w-4 h-4 shrink-0" />
+            {!sidebarCollapsed && <span>Reports</span>}
+          </Link>
+
+          {/* System */}
+          <Link
+            href="/?tab=system"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-850 transition"
+            title="System Health & Metrics"
+          >
+            <Activity className="w-4 h-4 shrink-0" />
+            {!sidebarCollapsed && <span>System</span>}
+          </Link>
+
+          {/* Settings */}
+          <Link
+            href="/?tab=settings"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-850 transition"
+            title="Gateway Settings"
+          >
+            <SettingsIcon className="w-4 h-4 shrink-0" />
+            {!sidebarCollapsed && <span>Settings</span>}
+          </Link>
+        </nav>
+
+        {/* Sidebar Footer */}
+        <div className="p-3 border-t border-slate-800 space-y-2">
+          {!sidebarCollapsed && currentUser && (
+            <div className="px-3 py-2 rounded-xl bg-slate-950/60 border border-slate-800/80 flex items-center justify-between">
+              <div className="truncate">
+                <p className="text-[11px] font-bold text-slate-200 truncate">{currentUser.email}</p>
+                <p className="text-[10px] text-emerald-400 font-mono uppercase tracking-wider">{currentUser.role || 'Admin'}</p>
+              </div>
+              <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+            </div>
+          )}
+
+          <button
+            onClick={handleLogout}
+            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-950/30 transition cursor-pointer ${
+              sidebarCollapsed ? 'justify-center' : ''
+            }`}
+            title="Log out"
+          >
+            <LogOut className="w-4 h-4 shrink-0" />
+            {!sidebarCollapsed && <span>Sign Out</span>}
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Content Body */}
+      <div className="flex-1 flex flex-col min-w-0 min-h-screen">
       
       {/* ========================================================= */}
       {/* 1. TOP HEADER & SCOPE SELECTOR                            */}
@@ -1277,6 +1471,32 @@ export default function GuardrailsPage() {
           </div>
         </div>
       )}
+
+      </div>
+
+      {/* Mobile Bottom Navigation Bar */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 px-4 py-2 flex items-center justify-around z-40">
+        <Link href="/?tab=overview" className="flex flex-col items-center gap-1 text-[10px] text-slate-400">
+          <LayoutDashboard className="w-4 h-4" />
+          <span>Dashboard</span>
+        </Link>
+        <Link href="/?tab=campaigns" className="flex flex-col items-center gap-1 text-[10px] text-slate-400">
+          <Send className="w-4 h-4" />
+          <span>Campaigns</span>
+        </Link>
+        <Link href="/guardrails" className="flex flex-col items-center gap-1 text-[10px] text-emerald-400">
+          <Shield className="w-4 h-4" />
+          <span>Guardrails</span>
+        </Link>
+        <Link href="/?tab=instances" className="flex flex-col items-center gap-1 text-[10px] text-slate-400">
+          <Smartphone className="w-4 h-4" />
+          <span>Instances</span>
+        </Link>
+        <Link href="/?tab=settings" className="flex flex-col items-center gap-1 text-[10px] text-slate-400">
+          <SettingsIcon className="w-4 h-4" />
+          <span>Settings</span>
+        </Link>
+      </div>
 
     </div>
   );
