@@ -126,6 +126,15 @@ export default function AppDashboard() {
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [settingsSavedMsg, setSettingsSavedMsg] = useState('');
 
+  // AI Settings State
+  const [aiApiKey, setAiApiKey] = useState('');
+  const [aiMaskedKey, setAiMaskedKey] = useState('');
+  const [aiModel, setAiModel] = useState('anthropic/claude-3.5-haiku');
+  const [aiSpendCap, setAiSpendCap] = useState(10.0);
+  const [aiTesting, setAiTesting] = useState(false);
+  const [aiTestResult, setAiTestResult] = useState<any>(null);
+  const [savingAiSettings, setSavingAiSettings] = useState(false);
+
   // Replies Inbox State
   const [conversations, setConversations] = useState<any[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
@@ -367,6 +376,18 @@ export default function AppDashboard() {
       if (res.ok && data.settings) setSettings(data.settings);
     } catch (err) {
       console.error('Error fetching settings:', err);
+    }
+
+    try {
+      const aiRes = await fetch('/api/v1/settings/ai');
+      const aiData = await aiRes.json();
+      if (aiRes.ok && aiData.settings) {
+        setAiMaskedKey(aiData.settings.maskedKey || '');
+        setAiModel(aiData.settings.defaultModel || 'anthropic/claude-3.5-haiku');
+        setAiSpendCap(aiData.settings.monthlySpendCapUsd ?? 10.0);
+      }
+    } catch (err) {
+      console.error('Error fetching AI settings:', err);
     }
   };
 
@@ -727,6 +748,56 @@ export default function AppDashboard() {
       }
     } catch (err: any) {
       alert(err.message);
+    }
+  };
+
+  const handleSaveAiSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingAiSettings(true);
+    try {
+      const res = await fetch('/api/v1/settings/ai', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiKey: aiApiKey.trim() || undefined,
+          defaultModel: aiModel,
+          monthlySpendCapUsd: aiSpendCap,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setAiApiKey('');
+        loadSettings();
+        setSettingsSavedMsg('AI Guardrail Advisor settings saved!');
+        setTimeout(() => setSettingsSavedMsg(''), 3000);
+      } else {
+        alert(data.error || 'Failed to save AI settings');
+      }
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setSavingAiSettings(false);
+    }
+  };
+
+  const handleTestAiConnection = async () => {
+    setAiTesting(true);
+    setAiTestResult(null);
+    try {
+      const res = await fetch('/api/v1/settings/ai/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiKey: aiApiKey.trim() || undefined,
+          model: aiModel,
+        }),
+      });
+      const data = await res.json();
+      setAiTestResult(data);
+    } catch (err: any) {
+      setAiTestResult({ success: false, error: err.message });
+    } finally {
+      setAiTesting(false);
     }
   };
 
@@ -2686,6 +2757,113 @@ export default function AppDashboard() {
                     className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow transition cursor-pointer"
                   >
                     Save Settings
+                  </button>
+                </div>
+              </form>
+
+              {/* AI Guardrail Advisor (OpenRouter) Form */}
+              <form onSubmit={handleSaveAiSettings} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4 max-w-2xl">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                  <div>
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-teal-400" />
+                      AI Guardrail Advisor (OpenRouter Integration)
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      Reasoning model for evidence-based anti-ban tuning and parameter clamping
+                    </p>
+                  </div>
+                  {aiMaskedKey && (
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold">
+                      Configured: {aiMaskedKey}
+                    </span>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    OpenRouter API Key {aiMaskedKey ? `(${aiMaskedKey})` : ''}
+                  </label>
+                  <input
+                    type="password"
+                    value={aiApiKey}
+                    onChange={(e) => setAiApiKey(e.target.value)}
+                    placeholder={aiMaskedKey ? 'Leave blank to keep current key, or paste new sk-or-...' : 'sk-or-v1-...'}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono placeholder-slate-600 focus:outline-none focus:border-teal-500"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Stored encrypted at rest using AES-256-GCM. Never transmitted unmasked.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">Reasoning Model</label>
+                    <select
+                      value={aiModel}
+                      onChange={(e) => setAiModel(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono"
+                    >
+                      <option value="anthropic/claude-3.5-haiku">Claude 3.5 Haiku (Recommended, Fast & Safe)</option>
+                      <option value="openai/gpt-4o-mini">GPT-4o Mini (Cost-efficient)</option>
+                      <option value="google/gemini-flash-1.5">Gemini 1.5 Flash (Ultra-fast)</option>
+                      <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet (In-depth)</option>
+                      <option value="openai/gpt-4o">GPT-4o (Standard)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">Monthly Spend Cap (USD)</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="1"
+                      max="500"
+                      value={aiSpendCap}
+                      onChange={(e) => setAiSpendCap(Number(e.target.value))}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-xl bg-teal-950/20 border border-teal-500/20 text-[11px] text-teal-300 flex items-start gap-2">
+                  <ShieldCheck className="w-4 h-4 shrink-0 text-teal-400 mt-0.5" />
+                  <div>
+                    <span className="font-bold">Zero-PII Privacy Protection:</span> Only aggregated volume, failure rates, delay distributions, and circuit breaker events are sent to OpenRouter. No phone numbers, customer names, or message bodies are ever transmitted.
+                  </div>
+                </div>
+
+                {aiTestResult && (
+                  <div
+                    className={`p-3 rounded-xl text-xs flex items-center justify-between ${
+                      aiTestResult.success
+                        ? 'bg-emerald-950/30 border border-emerald-500/30 text-emerald-300'
+                        : 'bg-rose-950/30 border border-rose-500/30 text-rose-300'
+                    }`}
+                  >
+                    <span>
+                      {aiTestResult.success
+                        ? `✓ Connection verified! Latency: ${aiTestResult.pingMs}ms (${aiTestResult.model})`
+                        : `✗ Test failed: ${aiTestResult.error}`}
+                    </span>
+                  </div>
+                )}
+
+                <div className="pt-2 flex items-center gap-3">
+                  <button
+                    type="submit"
+                    disabled={savingAiSettings}
+                    className="px-5 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-bold text-xs rounded-xl shadow transition cursor-pointer"
+                  >
+                    {savingAiSettings ? 'Saving...' : 'Save AI Settings'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleTestAiConnection}
+                    disabled={aiTesting}
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs rounded-xl transition cursor-pointer"
+                  >
+                    {aiTesting ? 'Testing...' : 'Test Connection'}
                   </button>
                 </div>
               </form>

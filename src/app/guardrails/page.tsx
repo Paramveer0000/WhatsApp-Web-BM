@@ -41,7 +41,9 @@ import {
   Settings as SettingsIcon,
   LogOut,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  ArrowLeft,
+  Menu
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -62,10 +64,11 @@ import {
   simulatePacing, 
   SimulationResult 
 } from '@/lib/guardrails';
+import { AiGuardrailAdvisorTab } from '@/components/AiGuardrailAdvisorTab';
 
 export default function GuardrailsPage() {
   // Navigation & Scope State
-  const [activeTab, setActiveTab] = useState<'config' | 'activity' | 'versions'>('config');
+  const [activeTab, setActiveTab] = useState<'config' | 'activity' | 'versions' | 'advisor'>('config');
   const [scope, setScope] = useState<'global' | 'instance' | 'campaign'>('global');
   const [scopeId, setScopeId] = useState('');
   const [instances, setInstances] = useState<any[]>([]);
@@ -503,11 +506,12 @@ export default function GuardrailsPage() {
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <Link
-              href="/"
-              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
-              title="Return to Dashboard"
+              href="/?tab=overview"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-300 hover:text-white border border-slate-700/60 transition shadow-sm"
+              title="Return to Main Console"
             >
-              <Shield className="w-5 h-5 text-emerald-400" />
+              <ArrowLeft className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Back to Console</span>
             </Link>
             <div>
               <div className="flex items-center gap-2">
@@ -608,19 +612,30 @@ export default function GuardrailsPage() {
             <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
               <button
                 onClick={() => setActiveTab('config')}
-                className={`px-2.5 py-1 rounded-lg ${activeTab === 'config' ? 'bg-slate-800 text-white font-bold' : 'text-slate-400'}`}
+                className={`px-2.5 py-1 rounded-lg transition ${activeTab === 'config' ? 'bg-slate-800 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
               >
                 Settings
               </button>
               <button
+                onClick={() => setActiveTab('advisor')}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg transition ${
+                  activeTab === 'advisor'
+                    ? 'bg-gradient-to-r from-teal-600 to-emerald-600 text-white font-bold shadow-sm'
+                    : 'text-teal-400 hover:text-white'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>AI Advisor</span>
+              </button>
+              <button
                 onClick={() => setActiveTab('activity')}
-                className={`px-2.5 py-1 rounded-lg ${activeTab === 'activity' ? 'bg-slate-800 text-white font-bold' : 'text-slate-400'}`}
+                className={`px-2.5 py-1 rounded-lg transition ${activeTab === 'activity' ? 'bg-slate-800 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
               >
                 Activity
               </button>
               <button
                 onClick={() => setActiveTab('versions')}
-                className={`px-2.5 py-1 rounded-lg ${activeTab === 'versions' ? 'bg-slate-800 text-white font-bold' : 'text-slate-400'}`}
+                className={`px-2.5 py-1 rounded-lg transition ${activeTab === 'versions' ? 'bg-slate-800 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
               >
                 Versions
               </button>
@@ -1327,6 +1342,22 @@ export default function GuardrailsPage() {
 
             </div>
           </div>
+        )}
+
+        {/* ========================================================= */}
+        {/* AI ADVISOR TAB                                            */}
+        {/* ========================================================= */}
+        {activeTab === 'advisor' && (
+          <AiGuardrailAdvisorTab
+            scope={scope}
+            scopeId={scopeId}
+            currentConfig={currentConfig}
+            onApplyDraft={(draftConfig) => {
+              setCurrentConfig(draftConfig);
+              setActiveTab('config');
+              setDiffDrawerOpen(true);
+            }}
+          />
         )}
 
         {/* ========================================================= */}

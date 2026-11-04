@@ -233,6 +233,14 @@ export class EvolutionClient {
     pushHost('http://evolution:8080');
     pushHost('http://evolution-api:8080');
     pushHost('http://whatsapp_evolution_api:8080');
+    pushHost('http://host.docker.internal:8081');
+    pushHost('http://host.docker.internal:8080');
+    pushHost('http://172.17.0.1:8081');
+    pushHost('http://172.17.0.1:8080');
+    pushHost('http://localhost:8081');
+    pushHost('http://localhost:8080');
+    pushHost('http://127.0.0.1:8081');
+    pushHost('http://127.0.0.1:8080');
 
     let lastError: any;
 

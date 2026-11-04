@@ -320,13 +320,15 @@ model GuardrailPreset {
 }
 
 model GuardrailVersion {
-  id          String   @id @default(cuid())
-  profileId   String
-  version     Int
-  config      String   // JSON
-  diffSummary String?
-  savedBy     String?
-  savedAt     DateTime @default(now())
+  id             String   @id @default(cuid())
+  profileId      String
+  version        Int
+  config         String   // JSON
+  diffSummary    String?
+  source         String   @default("manual") // "manual", "preset", "advisor", "import", "restore"
+  advisorRunId   String?
+  savedBy        String?
+  savedAt        DateTime @default(now())
 
   @@index([profileId, version])
 }
@@ -343,5 +345,87 @@ model GuardrailEvent {
   @@index([type, severity])
   @@index([instanceId])
   @@index([campaignId])
+}
+
+model AiSettings {
+  id                     String   @id @default("default")
+  provider               String   @default("openrouter")
+  apiKeyEncrypted        String?
+  model                  String   @default("anthropic/claude-3.5-haiku")
+  fallbackModel          String?  @default("openai/gpt-4o-mini")
+  monthlyCapUsd          Float    @default(10.0)
+  maxTokens              Int      @default(2048)
+  temperature            Float    @default(0.2)
+  timeoutMs              Int      @default(30000)
+  includeContentAnalysis Boolean  @default(false)
+  enabled                Boolean  @default(true)
+  updatedAt              DateTime @updatedAt
+  createdAt              DateTime @default(now())
+}
+
+model AiUsage {
+  id               String   @id @default(cuid())
+  runId            String?
+  model            String
+  promptTokens     Int      @default(0)
+  completionTokens Int      @default(0)
+  totalTokens      Int      @default(0)
+  costUsd          Float    @default(0.0)
+  createdAt        DateTime @default(now())
+}
+
+model AdvisorRun {
+  id              String                  @id @default(cuid())
+  scope           String                  @default("global") // "global" | "instance"
+  scopeId         String?                 @default("")
+  windowDays      Int                     @default(14)
+  goal            String                  @default("Balanced") // "Maximize safety" | "Balanced" | "Maximize throughput within safe limits"
+  notes           String?
+  model           String                  @default("rule_based")
+  mode            String                  @default("rule_based") // "ai" | "rule_based"
+  inputSummary    String                  // JSON
+  output          String                  // JSON
+  validatedOutput String                  // JSON
+  discardedCount  Int                     @default(0)
+  status          String                  @default("completed") // "running" | "completed" | "failed"
+  costUsd         Float                   @default(0.0)
+  createdBy       String?
+  createdAt       DateTime                @default(now())
+  recommendations AdvisorRecommendation[]
+  experiments     AdvisorExperiment[]
+}
+
+model AdvisorRecommendation {
+  id               String     @id @default(cuid())
+  runId            String
+  fieldPath        String
+  currentValue     String     // JSON
+  suggestedValue   String     // JSON
+  rationale        String
+  expectedEffect   String?
+  riskChange       String     @default("neutral") // "lower" | "neutral" | "higher"
+  confidence       String     @default("medium") // "low" | "medium" | "high"
+  priority         Int        @default(1)
+  status           String     @default("pending") // "pending" | "applied" | "dismissed"
+  appliedVersionId String?
+  createdAt        DateTime   @default(now())
+  run              AdvisorRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId, status])
+}
+
+model AdvisorExperiment {
+  id              String      @id @default(cuid())
+  runId           String
+  baselineMetrics String      // JSON
+  appliedChanges  String      // JSON
+  status          String      @default("evaluating") // "evaluating" | "completed" | "reverted"
+  verdict         String?     // "improved" | "no_change" | "worse"
+  result          String?     // JSON
+  startedAt       DateTime    @default(now())
+  evaluatedAt     DateTime?
+  run             AdvisorRun  @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
 }
 
