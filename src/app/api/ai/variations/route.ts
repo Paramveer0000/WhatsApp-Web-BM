@@ -146,16 +146,18 @@ const POLITE_WORDPLAY_MAP: Array<{ pattern: RegExp; options: string[] }> = [
   { pattern: /\bquestions\b/gi, options: ['inquiries', 'queries', 'questions', 'questions or thoughts'] },
 ];
 
-export function generateSmartFallbackVariations(baseMessage: string): Array<{ label: string; content: string }> {
+export function generateSmartFallbackVariations(baseMessage: string, count: number = 12): Array<{ label: string; content: string }> {
   const trimmed = baseMessage.trim();
   const wordCount = trimmed.split(/\s+/).filter(Boolean).length;
+  const targetCount = Math.min(19, Math.max(1, count));
+  const activeStyles = WARM_VARIATION_STYLES.slice(0, targetCount);
 
   // Case 1: Ultra-short inputs (e.g., "hello buddy", "hi there", "good morning")
   if (wordCount <= 6) {
     const isBuddyGreeting = /buddy|bro|friend|pal|mate/i.test(trimmed);
     const hasNameToken = /\{name[^\}]*\}/i.test(trimmed);
 
-    return WARM_VARIATION_STYLES.map((style, idx) => {
+    return activeStyles.map((style, idx) => {
       let content = '';
       if (style.shortPhrases && style.shortPhrases.length > 0) {
         content = style.shortPhrases[idx % style.shortPhrases.length];
@@ -190,7 +192,7 @@ export function generateSmartFallbackVariations(baseMessage: string): Array<{ la
       return `__TOKEN_${tokenList.length - 1}__`;
     });
 
-  return WARM_VARIATION_STYLES.map((style, idx) => {
+  return activeStyles.map((style, idx) => {
     let body = tokenized;
 
     // Apply meaning-preserving polite wordplay substitutions
@@ -231,6 +233,7 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     const baseMessage = body.baseMessage || body.message || body.template || '';
+    const requestedCount = Math.min(19, Math.max(1, Number(body.count || 12)));
 
     if (!baseMessage || !baseMessage.trim()) {
       return NextResponse.json({ error: 'Base message is required' }, { status: 400 });
@@ -250,7 +253,7 @@ export async function POST(req: NextRequest) {
       try {
         const model = aiSettings?.model || 'anthropic/claude-3.5-haiku';
         const prompt = `You are an expert copywriter specializing in warm, polite, and friendly WhatsApp messaging.
-The user will provide 1 base WhatsApp message. Your task is to generate exactly 12 distinct variations of this message.
+The user will provide 1 base WhatsApp message. Your task is to generate exactly ${requestedCount} distinct variations of this message.
 
 CRITICAL NON-NEGOTIABLE RULES:
 1. PRESERVE 100% OF THE ORIGINAL MEANING AND INTENTION:
@@ -261,7 +264,7 @@ CRITICAL NON-NEGOTIABLE RULES:
    - Every single variation must be courteous, warm, respectful, polite, and welcoming.
 3. ONLY USE SUBTLE WORDPLAY AND NATURAL PARAPHRASING:
    - Use graceful sentence rephrasing, natural synonyms, and polite variations.
-   - The recipient must receive the EXACT same information, just expressed in 12 different polite, natural styles.
+   - The recipient must receive the EXACT same information, just expressed in ${requestedCount} different polite, natural styles.
 4. PRESERVE ALL PLACEHOLDERS AND FORMATTING EXACTLY:
    - Keep dynamic variables like {name}, {company}, {phone}, etc., exactly as written.
    - Keep WhatsApp formatting (*bold*, _italic_, ~strike~, \`code\`) intact.
@@ -271,17 +274,7 @@ Return ONLY a valid JSON object matching this schema:
 {
   "variations": [
     { "label": "Message 2 (Warm & Friendly)", "content": "..." },
-    { "label": "Message 3 (Polite & Cordial)", "content": "..." },
-    { "label": "Message 4 (Gracious & Welcoming)", "content": "..." },
-    { "label": "Message 5 (Courteous & Pleasant)", "content": "..." },
-    { "label": "Message 6 (Gentle & Attentive)", "content": "..." },
-    { "label": "Message 7 (Kind & Personable)", "content": "..." },
-    { "label": "Message 8 (Respectful & Sincere)", "content": "..." },
-    { "label": "Message 9 (Friendly & Cheerful)", "content": "..." },
-    { "label": "Message 10 (Considerate & Helpful)", "content": "..." },
-    { "label": "Message 11 (Warm Appreciation)", "content": "..." },
-    { "label": "Message 12 (Pleasant & Engaging)", "content": "..." },
-    { "label": "Message 13 (Gracious & Courteous)", "content": "..." }
+    { "label": "Message 3 (Polite & Cordial)", "content": "..." }
   ]
 }
 
@@ -316,8 +309,8 @@ ${baseMessage}`;
           if (rawText) {
             const parsed = JSON.parse(rawText);
             const list = Array.isArray(parsed.variations) ? parsed.variations : parsed;
-            if (Array.isArray(list) && list.length >= 8) {
-              const formatted = list.slice(0, 12).map((item: any, idx: number) => ({
+            if (Array.isArray(list) && list.length >= 1) {
+              const formatted = list.slice(0, requestedCount).map((item: any, idx: number) => ({
                 position: idx + 2,
                 label: item.label || `Message ${idx + 2} (${WARM_VARIATION_STYLES[idx]?.label || 'Polite & Warm'})`,
                 content: item.content || item.text,
@@ -337,7 +330,7 @@ ${baseMessage}`;
     }
 
     // Fallback: Smart Algorithmic Linguistic Variation Engine
-    const fallbackList = generateSmartFallbackVariations(baseMessage);
+    const fallbackList = generateSmartFallbackVariations(baseMessage, requestedCount);
     const variations = fallbackList.map((item, idx) => ({
       position: idx + 2,
       label: item.label,
