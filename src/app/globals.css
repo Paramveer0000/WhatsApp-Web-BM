@@ -50,3 +50,66 @@ body {
 .filter-privacy .privacy-blur:hover {
   filter: blur(0);
 }
+
+
+/* ========================================================= */
+/* DAY / NIGHT (LIGHT / DARK) THEME TOGGLE STYLES           */
+/* ========================================================= */
+[data-theme="day"] {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+}
+
+[data-theme="day"] body {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+[data-theme="day"] .bg-slate-950 {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+  border-color: #e2e8f0 !important;
+}
+
+[data-theme="day"] .bg-slate-900 {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05) !important;
+}
+
+[data-theme="day"] .bg-slate-850,
+[data-theme="day"] .bg-slate-800 {
+  background-color: #f1f5f9 !important;
+  color: #1e293b !important;
+  border-color: #cbd5e1 !important;
+}
+
+[data-theme="day"] .border-slate-800,
+[data-theme="day"] .border-slate-800\/80,
+[data-theme="day"] .border-slate-800\/60 {
+  border-color: #e2e8f0 !important;
+}
+
+[data-theme="day"] .text-white {
+  color: #0f172a !important;
+}
+
+[data-theme="day"] .text-slate-300,
+[data-theme="day"] .text-slate-200 {
+  color: #334155 !important;
+}
+
+[data-theme="day"] .text-slate-400 {
+  color: #64748b !important;
+}
+
+[data-theme="day"] aside {
+  background-color: #ffffff !important;
+  border-right-color: #e2e8f0 !important;
+}
+
+[data-theme="day"] header {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  border-bottom-color: #e2e8f0 !important;
+}

@@ -146,6 +146,22 @@ export function parseTemplateToAST(input: string): { ast: ASTNode[]; errors: Par
           options.push(currentOption);
           advance(); // skip }
 
+          // Support single-brace variables: {name}, {company}, {name|fallback}, {company|fallback}
+          if (options.length === 1 && options[0].length === 1 && options[0][0].type === 'text') {
+            const rawKey = options[0][0].value.trim();
+            if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(rawKey)) {
+              nodes.push({ type: 'variable', key: rawKey });
+              continue;
+            }
+          } else if (options.length === 2 && options[0].length === 1 && options[0][0].type === 'text') {
+            const rawKey = options[0][0].value.trim();
+            if (/^(name|phone|company|city|email|var\d+|custom\d+|address|firstName|lastName|first_name|last_name)$/i.test(rawKey)) {
+              const fallback = options[1].map((n) => (n.type === 'text' ? n.value : '')).join('');
+              nodes.push({ type: 'variable', key: rawKey, fallback });
+              continue;
+            }
+          }
+
           if (options.length > 1) {
             nodes.push({ type: 'spintax', options });
           } else {

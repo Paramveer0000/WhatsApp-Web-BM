@@ -76,6 +76,8 @@ import {
   Calendar,
   ArrowLeftRight,
   LayoutGrid,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -179,6 +181,25 @@ export default function AppDashboard() {
   const [replyInstance, setReplyInstance] = useState('');
   const [sendingReply, setSendingReply] = useState(false);
   const [privacyMode, setPrivacyMode] = useState(false);
+  const [theme, setTheme] = useState<'day' | 'night'>('night');
+
+  useEffect(() => {
+    const saved = typeof window !== 'undefined' ? (localStorage.getItem('app_theme') as 'day' | 'night') : null;
+    if (saved) {
+      setTheme(saved);
+      document.documentElement.setAttribute('data-theme', saved);
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    const next = theme === 'night' ? 'day' : 'night';
+    setTheme(next);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('app_theme', next);
+      document.documentElement.setAttribute('data-theme', next);
+    }
+    toast.info(next === 'day' ? '☀️ Day Mode activated' : '🌙 Night Mode activated');
+  };
   const [syncingReplies, setSyncingReplies] = useState(false);
   const [clearingOldChats, setClearingOldChats] = useState(false);
   const [uploadingChat, setUploadingChat] = useState(false);
@@ -1202,6 +1223,26 @@ export default function AppDashboard() {
               <RefreshCw className="w-3 h-3 hover:rotate-180 transition cursor-pointer" />
             </div>
 
+            {/* Day / Night Mode Toggle */}
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-950/80 hover:bg-slate-850 border border-slate-800 text-slate-300 hover:text-white text-xs font-medium transition cursor-pointer"
+              title={theme === 'night' ? 'Switch to Day Mode (Light)' : 'Switch to Night Mode (Dark)'}
+            >
+              {theme === 'night' ? (
+                <>
+                  <Sun className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="hidden md:inline">Day</span>
+                </>
+              ) : (
+                <>
+                  <Moon className="w-3.5 h-3.5 text-indigo-400" />
+                  <span className="hidden md:inline">Night</span>
+                </>
+              )}
+            </button>
+
             {/* Privacy Mode Toggle (Shift+P) */}
             <button
               type="button"
@@ -1250,7 +1291,7 @@ export default function AppDashboard() {
         </header>
 
         {/* Main Body View */}
-        <main className={`flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto pb-24 md:pb-12 ${privacyMode ? 'filter-privacy' : ''}`}>
+        <main className={`flex-1 p-4 sm:p-6 lg:p-8 ${currentTab === 'wizard' ? 'max-w-[1650px]' : 'max-w-7xl'} w-full mx-auto pb-24 md:pb-12 ${privacyMode ? 'filter-privacy' : ''}`}>
           
           {/* ========================================================= */}
           {/* 3. VIEW: OVERVIEW / DASHBOARD (Zolo Suit Business Style)   */}
@@ -1583,51 +1624,6 @@ export default function AppDashboard() {
                       })
                     )}
                   </div>
-                </div>
-              </div>
-
-              {/* 7-Day Performance Chart */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-sm font-bold text-white">7-Day Delivery & Read Funnel</h3>
-                    <p className="text-xs text-slate-400">Hourly & daily throughput volume</p>
-                  </div>
-                  <span className="text-xs font-mono text-emerald-400">Aggregated SSE Metrics</span>
-                </div>
-
-                <div className="h-64 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart
-                      data={[
-                        { day: 'Mon', sent: 120, delivered: 118, read: 92 },
-                        { day: 'Tue', sent: 210, delivered: 205, read: 165 },
-                        { day: 'Wed', sent: 340, delivered: 332, read: 260 },
-                        { day: 'Thu', sent: 180, delivered: 176, read: 140 },
-                        { day: 'Fri', sent: 290, delivered: 284, read: 220 },
-                        { day: 'Sat', sent: 150, delivered: 148, read: 110 },
-                        { day: 'Sun', sent: 220, delivered: 215, read: 180 }
-                      ]}
-                      margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-                    >
-                      <defs>
-                        <linearGradient id="colorSent" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
-                          <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                        </linearGradient>
-                        <linearGradient id="colorRead" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#14b8a6" stopOpacity={0.4} />
-                          <stop offset="95%" stopColor="#14b8a6" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                      <XAxis dataKey="day" stroke="#64748b" fontSize={11} />
-                      <YAxis stroke="#64748b" fontSize={11} />
-                      <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155' }} />
-                      <Area type="monotone" dataKey="sent" stroke="#10b981" fillOpacity={1} fill="url(#colorSent)" />
-                      <Area type="monotone" dataKey="read" stroke="#14b8a6" fillOpacity={1} fill="url(#colorRead)" />
-                    </AreaChart>
-                  </ResponsiveContainer>
                 </div>
               </div>
             </div>
@@ -2088,9 +2084,9 @@ export default function AppDashboard() {
                 </div>
               </div>
 
-              <form onSubmit={handleLaunchCampaign} className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              <form onSubmit={handleLaunchCampaign} className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
                 {/* Left Column: Form & Composer */}
-                <div className="lg:col-span-7 space-y-6">
+                <div className="lg:col-span-7 xl:col-span-7 space-y-6">
                   {/* Step 1: Campaign Details */}
                   <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
                     <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-400">1. Campaign Details</h3>
@@ -2400,7 +2396,7 @@ export default function AppDashboard() {
                 </div>
 
                 {/* Right Column: Live Sticky WhatsApp Bubble & Rotation Preview */}
-                <div className="lg:col-span-5 sticky top-24 space-y-4">
+                <div className="lg:col-span-5 xl:col-span-5 lg:sticky lg:top-20 space-y-4">
                   {/* Variant Preview Selector (Section 2) */}
                   {wizDistributionMode !== 'SINGLE' && (
                     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3 shadow-xl">
@@ -2419,7 +2415,7 @@ export default function AppDashboard() {
                             onChange={(e) => {
                               const n = Math.max(1, Number(e.target.value));
                               setPreviewRecipientNumber(n);
-                              setActivePreviewVariantIndex((n - 1) % wizVariants.length);
+                              setActivePreviewVariantIndex((n - 1) % (wizVariants.length || 1));
                             }}
                             className="bg-slate-950 border border-slate-800 rounded px-2 py-0.5 text-xs text-white font-mono w-14 text-center"
                           />
@@ -2496,9 +2492,15 @@ export default function AppDashboard() {
                     }
                     sampleRecipient={{
                       name: previewRecipientNumber === 1 ? 'Rahul Sharma' : `Audience Contact #${previewRecipientNumber}`,
-                      phone: `9198765432${String(previewRecipientNumber).padStart(2, '0')}`,
+                      phone: `+91 98765 432${String(previewRecipientNumber).padStart(2, '0')}`,
+                      company: 'Acme Corp',
                     }}
                     appendOptOut={true}
+                    variantLabel={wizVariants[activePreviewVariantIndex]?.label}
+                    currentVariantIndex={activePreviewVariantIndex}
+                    totalVariants={wizVariants.length}
+                    onPrevVariant={() => setActivePreviewVariantIndex((prev) => (prev > 0 ? prev - 1 : wizVariants.length - 1))}
+                    onNextVariant={() => setActivePreviewVariantIndex((prev) => (prev < wizVariants.length - 1 ? prev + 1 : 0))}
                   />
                 </div>
               </form>
