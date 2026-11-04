@@ -641,6 +641,7 @@ export default function AppDashboard() {
       alert(err.message);
     } finally {
       setImportingFile(false);
+      if (e.target) e.target.value = '';
     }
   };
 

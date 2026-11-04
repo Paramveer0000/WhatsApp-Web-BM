@@ -5,29 +5,96 @@ import { getSessionUser } from '@/lib/auth';
 import { normalizePhone } from '@/lib/phone';
 import { EvolutionClient } from '@/lib/evolution';
 import { logger } from '@/lib/logger';
+import * as XLSX from 'xlsx';
 
 export async function POST(req: NextRequest) {
   try {
     const user = await getSessionUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const body = await req.json();
-    const {
-      rows = [],
-      phoneColumn,
-      nameColumn,
-      listName,
-      defaultCountryCode = '91',
-      verifyWhatsApp = false,
-      instanceName,
-    } = body;
+    const contentType = req.headers.get('content-type') || '';
+    let rows: any[] = [];
+    let phoneColumn: string | undefined;
+    let nameColumn: string | undefined;
+    let listName: string | undefined;
+    let defaultCountryCode = '91';
+    let verifyWhatsApp = false;
+    let instanceName: string | undefined;
+
+    // Handle Multipart Form Data (file upload: CSV, XLSX, XLS)
+    if (contentType.includes('multipart/form-data')) {
+      const formData = await req.formData();
+      const file = formData.get('file') as File | null;
+      if (!file) {
+        return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
+      }
+
+      listName = (formData.get('listName') as string) || `Import-${new Date().toLocaleDateString()}`;
+      defaultCountryCode = (formData.get('defaultCountryCode') as string) || '91';
+      verifyWhatsApp = formData.get('verifyWhatsApp') === 'true';
+      instanceName = (formData.get('instanceName') as string) || undefined;
+      phoneColumn = (formData.get('phoneColumn') as string) || undefined;
+      nameColumn = (formData.get('nameColumn') as string) || undefined;
+
+      const arrayBuffer = await file.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
+      const sheetName = workbook.SheetNames[0];
+      if (!sheetName) {
+        return NextResponse.json({ error: 'The uploaded file has no sheets or content' }, { status: 400 });
+      }
+      const worksheet = workbook.Sheets[sheetName];
+      rows = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+
+      if (rows.length === 0) {
+        return NextResponse.json({ error: 'The uploaded file contains no data rows' }, { status: 400 });
+      }
+
+      // Auto-detect columns from the first row if not provided
+      const sampleRow = rows[0];
+      const keys = Object.keys(sampleRow);
+
+      if (!phoneColumn) {
+        phoneColumn = keys.find((k) =>
+          /^(phone|mobile|whatsapp|number|contact|phone_number|phonenumber|tel|contact_number)$/i.test(k.trim())
+        ) || keys.find((k) =>
+          /(phone|mobile|whatsapp|number|contact|tel)/i.test(k.trim())
+        );
+
+        if (!phoneColumn && keys.length > 0) {
+          phoneColumn = keys[0];
+        }
+      }
+
+      if (!nameColumn) {
+        nameColumn = keys.find((k) =>
+          /^(name|full_name|fullname|first_name|firstname|contact_name|customer_name)$/i.test(k.trim())
+        ) || keys.find((k) =>
+          /(name)/i.test(k.trim()) && k !== phoneColumn
+        );
+
+        if (!nameColumn && keys.length > 1 && keys[1] !== phoneColumn) {
+          nameColumn = keys[1];
+        }
+      }
+    } else {
+      // Handle standard JSON payload
+      const body = await req.json();
+      rows = body.rows || [];
+      phoneColumn = body.phoneColumn;
+      nameColumn = body.nameColumn;
+      listName = body.listName;
+      defaultCountryCode = body.defaultCountryCode || '91';
+      verifyWhatsApp = Boolean(body.verifyWhatsApp);
+      instanceName = body.instanceName;
+    }
 
     if (!Array.isArray(rows) || rows.length === 0) {
       return NextResponse.json({ error: 'No rows provided for import' }, { status: 400 });
     }
 
     if (!phoneColumn) {
-      return NextResponse.json({ error: 'phoneColumn mapping is required' }, { status: 400 });
+      return NextResponse.json({ error: 'Could not determine phone number column in the file' }, { status: 400 });
     }
 
     // 1. Fetch current global Blacklist
@@ -101,7 +168,6 @@ export async function POST(req: NextRequest) {
     if (verifyWhatsApp && instanceName && validContacts.length > 0) {
       try {
         const client = await EvolutionClient.fromDatabase();
-        // Batch check in chunks of 50
         const chunkSize = 50;
         const verifiedList: typeof validContacts = [];
 
@@ -168,6 +234,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      imported: savedCount,
+      duplicates: duplicatesInFile,
+      invalid: invalidRows.length,
       stats: {
         totalRows: rows.length,
         validCount: savedCount,
@@ -184,4 +253,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
-
