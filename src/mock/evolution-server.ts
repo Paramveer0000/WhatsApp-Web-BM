@@ -115,7 +115,8 @@ const server = http.createServer((req, res) => {
     if (pathname.startsWith('/webhook/set/') && req.method === 'POST') {
       const name = decodeURIComponent(pathname.replace('/webhook/set/', ''));
       const inst = instances.get(name);
-      if (inst) inst.webhook = parsedBody.url;
+      const webhookUrl = parsedBody.webhook?.url || parsedBody.url;
+      if (inst) inst.webhook = webhookUrl;
       res.writeHead(200);
       return res.end(JSON.stringify({ status: 'SUCCESS', webhook: parsedBody }));
     }

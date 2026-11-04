@@ -371,20 +371,25 @@ export class EvolutionClient {
     });
   }
 
-  // 2. Webhook Registration
+  // 2. Webhook Registration (Evolution API v2 nested schema & v1 backward compatibility)
   async setWebhook(instanceName: string, webhookUrl: string, secret?: string): Promise<any> {
+    const webhookConfig = {
+      enabled: true,
+      url: webhookUrl,
+      webhookByEvents: false,
+      events: [
+        'CONNECTION_UPDATE',
+        'MESSAGES_UPDATE',
+        'MESSAGES_UPSERT',
+      ],
+      headers: secret ? { 'x-webhook-secret': secret } : undefined,
+    };
+
     return this.request(`/webhook/set/${encodeURIComponent(instanceName)}`, {
       method: 'POST',
       body: JSON.stringify({
-        enabled: true,
-        url: webhookUrl,
-        webhookByEvents: false,
-        events: [
-          'CONNECTION_UPDATE',
-          'MESSAGES_UPDATE',
-          'MESSAGES_UPSERT',
-        ],
-        headers: secret ? { 'x-webhook-secret': secret } : undefined,
+        webhook: webhookConfig,
+        ...webhookConfig,
       }),
     });
   }
