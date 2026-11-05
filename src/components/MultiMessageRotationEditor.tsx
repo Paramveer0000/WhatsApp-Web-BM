@@ -632,7 +632,16 @@ export default function MultiMessageRotationEditor({
               <button
                 key={m}
                 type="button"
-                onClick={() => onSingleMediaTypeChange(m)}
+                onClick={() => {
+                onSingleMediaTypeChange(m);
+                if (variants && variants.length > 0) {
+                  onVariantsChange(variants.map(v => ({
+                    ...v,
+                    mediaType: m,
+                    mediaUrl: m === 'text' ? '' : (v.mediaUrl || singleMediaUrl),
+                  })));
+                }
+              }}
                 className={`px-2.5 py-1 rounded-lg capitalize transition cursor-pointer ${
                   singleMediaType === m
                     ? 'bg-emerald-600 text-white font-bold'
@@ -651,8 +660,26 @@ export default function MultiMessageRotationEditor({
             mediaType={singleMediaType}
             mediaUrl={singleMediaUrl}
             fileName={singleFileName}
-            onMediaUrlChange={onSingleMediaUrlChange}
-            onFileNameChange={onSingleFileNameChange}
+            onMediaUrlChange={(url) => {
+              onSingleMediaUrlChange(url);
+              if (variants && variants.length > 0) {
+                onVariantsChange(variants.map(v => ({
+                  ...v,
+                  mediaType: singleMediaType || 'image',
+                  mediaUrl: url,
+                  fileName: singleFileName,
+                })));
+              }
+            }}
+            onFileNameChange={(name) => {
+              onSingleFileNameChange(name);
+              if (variants && variants.length > 0) {
+                onVariantsChange(variants.map(v => ({
+                  ...v,
+                  fileName: name,
+                })));
+              }
+            }}
           />
         )}
 

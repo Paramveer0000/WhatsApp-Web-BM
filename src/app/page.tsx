@@ -715,13 +715,16 @@ export default function AppDashboard() {
         payload.mediaUrl = wizMediaUrl || undefined;
         payload.fileName = wizFileName || undefined;
       } else {
+        payload.mediaType = wizMediaType || undefined;
+        payload.mediaUrl = wizMediaUrl || undefined;
+        payload.fileName = wizFileName || undefined;
         payload.variants = wizVariants.map((v, i) => ({
           position: i + 1,
           label: v.label,
           content: v.content,
-          mediaType: v.mediaType || 'text',
-          mediaUrl: v.mediaUrl || undefined,
-          fileName: v.fileName || undefined,
+          mediaType: (v.mediaType && v.mediaType !== 'text') ? v.mediaType : (wizMediaType || 'text'),
+          mediaUrl: v.mediaUrl || wizMediaUrl || undefined,
+          fileName: v.fileName || wizFileName || undefined,
           weight: v.weight,
         }));
       }
