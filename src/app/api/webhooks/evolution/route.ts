@@ -252,6 +252,35 @@ export async function POST(req: NextRequest, { params }: { params?: { instanceId
               receivedAt: new Date(),
             },
           });
+
+          // Link incoming reply to Campaign Recipient and record REPLIED status
+          try {
+            const rawPhone = phone.replace(/[^\d]/g, '');
+            const matchingRecipient = await db.campaignRecipient.findFirst({
+              where: {
+                OR: [
+                  { phone: rawPhone },
+                  { phone: `+${rawPhone}` },
+                  { phone: rawPhone.startsWith('91') ? rawPhone.slice(2) : `91${rawPhone}` },
+                  { remoteJid: remoteJid },
+                ],
+                status: { in: ['SENT', 'DELIVERED', 'READ'] },
+              },
+              orderBy: { sentAt: 'desc' },
+            });
+
+            if (matchingRecipient) {
+              await transitionMessage(matchingRecipient.id, ['SENT', 'DELIVERED', 'READ'], 'REPLIED', {
+                repliedAt: new Date(),
+              });
+              logger.info(
+                { recipientId: matchingRecipient.id, phone: rawPhone },
+                'Campaign recipient transitioned to REPLIED from inbound WhatsApp message'
+              );
+            }
+          } catch (replyErr: any) {
+            logger.warn({ err: replyErr.message }, 'Failed to link reply to campaign recipient');
+          }
         }
       }
     }

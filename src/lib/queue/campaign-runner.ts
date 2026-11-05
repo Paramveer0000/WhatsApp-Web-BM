@@ -283,13 +283,37 @@ export class CampaignRunner {
         }
 
         // 3. Instance Pool Selection & Circuit Filter
-        const healthyInstances = availableInstances.filter(
+        let healthyInstances = availableInstances.filter(
           (inst) => CircuitBreaker.getState(inst.name) !== 'open'
         );
 
         if (healthyInstances.length === 0) {
-          await this.triggerCircuitBreaker(campaignId, 'All assigned instances have open circuit breakers');
-          break;
+          // Actively probe connection state for each assigned instance before halting
+          for (const inst of availableInstances) {
+            try {
+              const liveState = await evolution.getConnectionState(inst.name);
+              if (liveState?.toUpperCase() === 'OPEN' || liveState?.toUpperCase() === 'CONNECTED') {
+                CircuitBreaker.recordSuccess(inst.name);
+                await db.instance.updateMany({
+                  where: { name: inst.name },
+                  data: { status: 'OPEN', circuitState: 'closed' },
+                });
+              }
+            } catch {}
+          }
+
+          healthyInstances = availableInstances.filter(
+            (inst) => CircuitBreaker.getState(inst.name) !== 'open'
+          );
+
+          if (healthyInstances.length === 0) {
+            const disconnectedNames = availableInstances.map((i) => i.name).join(', ');
+            await this.triggerCircuitBreaker(
+              campaignId,
+              `Assigned instances (${disconnectedNames}) are disconnected from WhatsApp. Please check/reconnect them in the Instances tab.`
+            );
+            break;
+          }
         }
 
         let activeInstance = healthyInstances[instanceIndex % healthyInstances.length]!;
@@ -580,11 +604,25 @@ export class CampaignRunner {
           });
 
           if (consecutiveFailures >= 5) {
-            await this.triggerCircuitBreaker(
-              campaignId,
-              `5 consecutive connection failures on instance "${activeInstance.name}"`
+            CircuitBreaker.recordFailure(activeInstance.name, true);
+            const remainingHealthy = availableInstances.filter(
+              (i) => i.name !== activeInstance.name && CircuitBreaker.getState(i.name) !== 'open'
             );
-            return;
+            if (remainingHealthy.length > 0) {
+              consecutiveFailures = 0;
+              eventBus.emitLog(campaignId, {
+                type: 'warning',
+                status: 'INSTANCE_FAILOVER',
+                message: `Instance "${activeInstance.name}" encountered 5 connection failures. Failing over to "${remainingHealthy[0].name}"...`,
+              });
+              continue;
+            } else {
+              await this.triggerCircuitBreaker(
+                campaignId,
+                `5 consecutive connection failures on instance "${activeInstance.name}" (all assigned instances exhausted)`
+              );
+              return;
+            }
           }
         }
 
