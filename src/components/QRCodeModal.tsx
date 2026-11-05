@@ -43,7 +43,11 @@ export default function QRCodeModal({ isOpen, instanceName, onClose, onConnected
       const state = (data.state || 'CONNECTING').toUpperCase();
       setConnectionState(state);
       if (data.qr?.base64) {
-        setQrBase64(data.qr.base64);
+        let b64 = data.qr.base64;
+        if (typeof b64 === 'string' && !b64.startsWith('data:image')) {
+          b64 = `data:image/png;base64,${b64}`;
+        }
+        setQrBase64(b64);
       }
 
       if (state === 'OPEN' || state === 'CONNECTED') {
@@ -53,6 +57,25 @@ export default function QRCodeModal({ isOpen, instanceName, onClose, onConnected
     } catch (err: any) {
       setError(err.message);
     } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetSession = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      await fetch(`/api/evolution/instances/${encodeURIComponent(instanceName)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'restart' }),
+      });
+      // Wait 2 seconds for Baileys to cleanly restart, then reload QR
+      setTimeout(() => {
+        loadQRAndState();
+      }, 2000);
+    } catch (err: any) {
+      setError(err.message || 'Failed to reset instance session');
       setLoading(false);
     }
   };
@@ -156,16 +179,28 @@ export default function QRCodeModal({ isOpen, instanceName, onClose, onConnected
                 </div>
               )}
 
-              <div className="flex items-center justify-between w-full pt-2">
-                <button
-                  type="button"
-                  onClick={loadQRAndState}
-                  disabled={loading}
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-xl border border-slate-700 transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
-                  <span>Refresh QR</span>
-                </button>
+              <div className="flex items-center justify-between w-full pt-2 gap-2">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={loadQRAndState}
+                    disabled={loading}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-xl border border-slate-700 transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    title="Reload QR code"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+                    <span>Refresh</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleResetSession}
+                    disabled={loading}
+                    className="px-3 py-1.5 bg-amber-950/40 hover:bg-amber-900/50 text-amber-300 border border-amber-600/30 text-xs font-medium rounded-xl transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    title="Clear stuck WhatsApp session and re-generate a clean QR code"
+                  >
+                    <span>Reset Session</span>
+                  </button>
+                </div>
                 <button
                   type="button"
                   onClick={onClose}
