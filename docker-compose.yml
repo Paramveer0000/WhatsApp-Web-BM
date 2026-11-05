@@ -22,8 +22,14 @@ services:
     volumes:
       - app_data:/app/prisma
     networks:
-      - default
-      - dokploy-network
+      default:
+        aliases:
+          - app
+          - whatsapp_campaign_app
+      dokploy-network:
+        aliases:
+          - app
+          - whatsapp_campaign_app
     depends_on:
       - redis
       - evolution
@@ -45,8 +51,14 @@ services:
     volumes:
       - app_data:/app/prisma
     networks:
-      - default
-      - dokploy-network
+      default:
+        aliases:
+          - app
+          - whatsapp_campaign_app
+      dokploy-network:
+        aliases:
+          - app
+          - whatsapp_campaign_app
     depends_on:
       - redis
       - app

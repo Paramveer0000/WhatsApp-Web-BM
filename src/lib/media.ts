@@ -29,7 +29,10 @@ export async function resolveMediaUrlForEvolution(
 
   const baseInternal =
     process.env.INTERNAL_BASE_URL ||
-    (process.env.NODE_ENV === 'production' ? 'http://app:3000' : 'http://localhost:3000');
+    process.env.PUBLIC_BASE_URL ||
+    (process.env.NODE_ENV === 'production'
+      ? 'http://whatsappwebbm-whatsappwebbm-jf5s9a-c9ba86-200-141-6-138.sslip.io'
+      : 'http://localhost:3000');
 
   // Case 1: Data URI Base64 (e.g. data:image/jpeg;base64,...)
   if (mediaUrl.startsWith('data:')) {
@@ -112,3 +115,4 @@ export async function resolveMediaUrlForEvolution(
     mimetype: mime,
   };
 }
+
