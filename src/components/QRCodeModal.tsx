@@ -20,7 +20,8 @@ export default function QRCodeModal({ isOpen, instanceName, onClose, onConnected
   useEffect(() => {
     if (isOpen && instanceName) {
       loadQRAndState();
-      timerRef.current = setInterval(checkState, 3000);
+      // Poll connection status every 2.5s without re-generating QR code
+      timerRef.current = setInterval(checkState, 2500);
     }
 
     return () => {
@@ -33,14 +34,21 @@ export default function QRCodeModal({ isOpen, instanceName, onClose, onConnected
       setLoading(true);
       setError(null);
 
-      const res = await fetch(`/api/evolution/instances/${encodeURIComponent(instanceName)}`);
+      // Explicitly pass ?qr=true to fetch/generate QR code once on open or refresh
+      const res = await fetch(`/api/evolution/instances/${encodeURIComponent(instanceName)}?qr=true`);
       const data = await res.json();
 
       if (!res.ok) throw new Error(data.error || 'Failed to load instance QR');
 
-      setConnectionState(data.state || 'CONNECTING');
+      const state = (data.state || 'CONNECTING').toUpperCase();
+      setConnectionState(state);
       if (data.qr?.base64) {
         setQrBase64(data.qr.base64);
+      }
+
+      if (state === 'OPEN' || state === 'CONNECTED') {
+        if (timerRef.current) clearInterval(timerRef.current);
+        if (onConnected) onConnected(instanceName);
       }
     } catch (err: any) {
       setError(err.message);
@@ -51,12 +59,13 @@ export default function QRCodeModal({ isOpen, instanceName, onClose, onConnected
 
   const checkState = async () => {
     try {
+      // Polls status WITHOUT ?qr=true so Baileys does NOT reset the pairing keys mid-scan!
       const res = await fetch(`/api/evolution/instances/${encodeURIComponent(instanceName)}`);
       const data = await res.json();
       const state = (data.state || '').toUpperCase();
       setConnectionState(state);
 
-      if (state === 'OPEN') {
+      if (state === 'OPEN' || state === 'CONNECTED') {
         if (timerRef.current) clearInterval(timerRef.current);
         if (onConnected) onConnected(instanceName);
       }
@@ -65,7 +74,7 @@ export default function QRCodeModal({ isOpen, instanceName, onClose, onConnected
 
   if (!isOpen) return null;
 
-  const isConnected = connectionState === 'OPEN';
+  const isConnected = connectionState === 'OPEN' || connectionState === 'CONNECTED';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
@@ -114,7 +123,7 @@ export default function QRCodeModal({ isOpen, instanceName, onClose, onConnected
                 ) : (
                   <div className="p-4 text-xs text-slate-700 flex flex-col items-center gap-2">
                     <AlertTriangle className="w-6 h-6 text-amber-500" />
-                    <span>No QR image returned. Instance might already be connected.</span>
+                    <span>No QR image returned. Click "Refresh" or check instance status.</span>
                   </div>
                 )}
               </div>
@@ -151,10 +160,11 @@ export default function QRCodeModal({ isOpen, instanceName, onClose, onConnected
                 <button
                   type="button"
                   onClick={loadQRAndState}
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-xl border border-slate-700 transition flex items-center gap-1.5 cursor-pointer"
+                  disabled={loading}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-xl border border-slate-700 transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
-                  <RefreshCw className="w-3 h-3" />
-                  <span>Refresh</span>
+                  <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+                  <span>Refresh QR</span>
                 </button>
                 <button
                   type="button"
@@ -171,4 +181,3 @@ export default function QRCodeModal({ isOpen, instanceName, onClose, onConnected
     </div>
   );
 }
-

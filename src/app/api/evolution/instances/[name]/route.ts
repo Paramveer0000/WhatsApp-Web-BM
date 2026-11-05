@@ -13,19 +13,45 @@ export async function GET(req: NextRequest, { params }: { params: { name: string
     const instanceName = decodeURIComponent(params.name);
     const client = await EvolutionClient.fromDatabase();
 
-    const state = await client.getConnectionState(instanceName);
+    const fetchQr = req.nextUrl.searchParams.get('qr') === 'true';
+
+    // 1. Fetch current connection state from Evolution API without regenerating pairing keys
+    const rawState = await client.getConnectionState(instanceName);
+    const isOpen = rawState?.toLowerCase() === 'open' || rawState?.toLowerCase() === 'connected';
+    const isConnecting = rawState?.toLowerCase() === 'connecting';
+    const status = isOpen ? 'OPEN' : (isConnecting ? 'CONNECTING' : 'CLOSE');
+
     let qr: any = null;
 
-    if (state !== 'OPEN' && state !== 'open') {
+    // 2. Only generate/fetch QR code when explicitly requested (?qr=true) and not yet connected
+    // This prevents poll requests from constantly resetting the Baileys pairing handshake!
+    if (fetchQr && !isOpen) {
       try {
         qr = await client.getConnectQR(instanceName);
       } catch (qrErr: any) {
-        logger.debug({ err: qrErr.message }, 'QR fetch warning');
+        // If instance was not created in Evolution API yet, auto-create it now
+        if (
+          qrErr?.name === 'InstanceNotFoundError' ||
+          qrErr?.code === 'INSTANCE_NOT_FOUND' ||
+          qrErr?.status === 404
+        ) {
+          try {
+            await client.createInstance(instanceName, true);
+            const webhookBase = process.env.INTERNAL_BASE_URL || 'http://app:3000';
+            const webhookSecret = process.env.WEBHOOK_SECRET || 'whsec-evolution';
+            const webhookUrl = `${webhookBase}/api/webhooks/evolution/${encodeURIComponent(instanceName)}`;
+            await client.setWebhook(instanceName, webhookUrl, webhookSecret).catch(() => {});
+            qr = await client.getConnectQR(instanceName);
+          } catch (createErr: any) {
+            logger.warn({ err: createErr.message, instanceName }, 'Failed to auto-create instance for QR');
+          }
+        } else {
+          logger.debug({ err: qrErr.message, instanceName }, 'QR fetch warning');
+        }
       }
     }
 
-    // Update DB status
-    const status = (state === 'open' || state === 'OPEN') ? 'OPEN' : (state === 'connecting' ? 'CONNECTING' : 'CLOSE');
+    // 3. Update DB status
     await db.instance.updateMany({
       where: { name: instanceName },
       data: { status },
@@ -107,4 +133,3 @@ export async function DELETE(req: NextRequest, { params }: { params: { name: str
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
-
