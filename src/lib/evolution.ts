@@ -2,6 +2,7 @@ import { db } from './db';
 import { decrypt } from './crypto';
 import { logger } from './logger';
 import { evolutionErrorsCounter, circuitStateGauge } from './metrics';
+import { resolveMediaUrlForEvolution } from './media';
 
 export interface EvolutionConfig {
   apiUrl: string;
@@ -254,14 +255,19 @@ export class EvolutionClient {
     pushHost('http://evolution:8080');
     pushHost('http://evolution-api:8080');
     pushHost('http://whatsapp_evolution_api:8080');
-    pushHost('http://host.docker.internal:8081');
-    pushHost('http://host.docker.internal:8080');
-    pushHost('http://172.17.0.1:8081');
-    pushHost('http://172.17.0.1:8080');
-    pushHost('http://localhost:8081');
-    pushHost('http://localhost:8080');
-    pushHost('http://127.0.0.1:8081');
-    pushHost('http://127.0.0.1:8080');
+
+    // Only add host/localhost fallbacks if running outside Docker (local dev)
+    const isDocker = process.env.NODE_ENV === 'production' || this.apiUrl.includes('evolution');
+    if (!isDocker) {
+      pushHost('http://host.docker.internal:8081');
+      pushHost('http://host.docker.internal:8080');
+      pushHost('http://172.17.0.1:8081');
+      pushHost('http://172.17.0.1:8080');
+      pushHost('http://localhost:8081');
+      pushHost('http://localhost:8080');
+      pushHost('http://127.0.0.1:8081');
+      pushHost('http://127.0.0.1:8080');
+    }
 
     let lastError: any;
 
@@ -449,13 +455,15 @@ export class EvolutionClient {
     const cleanFileName =
       options.fileName && options.fileName.includes('.') ? options.fileName : `media_${Date.now()}.${ext}`;
 
+    const resolved = await resolveMediaUrlForEvolution(options.media, cleanFileName);
+
     const payload = {
       number,
       mediatype: options.mediaType,
-      mimetype: options.mimetype,
+      mimetype: resolved.mimetype || options.mimetype,
       caption: options.caption || '',
-      media: options.media,
-      fileName: cleanFileName,
+      media: resolved.resolvedUrl,
+      fileName: resolved.fileName,
       delay: options.delay || 1200,
     };
 

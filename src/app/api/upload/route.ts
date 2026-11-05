@@ -44,20 +44,26 @@ export async function POST(req: NextRequest) {
     const safeBase = path.basename(file.name, ext).replace(/[^a-zA-Z0-9_-]/g, '_');
     const savedFileName = `${Date.now()}_${hash}_${safeBase}${ext}`;
 
-    // Ensure public/uploads directory exists
-    const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir, { recursive: true });
-    }
+    // Ensure uploads directories exist (both in public and shared prisma volume)
+    const targetDirs = [
+      path.join(process.cwd(), 'prisma', 'uploads'),
+      path.join(process.cwd(), 'public', 'uploads'),
+    ];
 
-    const filePath = path.join(uploadsDir, savedFileName);
-    fs.writeFileSync(filePath, buffer);
+    for (const dir of targetDirs) {
+      try {
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(path.join(dir, savedFileName), buffer);
+      } catch (err: any) {
+        logger.warn({ dir, err: err.message }, 'Could not save to upload dir');
+      }
+    }
 
     // Build base64 Data URI
     const base64Uri = `data:${mime};base64,${buffer.toString('base64')}`;
 
-    // Relative web URL
-    const publicUrl = `/uploads/${savedFileName}`;
+    // Web URL served via /api/media route
+    const publicUrl = `/api/media/${savedFileName}`;
 
     return NextResponse.json({
       success: true,

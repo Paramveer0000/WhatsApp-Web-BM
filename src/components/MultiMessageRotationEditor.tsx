@@ -125,7 +125,7 @@ function MediaUploadInput({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Upload failed');
-      onMediaUrlChange(data.base64 || data.url);
+      onMediaUrlChange(data.url || data.base64);
       onFileNameChange(data.fileName || file.name);
     } catch (err: any) {
       setUploadError(err.message || 'Upload failed');
