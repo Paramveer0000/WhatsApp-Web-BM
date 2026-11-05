@@ -185,7 +185,8 @@ export class CampaignRunner {
           todaySentInstance: 0,
         };
 
-        const hasWindowOverride = this.overrideWindowFlags.has(campaignId);
+        const currentCampaign = await db.campaign.findUnique({ where: { id: campaignId }, select: { riskOverride: true, sendWindowStart: true, sendWindowEnd: true } });
+        const hasWindowOverride = this.overrideWindowFlags.has(campaignId) || Boolean(currentCampaign?.riskOverride) || (currentCampaign?.sendWindowStart === '00:00' && currentCampaign?.sendWindowEnd === '23:59');
         const windowCheck = hasWindowOverride ? { allowed: true } : evaluateWindowRule(dummyCtx as any);
         if (!windowCheck.allowed) {
           await db.campaign.update({
