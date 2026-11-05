@@ -243,7 +243,15 @@ export class EvolutionClient {
       cleanMsg = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
     }
 
-    const msg = cleanMsg || originalMessage || 'Evolution API request failed';
+    if (!cleanMsg || cleanMsg === '[object Object]') {
+      if (typeof data?.error === 'string') {
+        cleanMsg = data.error;
+      } else {
+        cleanMsg = originalMessage || 'Evolution API request failed';
+      }
+    }
+
+    const msg = cleanMsg;
     const lower = msg.toLowerCase();
     const dataStr = JSON.stringify(data || '').toLowerCase();
     const combined = `${lower} ${dataStr}`;
@@ -480,9 +488,18 @@ export class EvolutionClient {
   }
 
   async restartInstance(instanceName: string): Promise<any> {
-    return this.request(`/instance/restart/${encodeURIComponent(instanceName)}`, {
-      method: 'PUT',
-    });
+    try {
+      return await this.request(`/instance/restart/${encodeURIComponent(instanceName)}`, {
+        method: 'POST',
+      });
+    } catch (err: any) {
+      if (err?.message?.includes('Cannot POST') || err?.status === 404) {
+        return await this.request(`/instance/restart/${encodeURIComponent(instanceName)}`, {
+          method: 'PUT',
+        });
+      }
+      throw err;
+    }
   }
 
   async logoutInstance(instanceName: string): Promise<any> {

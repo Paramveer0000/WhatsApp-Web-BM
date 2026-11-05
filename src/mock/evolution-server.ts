@@ -93,7 +93,7 @@ const server = http.createServer((req, res) => {
     }
 
     // 5. Restart / Logout / Delete Instance
-    if (pathname.startsWith('/instance/restart/') && req.method === 'PUT') {
+    if (pathname.startsWith('/instance/restart/') && (req.method === 'POST' || req.method === 'PUT')) {
       res.writeHead(200);
       return res.end(JSON.stringify({ status: 'SUCCESS', message: 'Instance restarted' }));
     }
