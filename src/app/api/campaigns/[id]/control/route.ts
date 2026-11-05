@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSessionUser } from '@/lib/auth';
 import { campaignRunner } from '@/lib/queue/campaign-runner';
+import { CircuitBreaker } from '@/lib/evolution';
 import { logger } from '@/lib/logger';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
@@ -16,7 +17,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     const campaign = await db.campaign.findUnique({
       where: { id: campaignId },
-      include: { instances: true, variants: true },
+      include: { instances: { include: { instance: true } }, variants: true },
     });
 
     if (!campaign) {
@@ -24,6 +25,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     if (action === 'START' || action === 'RESUME' || action === 'OVERRIDE_WINDOW' || action === 'SEND_NOW') {
+      for (const inst of campaign.instances) {
+        if ((inst as any).instance?.name) CircuitBreaker.recordSuccess((inst as any).instance.name);
+        if (inst.instanceId) CircuitBreaker.recordSuccess(inst.instanceId);
+      }
       if (action === 'OVERRIDE_WINDOW' || action === 'SEND_NOW') {
         campaignRunner.overrideWindow(campaignId);
       }

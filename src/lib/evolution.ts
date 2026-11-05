@@ -269,6 +269,8 @@ export class EvolutionClient {
 
     // 4. Session Closed
     if (
+      status === 428 ||
+      combined.includes('device_removed') ||
       combined.includes('session closed') ||
       combined.includes('connection closed') ||
       combined.includes('not connected') ||
