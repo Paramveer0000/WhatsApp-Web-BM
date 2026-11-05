@@ -36,6 +36,7 @@ export interface TransitionPatch {
   instanceUsed?: string;
   errorCode?: string;
   lastError?: string;
+  evaluationStatus?: string;
   attempts?: number;
   queuedAt?: Date;
   sendingAt?: Date;
@@ -79,9 +80,9 @@ export function isValidTransition(from: MessageStatus, to: MessageStatus): boole
     case 'QUEUED':
       return to === 'SENDING' || to === 'CANCELLED' || to === 'SKIPPED';
     case 'SENDING':
-      return to === 'SENT' || to === 'FAILED' || to === 'RETRY_WAIT' || to === 'UNCERTAIN';
+      return to === 'SENT' || to === 'FAILED' || to === 'RETRY_WAIT' || to === 'UNCERTAIN' || to === 'SKIPPED';
     case 'RETRY_WAIT':
-      return to === 'QUEUED' || to === 'CANCELLED' || to === 'FAILED';
+      return to === 'QUEUED' || to === 'CANCELLED' || to === 'FAILED' || to === 'SKIPPED';
     case 'UNCERTAIN':
       return to === 'SENT' || to === 'DELIVERED' || to === 'READ' || to === 'FAILED' || to === 'QUEUED';
     case 'FAILED':

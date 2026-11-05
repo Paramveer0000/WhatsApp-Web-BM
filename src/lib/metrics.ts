@@ -63,6 +63,16 @@ export const queueDepthGauge =
   });
 (global as any).__prom_queue_depth__ = queueDepthGauge;
 
+export const evolutionRetriesCounter =
+  (global as any).__prom_evolution_retries__ ||
+  new client.Counter({
+    name: 'evolution_retries_total',
+    help: 'Total campaign retries categorized by error class',
+    labelNames: ['class', 'instance'],
+    registers: [globalRegistry],
+  });
+(global as any).__prom_evolution_retries__ = evolutionRetriesCounter;
+
 export const sseClientsGauge =
   (global as any).__prom_sse_clients__ ||
   new client.Gauge({

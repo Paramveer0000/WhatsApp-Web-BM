@@ -62,3 +62,4 @@ export async function GET(req: NextRequest, { params }: { params: { file: string
     return NextResponse.json({ error: err.message || 'Internal error' }, { status: 500 });
   }
 }
+

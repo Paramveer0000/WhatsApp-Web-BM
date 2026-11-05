@@ -30,53 +30,90 @@ export interface SendMediaOptions {
 export class EvolutionError extends Error {
   public status?: number;
   public data?: any;
+  public code?: string;
+  public number?: string;
+  public jid?: string;
+  public isPermanent: boolean = false;
 
-  constructor(message: string, status?: number, data?: any) {
+  constructor(
+    message: string,
+    status?: number,
+    data?: any,
+    options?: { code?: string; number?: string; jid?: string; isPermanent?: boolean }
+  ) {
     super(message);
     this.name = 'EvolutionError';
     this.status = status;
     this.data = data;
+    this.code = options?.code;
+    this.number = options?.number;
+    this.jid = options?.jid;
+    this.isPermanent = options?.isPermanent ?? false;
   }
 }
 
 export class AuthError extends EvolutionError {
   constructor(message: string, status = 401, data?: any) {
-    super(message, status, data);
+    super(message, status, data, { code: 'AUTH_ERROR', isPermanent: true });
     this.name = 'AuthError';
+  }
+}
+
+export class InstanceNotFoundError extends EvolutionError {
+  constructor(message: string, status = 404, data?: any) {
+    super(message, status, data, { code: 'INSTANCE_NOT_FOUND', isPermanent: true });
+    this.name = 'InstanceNotFoundError';
   }
 }
 
 export class SessionClosedError extends EvolutionError {
   constructor(message: string, status = 400, data?: any) {
-    super(message, status, data);
+    super(message, status, data, { code: 'SESSION_CLOSED', isPermanent: true });
     this.name = 'SessionClosedError';
   }
 }
 
 export class InvalidRecipientError extends EvolutionError {
-  constructor(message: string, status = 400, data?: any) {
-    super(message, status, data);
+  constructor(
+    message: string,
+    status = 400,
+    data?: any,
+    options?: { number?: string; jid?: string; code?: string }
+  ) {
+    super(message, status, data, {
+      code: options?.code || 'NOT_ON_WHATSAPP',
+      number: options?.number,
+      jid: options?.jid,
+      isPermanent: true,
+    });
     this.name = 'InvalidRecipientError';
+  }
+}
+
+export class PermanentError extends EvolutionError {
+  constructor(message: string, status = 400, data?: any) {
+    super(message, status, data, { code: 'PERMANENT_ERROR', isPermanent: true });
+    this.name = 'PermanentError';
   }
 }
 
 export class RateLimitedError extends EvolutionError {
   constructor(message: string, status = 429, data?: any) {
-    super(message, status, data);
+    super(message, status, data, { code: 'RATE_LIMITED', isPermanent: false });
     this.name = 'RateLimitedError';
   }
 }
 
 export class TransientError extends EvolutionError {
   constructor(message: string, status = 500, data?: any) {
-    super(message, status, data);
+    super(message, status, data, { code: 'TRANSIENT_ERROR', isPermanent: false });
     this.name = 'TransientError';
   }
 }
 
 export class UnknownError extends EvolutionError {
   constructor(message: string, status = 500, data?: any) {
-    super(message, status, data);
+    super(message, status, data, { code: 'UNKNOWN_ERROR', isPermanent: false });
     this.name = 'UnknownError';
   }
 }
@@ -174,18 +211,34 @@ export class EvolutionClient {
 
   static classifyError(status?: number, data?: any, originalMessage?: string): EvolutionError {
     let cleanMsg = '';
-    if (Array.isArray(data?.message)) {
-      cleanMsg = data.message
-        .map((m: any) =>
-          typeof m === 'object' && m !== null
-            ? m.exists === false
-              ? `Phone ${m.number || m.jid || ''} is not registered on WhatsApp`
-              : JSON.stringify(m)
-            : String(m)
-        )
+    let extractedNumber: string | undefined;
+    let extractedJid: string | undefined;
+
+    // Check array in data.message or data.response.message
+    const msgArray = Array.isArray(data?.message)
+      ? data.message
+      : Array.isArray(data?.response?.message)
+      ? data.response.message
+      : null;
+
+    if (msgArray) {
+      cleanMsg = msgArray
+        .map((m: any) => {
+          if (typeof m === 'object' && m !== null) {
+            if (m.exists === false) {
+              extractedNumber = m.number || (m.jid ? String(m.jid).split('@')[0] : undefined);
+              extractedJid = m.jid;
+              return `Phone ${extractedNumber || ''} is not registered on WhatsApp`;
+            }
+            return JSON.stringify(m);
+          }
+          return String(m);
+        })
         .join(', ');
     } else if (typeof data?.message === 'string') {
       cleanMsg = data.message;
+    } else if (typeof data?.response?.message === 'string') {
+      cleanMsg = data.response.message;
     } else if (data?.error) {
       cleanMsg = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
     }
@@ -195,12 +248,26 @@ export class EvolutionClient {
     const dataStr = JSON.stringify(data || '').toLowerCase();
     const combined = `${lower} ${dataStr}`;
 
+    // 1. Auth Error
     if (status === 401 || status === 403) {
       return new AuthError(msg, status, data);
     }
-    if (status === 429 || combined.includes('rate limit')) {
+
+    // 2. Instance Not Found
+    if (
+      status === 404 ||
+      combined.includes('instance not found') ||
+      combined.includes('instance does not exist')
+    ) {
+      return new InstanceNotFoundError(msg, status || 404, data);
+    }
+
+    // 3. Rate Limited
+    if (status === 429 || combined.includes('rate limit') || combined.includes('too many requests')) {
       return new RateLimitedError(msg, status, data);
     }
+
+    // 4. Session Closed
     if (
       combined.includes('session closed') ||
       combined.includes('connection closed') ||
@@ -208,28 +275,46 @@ export class EvolutionClient {
       combined.includes('device disconnected') ||
       combined.includes('bad session')
     ) {
-      return new SessionClosedError(msg, status, data);
+      return new SessionClosedError(msg, status || 400, data);
     }
+
+    // 5. Invalid Recipient (Not on WhatsApp)
     if (
+      extractedNumber ||
       combined.includes('exists:false') ||
       combined.includes('exists: false') ||
       combined.includes('exists":false') ||
       combined.includes('exists": false') ||
       combined.includes('is not on whatsapp') ||
       combined.includes('not registered on whatsapp') ||
+      combined.includes('number not exists') ||
+      combined.includes('does not exist on whatsapp') ||
       combined.includes('invalid number') ||
-      combined.includes('not on whatsapp')
+      combined.includes('not on whatsapp') ||
+      combined.includes('contact not found')
     ) {
-      return new InvalidRecipientError(msg, status, data);
+      return new InvalidRecipientError(msg, status || 400, data, {
+        number: extractedNumber,
+        jid: extractedJid,
+      });
     }
+
+    // 6. Transient Server Errors & Timeouts
     if (
-      !status ||
-      status >= 500 ||
+      (status && status >= 500) ||
       combined.includes('timeout') ||
+      combined.includes('timed out') ||
+      combined.includes('aborted') ||
       combined.includes('econnreset') ||
       combined.includes('fetch failed')
     ) {
-      return new TransientError(msg, status, data);
+      return new TransientError(msg, status || 500, data);
+    }
+
+    // 7. Unknown 400 Client Errors are Permanent by default
+    if (status && status >= 400 && status < 500) {
+      logger.warn({ status, data, msg }, 'Unrecognized 400 client error from Evolution API treated as permanent');
+      return new PermanentError(msg, status, data);
     }
 
     return new UnknownError(msg, status, data);
@@ -318,8 +403,17 @@ export class EvolutionClient {
           return data as T;
         } catch (err: any) {
           lastError = err instanceof EvolutionError ? err : EvolutionClient.classifyError(undefined, undefined, err.message);
-          // If permanent client error, don't loop other hosts
-          if (err instanceof AuthError || err instanceof InvalidRecipientError) throw err;
+          // If permanent client error, throw immediately and do not loop other hosts
+          if (
+            err?.isPermanent ||
+            err instanceof AuthError ||
+            err instanceof InvalidRecipientError ||
+            err instanceof InstanceNotFoundError ||
+            err instanceof PermanentError ||
+            err instanceof SessionClosedError
+          ) {
+            throw err;
+          }
         } finally {
           clearTimeout(timeout);
         }

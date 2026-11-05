@@ -231,12 +231,17 @@ export async function POST(req: NextRequest) {
     const hasUnassigned = rawLists.includes('UNASSIGNED_CONTACTS') || targetMode === 'unassigned';
     const validListIds = rawLists.filter((id) => id !== 'ALL_CONTACTS' && id !== 'UNASSIGNED_CONTACTS');
 
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
     if (hasAll) {
-      // Broadcast to ALL non-blacklisted contacts
+      // Broadcast to ALL non-blacklisted contacts (excluding known non-WhatsApp numbers within 30-day TTL)
       const allContacts = await db.contact.findMany({
         where: { isBlacklisted: false },
       });
       for (const c of allContacts) {
+        if (c.waExists === false && c.waCheckedAt && new Date(c.waCheckedAt) > thirtyDaysAgo) {
+          continue;
+        }
         targetContactsMap.set(c.phone, {
           id: c.id,
           contactId: c.id,
@@ -255,6 +260,9 @@ export async function POST(req: NextRequest) {
           },
         });
         for (const c of unassignedContacts) {
+          if (c.waExists === false && c.waCheckedAt && new Date(c.waCheckedAt) > thirtyDaysAgo) {
+            continue;
+          }
           targetContactsMap.set(c.phone, {
             id: c.id,
             contactId: c.id,
@@ -273,6 +281,9 @@ export async function POST(req: NextRequest) {
 
         for (const lc of listContacts) {
           if (!lc.contact.isBlacklisted) {
+            if (lc.contact.waExists === false && lc.contact.waCheckedAt && new Date(lc.contact.waCheckedAt) > thirtyDaysAgo) {
+              continue;
+            }
             targetContactsMap.set(lc.contact.phone, {
               id: lc.contact.id,
               contactId: lc.contact.id,
@@ -310,6 +321,9 @@ export async function POST(req: NextRequest) {
           },
         });
         if (!contact.isBlacklisted) {
+          if (contact.waExists === false && contact.waCheckedAt && new Date(contact.waCheckedAt) > thirtyDaysAgo) {
+            continue;
+          }
           targetContactsMap.set(norm.formatted, {
             id: contact.id,
             contactId: contact.id,
@@ -321,9 +335,20 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    if (Array.isArray(recipients)) {
+    if (Array.isArray(recipients) && recipients.length > 0) {
+      const phones = recipients.map((r: any) => r.phone).filter(Boolean);
+      const knownInvalid = await db.contact.findMany({
+        where: {
+          phone: { in: phones },
+          waExists: false,
+          waCheckedAt: { gte: thirtyDaysAgo },
+        },
+        select: { phone: true },
+      });
+      const invalidSet = new Set(knownInvalid.map((k) => k.phone));
+
       for (const r of recipients) {
-        if (r.phone && !targetContactsMap.has(r.phone)) {
+        if (r.phone && !invalidSet.has(r.phone) && !targetContactsMap.has(r.phone)) {
           targetContactsMap.set(r.phone, {
             id: r.id || r.contactId,
             contactId: r.contactId || r.id,

@@ -1,6 +1,7 @@
 import { DateTime } from 'luxon';
 import { db, ensureDbSchema } from '../db';
-import { EvolutionClient, CircuitBreaker } from '../evolution';
+import { EvolutionClient, CircuitBreaker, InvalidRecipientError, AuthError, SessionClosedError } from '../evolution';
+import { isErrorRetryable, calculateRetryBackoff } from '../retry-policy';
 import { renderMessage } from '../spintax';
 import { eventBus } from './events';
 import {
@@ -236,22 +237,47 @@ export class CampaignRunner {
           });
 
           if (retryCandidate) {
-            const errLower = (retryCandidate.lastError || '').toLowerCase();
             const isNonRetryable =
-              errLower.includes('not on whatsapp') ||
-              errLower.includes('not registered') ||
-              errLower.includes('exists:false') ||
-              errLower.includes('exists: false') ||
-              errLower.includes('invalid number') ||
+              !isErrorRetryable(retryCandidate.lastError) ||
               retryCandidate.attempts >= retryCandidate.maxAttempts;
 
             if (isNonRetryable) {
-              await transitionMessage(retryCandidate.id, 'RETRY_WAIT', 'FAILED', {
-                lastError: retryCandidate.lastError || 'Phone number not registered on WhatsApp',
-                failedAt: new Date(),
-              });
+              const isInvalidRecipient =
+                retryCandidate.errorCode === 'NOT_ON_WHATSAPP' ||
+                (retryCandidate.lastError || '').toLowerCase().includes('not on whatsapp') ||
+                (retryCandidate.lastError || '').toLowerCase().includes('not registered') ||
+                (retryCandidate.lastError || '').toLowerCase().includes('exists:false') ||
+                (retryCandidate.lastError || '').toLowerCase().includes('exists: false') ||
+                (retryCandidate.lastError || '').toLowerCase().includes('invalid number');
+
+              if (isInvalidRecipient) {
+                await transitionMessage(retryCandidate.id, 'RETRY_WAIT', 'SKIPPED', {
+                  lastError: retryCandidate.lastError || 'Phone number not registered on WhatsApp',
+                  errorCode: 'NOT_ON_WHATSAPP',
+                  evaluationStatus: 'NOT_WA',
+                  failedAt: new Date(),
+                });
+              } else {
+                await transitionMessage(retryCandidate.id, 'RETRY_WAIT', 'FAILED', {
+                  lastError: retryCandidate.lastError || 'Delivery failed permanently',
+                  failedAt: new Date(),
+                });
+              }
               continue;
             } else {
+              // Enforce exponential backoff delay before requeue (minimum 5s, typical 30s/120s/480s)
+              const requiredBackoffMs = calculateRetryBackoff(retryCandidate.attempts);
+              const lastAttemptTime = retryCandidate.sendingAt
+                ? new Date(retryCandidate.sendingAt).getTime()
+                : 0;
+              const elapsed = Date.now() - lastAttemptTime;
+
+              if (elapsed < requiredBackoffMs) {
+                const waitTime = Math.min(requiredBackoffMs - elapsed, 5000);
+                await new Promise((r) => setTimeout(r, Math.max(1000, waitTime)));
+                continue;
+              }
+
               // Requeue transient error candidate
               await transitionMessage(retryCandidate.id, 'RETRY_WAIT', 'QUEUED');
               continue;
@@ -458,6 +484,7 @@ export class CampaignRunner {
         let sendSuccess = false;
         let errorMessage = '';
         let messageId = '';
+        let dispatchError: any = null;
         const startTime = Date.now();
 
         try {
@@ -486,9 +513,22 @@ export class CampaignRunner {
           CircuitBreaker.recordSuccess(activeInstance.name);
           sendDurationHistogram.observe({ instance: activeInstance.name, result: 'success' }, (Date.now() - startTime) / 1000);
         } catch (err: any) {
+          dispatchError = err;
           errorMessage = err.message || 'Dispatch error';
-          CircuitBreaker.recordFailure(activeInstance.name, EvolutionClient.isCircuitBreakerError(err));
           sendDurationHistogram.observe({ instance: activeInstance.name, result: 'error' }, (Date.now() - startTime) / 1000);
+
+          const isRecipientIssue =
+            err instanceof InvalidRecipientError ||
+            err?.code === 'NOT_ON_WHATSAPP' ||
+            errorMessage.toLowerCase().includes('not registered on whatsapp') ||
+            errorMessage.toLowerCase().includes('not on whatsapp') ||
+            errorMessage.toLowerCase().includes('exists:false') ||
+            errorMessage.toLowerCase().includes('exists: false');
+
+          // Never trip circuit breaker for recipient-level errors (e.g. not on WhatsApp)
+          if (!isRecipientIssue) {
+            CircuitBreaker.recordFailure(activeInstance.name, EvolutionClient.isCircuitBreakerError(err));
+          }
 
           if (EvolutionClient.isCircuitBreakerError(err)) {
             await transitionMessage(recipient.id, 'SENDING', 'FAILED', { lastError: errorMessage });
@@ -533,33 +573,105 @@ export class CampaignRunner {
           });
         } else {
           const isInvalidRecipient =
+            dispatchError instanceof InvalidRecipientError ||
+            dispatchError?.code === 'NOT_ON_WHATSAPP' ||
             errorMessage.toLowerCase().includes('not registered on whatsapp') ||
             errorMessage.toLowerCase().includes('not on whatsapp') ||
             errorMessage.toLowerCase().includes('invalid number') ||
             errorMessage.toLowerCase().includes('exists:false') ||
             errorMessage.toLowerCase().includes('exists: false');
 
-          // Do not increment instance failure counter for recipient errors (contact not on WhatsApp)
-          if (!isInvalidRecipient) {
-            consecutiveFailures++;
+          if (isInvalidRecipient) {
+            // Update recipient to SKIPPED, never retry
+            await transitionMessage(recipient.id, 'SENDING', 'SKIPPED', {
+              lastError: `Phone number not registered on WhatsApp: ${recipient.phone}`,
+              errorCode: 'NOT_ON_WHATSAPP',
+              evaluationStatus: 'NOT_WA',
+              failedAt: new Date(),
+            });
+
+            // Update contact in DB so future campaigns automatically exclude this contact (TTL 30 days)
+            try {
+              await db.contact.updateMany({
+                where: { phone: recipient.phone },
+                data: {
+                  waExists: false,
+                  waCheckedAt: new Date(),
+                },
+              });
+            } catch (cErr: any) {
+              logger.warn({ phone: recipient.phone, err: cErr.message }, 'Failed to update contact waExists flag');
+            }
+
+            try {
+              messagesCounter.inc({ status: 'SKIPPED', instance: activeInstance.name });
+            } catch {}
+
+            eventBus.emitLog(campaignId, {
+              type: 'warning',
+              status: 'SKIPPED',
+              message: `Recipient ${recipient.phone} is not on WhatsApp (skipped)`,
+              recipientId: recipient.id,
+              phone: recipient.phone,
+            });
+
+            // User requirement: "if message fail , it(same msg) will auto asign to second contact"
+            // Reassign the exact failed variant to the next pending contact so this message is delivered!
+            try {
+              if (variant && (recipient.variantId || variant.id)) {
+                const nextPending = await db.campaignRecipient.findFirst({
+                  where: {
+                    campaignId,
+                    status: 'PENDING',
+                    id: { not: recipient.id },
+                  },
+                  orderBy: { rotationIndex: 'asc' },
+                });
+
+                if (nextPending) {
+                  await db.campaignRecipient.update({
+                    where: { id: nextPending.id },
+                    data: {
+                      variantId: variant.id || recipient.variantId,
+                      variantIndex: recipient.variantIndex,
+                    },
+                  });
+                  eventBus.emitLog(campaignId, {
+                    type: 'info',
+                    status: 'VARIANT_REASSIGNED',
+                    message: `Undelivered message variant (${variant.label || `M${variant.position || ''}`}) auto-reassigned to next contact (${nextPending.phone}).`,
+                    recipientId: nextPending.id,
+                    phone: nextPending.phone,
+                  });
+                }
+              }
+            } catch (reassignErr: any) {
+              logger.warn({ reassignErr: reassignErr.message }, 'Failed to reassign failed variant to next contact');
+            }
+
+            // Short gap (1.5s) instead of full human pacing delay (12-25s)
+            await new Promise((r) => setTimeout(r, 1500));
+            continue;
           }
 
+          // Transient error handling with retry policy
+          consecutiveFailures++;
           try {
             messagesCounter.inc({ status: 'FAILED', instance: activeInstance.name });
           } catch {}
 
-          if (!isInvalidRecipient && recipient.attempts < recipient.maxAttempts) {
+          const retryable = isErrorRetryable(errorMessage) && recipient.attempts < recipient.maxAttempts;
+          if (retryable) {
             await transitionMessage(recipient.id, 'SENDING', 'RETRY_WAIT', {
               lastError: errorMessage,
             });
           } else {
             await transitionMessage(recipient.id, 'SENDING', 'FAILED', {
-              lastError: isInvalidRecipient ? `Phone number not registered on WhatsApp: ${recipient.phone}` : errorMessage,
+              lastError: errorMessage,
               failedAt: new Date(),
             });
 
-            // User requirement: "if message fail , it(same msg) will auto asign to second contact"
-            // Reassign the exact failed variant to the next pending contact so this message is delivered!
+            // Reassign the exact failed variant to next contact
             try {
               if (variant && (recipient.variantId || variant.id)) {
                 const nextPending = await db.campaignRecipient.findFirst({
@@ -596,9 +708,7 @@ export class CampaignRunner {
           eventBus.emitLog(campaignId, {
             type: 'danger',
             status: 'FAILED',
-            message: isInvalidRecipient
-              ? `Recipient ${recipient.phone} is not on WhatsApp (skipped)`
-              : `Send failed to ${recipient.phone}: ${errorMessage}`,
+            message: `Send failed to ${recipient.phone}: ${errorMessage}`,
             recipientId: recipient.id,
             phone: recipient.phone,
           });

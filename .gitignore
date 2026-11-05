@@ -48,3 +48,4 @@ next-env.d.ts
 id_rsa*
 id_ed25519*
 .ssh_key*
+scratch/

@@ -179,7 +179,36 @@ export async function POST(req: NextRequest, { params }: { params?: { instanceId
         const remoteJid = key.remoteJid || '';
         // Skip group messages & broadcast statuses
         if (!remoteJid.includes('@g.us') && !remoteJid.includes('status@broadcast')) {
-          const phone = remoteJid.replace('@s.whatsapp.net', '').replace('@c.us', '').replace(/[^\d]/g, '');
+          const isLid = remoteJid.includes('@lid');
+          let phone = isLid ? '' : remoteJid.replace('@s.whatsapp.net', '').replace('@c.us', '').replace(/[^\d]/g, '');
+
+          // Resolve @lid JID to real phone number via quoted message stanzaId or recent recipient
+          const quotedStanzaId =
+            msgData?.extendedTextMessage?.contextInfo?.stanzaId ||
+            payload.data?.contextInfo?.stanzaId;
+
+          let resolvedRecipient: any = null;
+          if (quotedStanzaId) {
+            resolvedRecipient = await db.campaignRecipient.findFirst({
+              where: {
+                OR: [{ evolutionMessageId: quotedStanzaId }, { messageId: quotedStanzaId }],
+              },
+            });
+          }
+
+          if (!resolvedRecipient && isLid) {
+            resolvedRecipient = await db.campaignRecipient.findFirst({
+              where: { remoteJid },
+              orderBy: { sentAt: 'desc' },
+            });
+          }
+
+          if (resolvedRecipient?.phone) {
+            phone = resolvedRecipient.phone;
+          } else if (!phone) {
+            phone = remoteJid;
+          }
+
           const messageId = key.id || `INC_${Date.now()}`;
           const pushName = payload.data?.pushName || null;
 
