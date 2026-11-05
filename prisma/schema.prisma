@@ -116,6 +116,7 @@ model MediaAsset {
   size      Int
   path      String
   url       String?
+  data      String?
   createdAt DateTime @default(now())
 }
 

@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import path from 'path';
 import fs from 'fs';
+import { db } from '@/lib/db';
 
 const MIME_MAP: Record<string, string> = {
   '.jpg': 'image/jpeg',
@@ -43,6 +44,40 @@ export async function GET(req: NextRequest, { params }: { params: { file: string
     }
 
     if (!foundPath) {
+      // Fallback: Query database MediaAsset table
+      const asset = await db.mediaAsset.findFirst({
+        where: {
+          OR: [
+            { path: fileName },
+            { url: { contains: fileName } },
+          ],
+        },
+      });
+
+      if (asset && asset.data) {
+        const match = asset.data.match(/^data:([^;]+);base64,(.+)$/s);
+        if (match) {
+          const contentType = match[1];
+          const fileBuffer = Buffer.from(match[2], 'base64');
+
+          // Cache to filesystem for subsequent fast reads
+          try {
+            const cacheDir = path.join(process.cwd(), 'prisma', 'uploads');
+            if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
+            fs.writeFileSync(path.join(cacheDir, fileName), fileBuffer);
+          } catch {}
+
+          return new NextResponse(fileBuffer, {
+            status: 200,
+            headers: {
+              'Content-Type': contentType,
+              'Content-Length': fileBuffer.length.toString(),
+              'Cache-Control': 'public, max-age=31536000, immutable',
+            },
+          });
+        }
+      }
+
       return NextResponse.json({ error: 'File not found' }, { status: 404 });
     }
 

@@ -7,6 +7,8 @@ if [ -d "/app/prisma-dist" ]; then
   echo "==> [Dokploy Startup] Refreshing schema.prisma from container image..."
   cp -f /app/prisma-dist/schema.prisma /app/prisma/schema.prisma || true
   cp -f /app/prisma-dist/seed.ts /app/prisma/seed.ts 2>/dev/null || true
+  mkdir -p /app/prisma/uploads 2>/dev/null || true
+  chmod -R 777 /app/prisma/uploads 2>/dev/null || true
 fi
 
 # Run schema sync and seeding when starting the web application (avoids concurrent SQLite push collisions with worker)

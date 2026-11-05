@@ -29,10 +29,9 @@ export async function resolveMediaUrlForEvolution(
 
   const baseInternal =
     process.env.INTERNAL_BASE_URL ||
-    process.env.PUBLIC_BASE_URL ||
     (process.env.NODE_ENV === 'production'
-      ? 'http://whatsappwebbm-whatsappwebbm-jf5s9a-c9ba86-200-141-6-138.sslip.io'
-      : 'http://localhost:3000');
+      ? 'http://app:3000'
+      : (process.env.PUBLIC_BASE_URL || 'http://localhost:3000'));
 
   // Case 1: Data URI Base64 (e.g. data:image/jpeg;base64,...)
   if (mediaUrl.startsWith('data:')) {
@@ -59,6 +58,16 @@ export async function resolveMediaUrlForEvolution(
             fs.writeFileSync(path.join(dir, safeFileName), buffer);
           } catch {}
         }
+
+        // Persist to MediaAsset database table for resilient cross-container serving
+        try {
+          const { db } = await import('./db');
+          await db.mediaAsset.upsert({
+            where: { sha256: hash },
+            update: { path: safeFileName, url: `/api/media/${safeFileName}`, data: mediaUrl },
+            create: { sha256: hash, mime, size: buffer.length, path: safeFileName, url: `/api/media/${safeFileName}`, data: mediaUrl },
+          });
+        } catch {}
 
         const resolvedUrl = `${baseInternal}/api/media/${safeFileName}`;
         logger.info({ mime, bytes: buffer.length, resolvedUrl }, 'Converted Base64 media to internal served URL');

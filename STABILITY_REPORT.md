@@ -96,3 +96,4 @@ All 82 automated test cases pass in Vitest across 8 test suites:
    - Configure Webhook events: subscribe only to `CONNECTION_UPDATE`, `MESSAGES_UPDATE`, `MESSAGES_UPSERT`.
 2. **Instance Concurrency:** Maintain concurrency of 1 in-flight message per instance lane to avoid Baileys rate-limiting.
 3. **Pacing Rules:** Standard pacing: 12–25s random delay. Skipped invalid contacts: 1.5s gap.
+

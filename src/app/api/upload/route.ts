@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
+import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import path from 'path';
 import fs from 'fs';
@@ -64,6 +65,30 @@ export async function POST(req: NextRequest) {
 
     // Web URL served via /api/media route
     const publicUrl = `/api/media/${savedFileName}`;
+
+    // Persist to MediaAsset database table for resilient cross-container & persistent serving
+    try {
+      await db.mediaAsset.upsert({
+        where: { sha256: hash },
+        update: {
+          mime,
+          size: file.size,
+          path: savedFileName,
+          url: publicUrl,
+          data: base64Uri,
+        },
+        create: {
+          sha256: hash,
+          mime,
+          size: file.size,
+          path: savedFileName,
+          url: publicUrl,
+          data: base64Uri,
+        },
+      });
+    } catch (dbErr: any) {
+      logger.warn({ err: dbErr.message }, 'Failed to persist media asset in database');
+    }
 
     return NextResponse.json({
       success: true,

@@ -19,6 +19,8 @@ services:
       - EVOLUTION_API_URL=http://evolution:8080
       - GLOBAL_API_KEY=429683C4C97741
       - WEBHOOK_SECRET=whsec-evolution-shared-secret
+      - INTERNAL_BASE_URL=http://app:3000
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-http://whatsappwebbm-whatsappwebbm-jf5s9a-c9ba86-200-141-6-138.sslip.io}
     volumes:
       - app_data:/app/prisma
     networks:
@@ -48,6 +50,8 @@ services:
       - REDIS_URL=redis://redis:6379
       - EVOLUTION_API_URL=http://evolution:8080
       - GLOBAL_API_KEY=429683C4C97741
+      - INTERNAL_BASE_URL=http://app:3000
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-http://whatsappwebbm-whatsappwebbm-jf5s9a-c9ba86-200-141-6-138.sslip.io}
     volumes:
       - app_data:/app/prisma
     networks:

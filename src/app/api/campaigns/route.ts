@@ -168,17 +168,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No matching WhatsApp instances found in database' }, { status: 400 });
     }
 
-    // Prepare & normalize variants
+    // Prepare & normalize variants (inheriting campaign-level media across all variations)
     let normalizedVariants: VariantInput[] = [];
+    const globalMediaType = (body.mediaType && body.mediaType !== 'text') ? body.mediaType : null;
+    const globalMediaUrl = body.mediaUrl || null;
+    const globalFileName = body.fileName || null;
+    const globalCaption = body.caption || null;
+
     if (Array.isArray(variants) && variants.length > 0) {
       normalizedVariants = variants.map((v: any, idx: number) => ({
         position: v.position || idx + 1,
         label: v.label || `Message ${idx + 1}`,
         content: v.content || v.body || '',
-        mediaType: v.mediaType || 'text',
-        mediaUrl: v.mediaUrl || null,
-        fileName: v.fileName || null,
-        caption: v.caption || null,
+        mediaType: (v.mediaType && v.mediaType !== 'text') ? v.mediaType : (globalMediaType || 'text'),
+        mediaUrl: v.mediaUrl || globalMediaUrl || null,
+        fileName: v.fileName || globalFileName || null,
+        caption: v.caption || globalCaption || null,
         weight: v.weight ?? v.weightPercent ?? Math.floor(100 / variants.length),
         weightPercent: v.weightPercent ?? v.weight ?? Math.floor(100 / variants.length),
         contentHash: computeContentHash(v.content || v.body || ''),
@@ -188,10 +193,10 @@ export async function POST(req: NextRequest) {
         position: 1,
         label: 'Message 1',
         content: rawTemplate || 'Hello {name}',
-        mediaType: body.mediaType || 'text',
-        mediaUrl: body.mediaUrl || null,
-        fileName: body.fileName || null,
-        caption: body.caption || null,
+        mediaType: globalMediaType || 'text',
+        mediaUrl: globalMediaUrl || null,
+        fileName: globalFileName || null,
+        caption: globalCaption || null,
         weight: 100,
         weightPercent: 100,
         contentHash: computeContentHash(rawTemplate || 'Hello {name}'),

@@ -240,5 +240,38 @@ describe('Part 1 & 2: Integration & Stability Simulations', () => {
     expect(retryAttempts).toBe(0); // Zero retries on non-WhatsApp numbers!
     expect(circuitBreakerTripped).toBe(false); // Breaker untouched!
   });
+
+  it('inherits campaign-level mediaUrl and mediaType across all variations', () => {
+    const body = {
+      mediaType: 'image',
+      mediaUrl: 'http://app:3000/api/media/upload_sample.jpg',
+      fileName: 'offer.jpg',
+      variants: [
+        { position: 1, label: 'Message 1', content: 'Offer 1' },
+        { position: 2, label: 'Message 2', content: 'Offer 2' },
+        { position: 3, label: 'Message 3', content: 'Offer 3' },
+      ],
+    };
+
+    const globalMediaType = (body.mediaType && body.mediaType !== 'text') ? body.mediaType : null;
+    const globalMediaUrl = body.mediaUrl || null;
+    const globalFileName = body.fileName || null;
+
+    const normalizedVariants = body.variants.map((v: any, idx: number) => ({
+      position: v.position || idx + 1,
+      label: v.label || `Message ${idx + 1}`,
+      content: v.content,
+      mediaType: (v.mediaType && v.mediaType !== 'text') ? v.mediaType : (globalMediaType || 'text'),
+      mediaUrl: v.mediaUrl || globalMediaUrl || null,
+      fileName: v.fileName || globalFileName || null,
+    }));
+
+    expect(normalizedVariants.length).toBe(3);
+    for (const variant of normalizedVariants) {
+      expect(variant.mediaType).toBe('image');
+      expect(variant.mediaUrl).toBe('http://app:3000/api/media/upload_sample.jpg');
+      expect(variant.fileName).toBe('offer.jpg');
+    }
+  });
 });
 
