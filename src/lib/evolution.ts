@@ -268,8 +268,11 @@ export class EvolutionClient {
     for (let round = 1; round <= 2; round++) {
       for (const host of candidateHosts) {
         const url = `${host}${ep}`;
+        const isMediaOrLarge =
+          ep.includes('sendMedia') || (typeof options.body === 'string' && options.body.length > 30000);
+        const timeoutMs = isMediaOrLarge ? 60000 : 15000;
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 12000);
+        const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
         try {
           logger.debug({ url, method: options.method || 'GET', round }, 'Evolution API request');
@@ -435,13 +438,24 @@ export class EvolutionClient {
   }
 
   async sendMedia(instanceName: string, number: string, options: SendMediaOptions): Promise<any> {
+    const ext =
+      options.mimetype === 'image/jpeg'
+        ? 'jpg'
+        : options.mimetype === 'image/png'
+        ? 'png'
+        : options.mimetype === 'video/mp4'
+        ? 'mp4'
+        : 'pdf';
+    const cleanFileName =
+      options.fileName && options.fileName.includes('.') ? options.fileName : `media_${Date.now()}.${ext}`;
+
     const payload = {
       number,
       mediatype: options.mediaType,
       mimetype: options.mimetype,
       caption: options.caption || '',
       media: options.media,
-      fileName: options.fileName || 'file',
+      fileName: cleanFileName,
       delay: options.delay || 1200,
     };
 
