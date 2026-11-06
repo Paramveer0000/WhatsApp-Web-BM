@@ -1,9 +1,15 @@
 import { NextRequest } from 'next/server';
+import { getSessionUser } from '@/lib/auth';
 import { eventBus } from '@/lib/queue/events';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
+  const user = await getSessionUser();
+  if (!user) {
+    return new Response('Unauthorized', { status: 401 });
+  }
+
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({

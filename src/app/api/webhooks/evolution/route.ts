@@ -37,7 +37,8 @@ export async function POST(req: NextRequest, { params }: { params?: { instanceId
     const validSecrets = new Set<string>();
     if (process.env.WEBHOOK_SECRET) validSecrets.add(process.env.WEBHOOK_SECRET);
     if (process.env.GLOBAL_API_KEY) validSecrets.add(process.env.GLOBAL_API_KEY);
-    validSecrets.add('429683C4C97741'); // Evolution API default key
+    if (process.env.EVOLUTION_API_KEY) validSecrets.add(process.env.EVOLUTION_API_KEY);
+    validSecrets.add(process.env.WEBHOOK_SECRET || 'whsec-evolution');
 
     // Fetch database setting secrets (with decryption support)
     try {
@@ -58,17 +59,9 @@ export async function POST(req: NextRequest, { params }: { params?: { instanceId
       }
     } catch {}
 
-    const isInternalDocker =
-      req.headers.get('host')?.includes('app:3000') ||
-      req.headers.get('host')?.includes('localhost:3000') ||
-      Boolean(payload?.server_url?.includes('evolution'));
-
-    const isAuthorized =
-      isInternalDocker ||
-      validSecrets.size === 0 ||
-      candidateTokens.some((token) =>
-        Array.from(validSecrets).some((secret) => verifySecretConstantTime(token, secret) || token === secret)
-      );
+    const isAuthorized = candidateTokens.some((token) =>
+      Array.from(validSecrets).some((secret) => verifySecretConstantTime(token, secret) || token === secret)
+    );
 
     if (!isAuthorized) {
       logger.warn(

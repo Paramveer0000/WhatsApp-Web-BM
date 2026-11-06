@@ -1,10 +1,20 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { cookies } from 'next/headers';
 import { db } from './db';
 import { NextRequest, NextResponse } from 'next/server';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-jwt-secret-key-12345';
+let runtimeSecret = process.env.JWT_SECRET;
+if (!runtimeSecret) {
+  if (process.env.NODE_ENV === 'production') {
+    // Generate an ephemeral strong 256-bit secret so attackers cannot forge tokens using known fallbacks
+    runtimeSecret = crypto.randomBytes(32).toString('hex');
+  } else {
+    runtimeSecret = 'fallback-jwt-secret-key-12345';
+  }
+}
+const JWT_SECRET = runtimeSecret;
 const COOKIE_NAME = 'wa_bulk_session';
 
 export interface UserSession {

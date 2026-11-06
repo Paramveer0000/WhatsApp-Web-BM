@@ -25,6 +25,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'File size exceeds maximum 50MB limit' }, { status: 400 });
     }
 
+    // Strict extension allowlist to prevent arbitrary file upload & stored XSS
+    const ALLOWED_EXTENSIONS = new Set([
+      '.jpg', '.jpeg', '.png', '.webp', '.gif',
+      '.mp4', '.mov', '.avi', '.m4v',
+      '.mp3', '.ogg', '.wav', '.m4a',
+      '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.csv', '.txt',
+    ]);
+
+    const rawExt = path.extname(file.name).toLowerCase();
+    if (!rawExt || !ALLOWED_EXTENSIONS.has(rawExt)) {
+      return NextResponse.json(
+        {
+          error: `Unsupported file type "${rawExt || 'unknown'}". Allowed: images (.jpg, .png, .webp, .gif), video, audio, PDF, and spreadsheets.`,
+        },
+        { status: 400 }
+      );
+    }
+
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
@@ -40,7 +58,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Generate safe unique filename
-    const ext = path.extname(file.name) || (mediaType === 'image' ? '.png' : '.bin');
+    const ext = rawExt;
     const hash = crypto.randomBytes(8).toString('hex');
     const safeBase = path.basename(file.name, ext).replace(/[^a-zA-Z0-9_-]/g, '_');
     const savedFileName = `${Date.now()}_${hash}_${safeBase}${ext}`;

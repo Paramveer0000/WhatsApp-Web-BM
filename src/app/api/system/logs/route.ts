@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, ensureDbSchema } from '@/lib/db';
 import { recordSystemLog } from '@/lib/logger';
+import { getSessionUser } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
+    const user = await getSessionUser();
+    if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+
     await ensureDbSchema();
 
     const { searchParams } = new URL(req.url);
@@ -99,6 +103,9 @@ export async function GET(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
+    const user = await getSessionUser();
+    if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+
     await ensureDbSchema();
     const { searchParams } = new URL(req.url);
     const keepLast = parseInt(searchParams.get('keepLast') || '0', 10);
@@ -132,6 +139,9 @@ export async function DELETE(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const user = await getSessionUser();
+    if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+
     await ensureDbSchema();
     const body = await req.json().catch(() => ({}));
     const message = body.message || 'Manual system diagnostic ping';

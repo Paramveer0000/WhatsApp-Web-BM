@@ -2,9 +2,15 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
+import { getSessionUser } from '@/lib/auth';
 import { eventBus } from '@/lib/queue/events';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  const user = await getSessionUser();
+  if (!user) {
+    return new Response('Unauthorized', { status: 401 });
+  }
+
   const campaignId = params.id;
   const encoder = new TextEncoder();
 
