@@ -389,3 +389,4 @@ export default function HelpGuideModal({ isOpen, onClose, initialTab = 'quicksta
     </div>
   );
 }
+

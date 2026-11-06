@@ -216,7 +216,15 @@ export default function AppDashboard() {
   const [wizName, setWizName] = useState(`Campaign-${Date.now().toString().slice(-4)}`);
   const [wizInstances, setWizInstances] = useState<string[]>([]);
   const [wizListIds, setWizListIds] = useState<string[]>([]);
-  const [wizAudienceMode, setWizAudienceMode] = useState<'lists' | 'all' | 'unassigned' | 'manual'>('lists');
+  const [wizAudienceMode, setWizAudienceMode] = useState<'lists' | 'import' | 'all' | 'unassigned' | 'manual'>('lists');
+  const [campaignImporting, setCampaignImporting] = useState(false);
+  const [campaignImportResult, setCampaignImportResult] = useState<{
+    fileName: string;
+    count: number;
+    listId: string;
+    listName: string;
+  } | null>(null);
+  const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
   const [wizManualNumbers, setWizManualNumbers] = useState('');
   const [wizTemplate, setWizTemplate] = useState(
     `{Hi|Hello|Dear} {name|Valued Customer},\n\nWe are pleased to share our newest updates with your team at *{company|your company}*!\n\nUse code: ~OLDCODE~ \`SPECIAL20\` for _20% off_ your order.\n\n{Best regards|Warm wishes},\nMarketing Team`
@@ -661,6 +669,46 @@ export default function AppDashboard() {
     }
   };
 
+  // Upload file directly within Target Audience
+  const handleCampaignFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCampaignImporting(true);
+    try {
+      const cleanName = file.name.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const listName = `Campaign-${cleanName}-${Date.now().toString().slice(-4)}`;
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('listName', listName);
+
+      const data = await api.upload('/api/contacts/import', formData, { silent: true });
+      if (!data.success && data.error) {
+        throw new Error(typeof data.error === 'string' ? data.error : data.error?.message || 'Failed to import file');
+      }
+
+      const count = data.imported ?? data.stats?.validCount ?? 0;
+      if (count === 0) {
+        throw new Error('No valid contact phone numbers found in file');
+      }
+
+      setWizListIds([data.listId]);
+      setCampaignImportResult({
+        fileName: file.name,
+        count,
+        listId: data.listId,
+        listName,
+      });
+
+      toast.success(`Loaded ${count} contacts from ${file.name}!`, 'Audience Ready');
+      loadContacts();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to import file', 'File Error');
+    } finally {
+      setCampaignImporting(false);
+      if (e.target) e.target.value = '';
+    }
+  };
+
   // Create Campaign
   const handleLaunchCampaign = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -672,7 +720,7 @@ export default function AppDashboard() {
       toast.warning('Please select at least 1 WhatsApp Instance');
       return;
     }
-    if (wizAudienceMode === 'lists' && wizListIds.length === 0) {
+    if ((wizAudienceMode === 'lists' || wizAudienceMode === 'import') && wizListIds.length === 0) {
       toast.warning('Please select at least 1 Contact List');
       return;
     }
@@ -1819,7 +1867,7 @@ export default function AppDashboard() {
               </div>
 
               {/* Sending Window / Guardrail Pause Notice */}
-              {activeCampaign?.haltReason && (
+              {activeCampaign?.haltReason && activeCampaign.status !== 'COMPLETED' && activeCampaign.status !== 'ABORTED' && (
                 <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
                   <div className="flex items-start gap-3">
                     <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
@@ -2198,6 +2246,13 @@ export default function AppDashboard() {
                             </button>
                             <button
                               type="button"
+                              onClick={() => setWizAudienceMode('import')}
+                              className={`px-2 py-0.5 rounded transition ${wizAudienceMode === 'import' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
+                            >
+                              📁 Import File
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => setWizAudienceMode('all')}
                               className={`px-2 py-0.5 rounded transition ${wizAudienceMode === 'all' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
                             >
@@ -2221,31 +2276,97 @@ export default function AppDashboard() {
                         </div>
 
                         {wizAudienceMode === 'lists' && (
-                          <div>
-                            <select
-                              multiple
-                              value={wizListIds}
-                              onChange={(e) =>
-                                setWizListIds(Array.from(e.target.selectedOptions, (option) => option.value))
-                              }
-                              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-xs text-white h-24 font-mono"
-                            >
-                              {contactLists.map((l) => (
-                                <option key={l.id} value={l.id}>
-                                  {l.name} ({l._count?.contacts || 0} contacts)
-                                </option>
-                              ))}
-                            </select>
-                            <div className="flex items-center justify-between text-[10px] text-slate-500 mt-1">
-                              <span>Hold Ctrl to multi-select</span>
-                              <button
-                                type="button"
-                                onClick={() => setWizListIds(contactLists.map((l) => l.id))}
-                                className="text-emerald-400 hover:underline"
-                              >
-                                Select All Lists
-                              </button>
+                          <div className="bg-slate-950 border border-slate-800 rounded-xl p-2.5 space-y-2">
+                            <div className="flex items-center justify-between pb-1.5 border-b border-slate-800/80 text-[11px]">
+                              <label className="flex items-center gap-2 cursor-pointer font-bold text-white hover:text-emerald-400 transition">
+                                <input
+                                  type="checkbox"
+                                  checked={contactLists.length > 0 && wizListIds.length === contactLists.length}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setWizListIds(contactLists.map((l) => l.id));
+                                    } else {
+                                      setWizListIds([]);
+                                    }
+                                  }}
+                                  className="rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                                />
+                                <span>Select All Lists</span>
+                              </label>
+                              <span className="font-mono text-emerald-400 text-[10px]">
+                                {wizListIds.length} of {contactLists.length} selected
+                              </span>
                             </div>
+                            <div className="max-h-28 overflow-y-auto space-y-1 pr-1">
+                              {contactLists.length === 0 ? (
+                                <p className="text-slate-500 text-xs italic py-2 text-center">
+                                  No contact lists found. Use the 📁 Import File tab to upload a list.
+                                </p>
+                              ) : (
+                                contactLists.map((l) => {
+                                  const isChecked = wizListIds.includes(l.id);
+                                  return (
+                                    <label
+                                      key={l.id}
+                                      className={`flex items-center justify-between p-1.5 px-2 rounded-lg border text-xs cursor-pointer transition ${
+                                        isChecked
+                                          ? 'bg-emerald-950/40 border-emerald-500/50 text-white'
+                                          : 'bg-slate-900/40 border-slate-800 text-slate-300 hover:border-slate-700'
+                                      }`}
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        <input
+                                          type="checkbox"
+                                          checked={isChecked}
+                                          onChange={(e) => {
+                                            if (e.target.checked) {
+                                              setWizListIds([...wizListIds, l.id]);
+                                            } else {
+                                              setWizListIds(wizListIds.filter((id) => id !== l.id));
+                                            }
+                                          }}
+                                          className="rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                                        />
+                                        <span className="font-medium">{l.name}</span>
+                                      </div>
+                                      <span className="font-mono text-[10px] text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/40">
+                                        {l._count?.contacts || 0} contacts
+                                      </span>
+                                    </label>
+                                  );
+                                })
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {wizAudienceMode === 'import' && (
+                          <div className="p-3.5 bg-slate-950 border border-dashed border-emerald-500/50 rounded-xl text-center space-y-2">
+                            <div className="flex flex-col items-center justify-center">
+                              <FileSpreadsheet className="w-6 h-6 text-emerald-400 mb-1" />
+                              <p className="text-xs font-bold text-white">Direct CSV / Excel Audience Import</p>
+                              <p className="text-[11px] text-slate-400">Upload your contact list file to use immediately in this campaign</p>
+                            </div>
+                            <label className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition cursor-pointer shadow">
+                              <Upload className="w-3.5 h-3.5" />
+                              <span>{campaignImporting ? 'Importing File...' : 'Choose File (.csv, .xlsx)'}</span>
+                              <input
+                                type="file"
+                                accept=".csv,.xlsx,.xls"
+                                onChange={handleCampaignFileUpload}
+                                disabled={campaignImporting}
+                                className="hidden"
+                              />
+                            </label>
+                            {campaignImportResult && (
+                              <div className="mt-2 p-2 bg-emerald-950/60 border border-emerald-500/40 rounded-lg text-left text-xs text-emerald-300 flex items-center justify-between">
+                                <div>
+                                  <span className="font-bold text-white">✓ {campaignImportResult.fileName}</span>
+                                  <span className="text-[11px] text-emerald-400 ml-2">({campaignImportResult.count} contacts ready)</span>
+                                </div>
+                                <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-mono">Ready to Send</span>
+                              </div>
+                            )}
                           </div>
                         )}
 
@@ -2698,10 +2819,76 @@ export default function AppDashboard() {
 
               {/* SUBTAB 1: ALL CONTACTS TABLE */}
               {contactSubTab === 'all' && (
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
+                <div className="space-y-3">
+                  {/* Bulk Selection Action Bar */}
+                  {selectedContactIds.length > 0 && (
+                    <div className="bg-emerald-950/60 border border-emerald-500/40 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs mb-3 shadow-lg">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        <span className="font-bold text-white">
+                          {selectedContactIds.length} contact{selectedContactIds.length !== 1 ? 's' : ''} selected
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const selectedObjs = contacts.filter((c) => selectedContactIds.includes(c.id));
+                            setWizManualNumbers(selectedObjs.map((c) => c.phone).join('\n'));
+                            setWizAudienceMode('manual');
+                            setCurrentTab('wizard');
+                            toast.success(`Loaded ${selectedContactIds.length} selected contacts into Campaign Creator!`);
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg transition shadow cursor-pointer"
+                        >
+                          <Send className="w-3.5 h-3.5" />
+                          <span>Create Campaign with Selected</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!confirm(`Delete ${selectedContactIds.length} selected contacts?`)) return;
+                            for (const id of selectedContactIds) {
+                              await fetch(`/api/contacts/${id}`, { method: 'DELETE' }).catch(() => {});
+                            }
+                            setSelectedContactIds([]);
+                            loadContacts();
+                            toast.success('Deleted selected contacts');
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-950/60 hover:bg-rose-900/60 text-rose-300 border border-rose-500/30 rounded-lg transition cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Delete Selected</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedContactIds([])}
+                          className="px-2.5 py-1 text-slate-400 hover:text-white transition cursor-pointer"
+                        >
+                          Deselect All
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
                   <table className="w-full text-left text-xs text-slate-300">
                     <thead className="bg-slate-950 text-slate-400 font-mono text-[11px] uppercase border-b border-slate-800">
                       <tr>
+                        <th className="p-4 w-10">
+                          <input
+                            type="checkbox"
+                            checked={contacts.length > 0 && selectedContactIds.length > 0 && selectedContactIds.length === contacts.length}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedContactIds(contacts.map((c) => c.id));
+                              } else {
+                                setSelectedContactIds([]);
+                              }
+                            }}
+                            className="rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                            title="Select All Contacts"
+                          />
+                        </th>
                         <th className="p-4">Name</th>
                         <th className="p-4">Phone Number</th>
                         <th className="p-4">Lists / Segments</th>
@@ -2713,7 +2900,7 @@ export default function AppDashboard() {
                     <tbody className="divide-y divide-slate-800/60 font-sans">
                       {contacts.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="p-8 text-center text-slate-500 text-xs">
+                          <td colSpan={7} className="p-8 text-center text-slate-500 text-xs">
                             No contacts available. Download the sample template above and import your contacts.
                           </td>
                         </tr>
@@ -2744,6 +2931,20 @@ export default function AppDashboard() {
 
                         return filtered.map((c) => (
                           <tr key={c.id} className="hover:bg-slate-850/60 transition">
+                            <td className="p-4 w-10">
+                              <input
+                                type="checkbox"
+                                checked={selectedContactIds.includes(c.id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedContactIds([...selectedContactIds, c.id]);
+                                  } else {
+                                    setSelectedContactIds(selectedContactIds.filter((id) => id !== c.id));
+                                  }
+                                }}
+                                className="rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                              />
+                            </td>
                             <td className="p-4 font-bold text-white">{c.name || 'Unnamed'}</td>
                             <td className="p-4 font-mono tabular-nums text-emerald-400">+{c.phone}</td>
                             <td className="p-4">
@@ -2817,6 +3018,7 @@ export default function AppDashboard() {
                       })()}
                     </tbody>
                   </table>
+                </div>
                 </div>
               )}
 
