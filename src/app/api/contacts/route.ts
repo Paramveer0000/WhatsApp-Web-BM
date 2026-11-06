@@ -125,3 +125,51 @@ export const POST = withApi(async function (req: NextRequest) {
 
   return NextResponse.json({ success: true, contact });
 });
+
+export const DELETE = withApi(async function (req: NextRequest) {
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+
+  const { searchParams } = new URL(req.url);
+  const unassigned = searchParams.get('unassigned') === 'true';
+
+  if (unassigned) {
+    // Find contacts not assigned to any list
+    const unassignedContacts = await db.contact.findMany({
+      where: {
+        lists: {
+          none: {},
+        },
+      },
+      select: { id: true },
+    });
+    const ids = unassignedContacts.map((c) => c.id);
+    if (ids.length > 0) {
+      await db.contact.deleteMany({
+        where: { id: { in: ids } },
+      });
+    }
+    return NextResponse.json({
+      success: true,
+      count: ids.length,
+      message: `Deleted ${ids.length} unassigned contact(s)`,
+    });
+  }
+
+  const body = await req.json().catch(() => ({}));
+  if (Array.isArray(body.ids) && body.ids.length > 0) {
+    await db.listContact.deleteMany({
+      where: { contactId: { in: body.ids } },
+    });
+    const deleted = await db.contact.deleteMany({
+      where: { id: { in: body.ids } },
+    });
+    return NextResponse.json({
+      success: true,
+      count: deleted.count,
+      message: `Deleted ${deleted.count} contact(s)`,
+    });
+  }
+
+  return NextResponse.json({ success: false, error: 'No contacts specified to delete' }, { status: 400 });
+});

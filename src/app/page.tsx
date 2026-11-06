@@ -2804,6 +2804,37 @@ export default function AppDashboard() {
                       <option value="UNASSIGNED">Unassigned to any list</option>
                     </select>
                   )}
+                  {contactSubTab === 'all' && contactListFilter === 'UNASSIGNED' && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const unassignedCount = contacts.filter((c) => !c.listIds || c.listIds.length === 0).length;
+                        if (unassignedCount === 0) {
+                          toast.info('No unassigned contacts to delete');
+                          return;
+                        }
+                        if (!confirm(`Permanently delete all ${unassignedCount} unassigned contacts? This cannot be undone.`)) return;
+                        try {
+                          const res = await fetch('/api/contacts?unassigned=true', { method: 'DELETE' });
+                          const data = await res.json();
+                          if (data.success) {
+                            toast.success(data.message || `Deleted ${unassignedCount} unassigned contacts`);
+                            setSelectedContactIds([]);
+                            loadContacts();
+                          } else {
+                            toast.error(data.error || 'Failed to delete contacts');
+                          }
+                        } catch (err: any) {
+                          toast.error(err.message || 'Failed to delete contacts');
+                        }
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-950/70 hover:bg-rose-900/80 text-rose-300 border border-rose-500/40 rounded-xl text-xs font-bold transition cursor-pointer shadow"
+                      title="Permanently remove all contacts that are not in any list"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                      <span>Delete All Unassigned</span>
+                    </button>
+                  )}
                   <div className="relative">
                     <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-500" />
                     <input
@@ -2818,7 +2849,23 @@ export default function AppDashboard() {
               </div>
 
               {/* SUBTAB 1: ALL CONTACTS TABLE */}
-              {contactSubTab === 'all' && (
+              {contactSubTab === 'all' && (() => {
+                const filtered = contacts.filter((c) => {
+                  if (contactListFilter === 'UNASSIGNED') {
+                    if (c.listIds && c.listIds.length > 0) return false;
+                  } else if (contactListFilter !== 'ALL') {
+                    const matchId = c.listIds && c.listIds.includes(contactListFilter);
+                    const targetList = contactLists.find((l) => l.id === contactListFilter);
+                    const matchName = targetList && c.listNames && c.listNames.includes(targetList.name);
+                    if (!matchId && !matchName) return false;
+                  }
+                  if (!contactSearch) return true;
+                  const s = contactSearch.toLowerCase();
+                  return (c.name && c.name.toLowerCase().includes(s)) || (c.phone && c.phone.includes(s));
+                });
+                const allSelected = filtered.length > 0 && filtered.every((c) => selectedContactIds.includes(c.id));
+
+                return (
                 <div className="space-y-3">
                   {/* Bulk Selection Action Bar */}
                   {selectedContactIds.length > 0 && (
@@ -2847,13 +2894,24 @@ export default function AppDashboard() {
                         <button
                           type="button"
                           onClick={async () => {
-                            if (!confirm(`Delete ${selectedContactIds.length} selected contacts?`)) return;
-                            for (const id of selectedContactIds) {
-                              await fetch(`/api/contacts/${id}`, { method: 'DELETE' }).catch(() => {});
+                            if (!confirm(`Delete ${selectedContactIds.length} selected contacts? This cannot be undone.`)) return;
+                            try {
+                              const res = await fetch('/api/contacts', {
+                                method: 'DELETE',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ ids: selectedContactIds }),
+                              });
+                              const data = await res.json();
+                              if (data.success) {
+                                toast.success(data.message || 'Deleted selected contacts');
+                                setSelectedContactIds([]);
+                                loadContacts();
+                              } else {
+                                toast.error(data.error || 'Failed to delete contacts');
+                              }
+                            } catch (err: any) {
+                              toast.error(err.message || 'Failed to delete contacts');
                             }
-                            setSelectedContactIds([]);
-                            loadContacts();
-                            toast.success('Deleted selected contacts');
                           }}
                           className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-950/60 hover:bg-rose-900/60 text-rose-300 border border-rose-500/30 rounded-lg transition cursor-pointer"
                         >
@@ -2877,16 +2935,18 @@ export default function AppDashboard() {
                         <th className="p-4 w-10">
                           <input
                             type="checkbox"
-                            checked={contacts.length > 0 && selectedContactIds.length > 0 && selectedContactIds.length === contacts.length}
+                            checked={allSelected}
                             onChange={(e) => {
                               if (e.target.checked) {
-                                setSelectedContactIds(contacts.map((c) => c.id));
+                                const newIds = new Set([...selectedContactIds, ...filtered.map((c) => c.id)]);
+                                setSelectedContactIds(Array.from(newIds));
                               } else {
-                                setSelectedContactIds([]);
+                                const filteredIds = new Set(filtered.map((c) => c.id));
+                                setSelectedContactIds(selectedContactIds.filter((id) => !filteredIds.has(id)));
                               }
                             }}
                             className="rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                            title="Select All Contacts"
+                            title="Select All Filtered Contacts"
                           />
                         </th>
                         <th className="p-4">Name</th>
@@ -2904,32 +2964,14 @@ export default function AppDashboard() {
                             No contacts available. Download the sample template above and import your contacts.
                           </td>
                         </tr>
-                      ) : (() => {
-                        const filtered = contacts.filter((c) => {
-                          if (contactListFilter === 'UNASSIGNED') {
-                            if (c.listIds && c.listIds.length > 0) return false;
-                          } else if (contactListFilter !== 'ALL') {
-                            const matchId = c.listIds && c.listIds.includes(contactListFilter);
-                            const targetList = contactLists.find((l) => l.id === contactListFilter);
-                            const matchName = targetList && c.listNames && c.listNames.includes(targetList.name);
-                            if (!matchId && !matchName) return false;
-                          }
-                          if (!contactSearch) return true;
-                          const s = contactSearch.toLowerCase();
-                          return (c.name && c.name.toLowerCase().includes(s)) || (c.phone && c.phone.includes(s));
-                        });
-
-                        if (filtered.length === 0) {
-                          return (
-                            <tr>
-                              <td colSpan={6} className="p-8 text-center text-slate-500 text-xs">
-                                No contacts found matching the selected filter.
-                              </td>
-                            </tr>
-                          );
-                        }
-
-                        return filtered.map((c) => (
+                      ) : filtered.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="p-8 text-center text-slate-500 text-xs">
+                            No contacts found matching the selected filter.
+                          </td>
+                        </tr>
+                      ) : (
+                        filtered.map((c) => (
                           <tr key={c.id} className="hover:bg-slate-850/60 transition">
                             <td className="p-4 w-10">
                               <input
@@ -3014,13 +3056,14 @@ export default function AppDashboard() {
                               </div>
                             </td>
                           </tr>
-                        ));
-                      })()}
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
                 </div>
-              )}
+                );
+              })()}
 
               {/* SUBTAB 2: LISTS MANAGEMENT */}
               {contactSubTab === 'lists' && (
@@ -3096,14 +3139,22 @@ export default function AppDashboard() {
                                   </button>
                                   <button
                                     onClick={async () => {
-                                      if (!confirm(`Delete list "${l.name}"? Contacts in this list will not be deleted.`)) return;
-                                      await fetch(`/api/contacts/lists/${l.id}`, { method: 'DELETE' });
-                                      loadContacts();
-                                      setContactSuccessMsg(`List "${l.name}" deleted.`);
-                                      setTimeout(() => setContactSuccessMsg(''), 3000);
+                                      const count = l._count?.contacts || 0;
+                                      const deleteContacts = confirm(
+                                        `Delete list "${l.name}"?\n\nDo you also want to permanently delete all ${count} contact(s) in this list?\n\n• Click OK to delete this list AND its ${count} contacts\n• Click Cancel to abort`
+                                      );
+                                      if (!deleteContacts) return;
+                                      try {
+                                        const res = await fetch(`/api/contacts/lists/${l.id}?deleteContacts=true`, { method: 'DELETE' });
+                                        const data = await res.json();
+                                        loadContacts();
+                                        toast.success(data.message || `List "${l.name}" and contacts deleted.`);
+                                      } catch (err: any) {
+                                        toast.error(err.message || 'Failed to delete list');
+                                      }
                                     }}
-                                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-950/60 text-slate-400 hover:text-rose-400 transition"
-                                    title="Delete list"
+                                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-950/60 text-slate-400 hover:text-rose-400 transition cursor-pointer"
+                                    title="Delete list and its contacts"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
                                   </button>
