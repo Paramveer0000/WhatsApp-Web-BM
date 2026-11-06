@@ -6,13 +6,27 @@ import { getSessionUser } from '@/lib/auth';
 export async function POST(req: NextRequest) {
   try {
     const user = await getSessionUser();
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!user || user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Forbidden: Admin access required to test API connections' }, { status: 403 });
     }
 
     const body = await req.json();
-    const apiUrl = body.apiUrl;
+    let apiUrl = (body.apiUrl || '').trim();
     const apiKey = body.apiKey;
+
+    if (apiUrl) {
+      try {
+        const parsed = new URL(apiUrl);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+          return NextResponse.json({ error: 'Invalid URL protocol. Only http and https are allowed.' }, { status: 400 });
+        }
+        if (parsed.hostname === '169.254.169.254' || parsed.hostname.startsWith('169.254.')) {
+          return NextResponse.json({ error: 'Prohibited target address' }, { status: 400 });
+        }
+      } catch {
+        return NextResponse.json({ error: 'Invalid API URL format' }, { status: 400 });
+      }
+    }
 
     const client = apiUrl ? new EvolutionClient(apiUrl, apiKey || '') : await EvolutionClient.fromDatabase();
 

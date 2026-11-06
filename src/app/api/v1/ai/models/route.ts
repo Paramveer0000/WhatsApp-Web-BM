@@ -1,7 +1,11 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 
+import { getSessionUser } from '@/lib/auth';
+
 export async function GET() {
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const models = [
     { id: 'anthropic/claude-3.5-haiku', name: 'Claude 3.5 Haiku', provider: 'Anthropic', costTier: 'Ultra Low (~$0.80/M)', recommended: true },
     { id: 'openai/gpt-4o-mini', name: 'GPT-4o Mini', provider: 'OpenAI', costTier: 'Ultra Low (~$0.15/M)', recommended: true },

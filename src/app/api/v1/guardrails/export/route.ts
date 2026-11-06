@@ -2,8 +2,12 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getEffectiveGuardrails } from '@/lib/guardrails';
 
+import { getSessionUser } from '@/lib/auth';
+
 export async function GET(req: NextRequest) {
   try {
+    const user = await getSessionUser();
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const { searchParams } = new URL(req.url);
     const scope = (searchParams.get('scope') || 'global') as 'global' | 'instance' | 'campaign';
     const scopeId = searchParams.get('scopeId') || '';

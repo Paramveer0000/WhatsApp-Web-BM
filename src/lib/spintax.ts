@@ -55,7 +55,11 @@ export function parseTemplateToAST(input: string): { ast: ASTNode[]; errors: Par
     return input[index + n] || '';
   }
 
-  function parseNodes(stopChars: string[] = []): ASTNode[] {
+  function parseNodes(stopChars: string[] = [], depth: number = 0): ASTNode[] {
+    if (depth > 25) {
+      // Exceeded max recursion depth, treat remainder as plain text to prevent stack overflow
+      return [{ type: 'text', value: input.slice(index) }];
+    }
     const nodes: ASTNode[] = [];
     let currentText = '';
 
@@ -138,7 +142,7 @@ export function parseTemplateToAST(input: string): { ast: ASTNode[]; errors: Par
             continue;
           }
 
-          const parsedChild = parseNodes(['|', '}']);
+          const parsedChild = parseNodes(['|', '}'], depth + 1);
           currentOption.push(...parsedChild);
         }
 
