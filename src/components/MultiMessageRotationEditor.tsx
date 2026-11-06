@@ -620,6 +620,11 @@ export default function MultiMessageRotationEditor({
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 lowercase">
                   foundation for ai variations
                 </span>
+                <InfoButton
+                  title="Base Message Text"
+                  description="Your core message. It serves as Message 1 and gives AI the context, offers, links, and tone to create variations."
+                  recommended="Write your core announcement or offer clearly here"
+                />
               </h3>
               <p className="text-[11px] text-slate-400">
                 Type your core message below. This serves as Message 1 and the exact meaning for all variations.
@@ -628,7 +633,8 @@ export default function MultiMessageRotationEditor({
           </div>
 
           {/* Media Attachment Selector */}
-          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-[11px]">
+          <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-[11px]">
             {(['text', 'image', 'video', 'document'] as const).map((m) => (
               <button
                 key={m}
@@ -652,6 +658,12 @@ export default function MultiMessageRotationEditor({
                 {m}
               </button>
             ))}
+            </div>
+            <InfoButton
+              title="Media Attachment"
+              description="Attach an image (e.g. Diwali offer, flyer), video, or PDF document. The same media is automatically shared across all message variations."
+              recommended="Keep images under 5MB for fast delivery"
+            />
           </div>
         </div>
 
@@ -752,6 +764,12 @@ export default function MultiMessageRotationEditor({
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold">
                   Warm & Polite Wordplay
                 </span>
+                <InfoButton
+                  title="AI Message Variations"
+                  description="Generates multiple natural rephrasings of your base message using warm, polite language while keeping prices, dates, and links identical."
+                  recommended="Create 3 to 5 variations"
+                  whyItMatters="Sending identical text to hundreds of contacts triggers WhatsApp spam filters. Variations make each message look individually typed."
+                />
               </h3>
               <p className="text-[11px] text-slate-400">
                 Specify how many variations you want to create. The exact meaning, offer, and codes will remain 100% intact.
@@ -763,7 +781,7 @@ export default function MultiMessageRotationEditor({
           <div className="flex flex-wrap items-center gap-3">
             {/* Number of Variations Stepper */}
             <div className="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5">
-              <span className="text-xs text-slate-300 font-medium">Variations to create:</span>
+              <span className="text-xs text-slate-300 font-medium flex items-center"><span>Variations to create:</span><InfoButton title="Variation Count" description="How many unique message variations to generate. For example, 4 variations means your audience will be split among 4 different messages." recommended="3-5 variations for standard campaigns" /></span>
               <div className="flex items-center gap-1">
                 <button
                   type="button"
@@ -851,6 +869,12 @@ export default function MultiMessageRotationEditor({
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold">
                   {variants.length} Message{variants.length !== 1 ? 's' : ''} Active
                 </span>
+                <InfoButton
+                  title="Distribution Split Across Numbers"
+                  description="How contacts and message variations are distributed across your connected WhatsApp numbers. Each number gets an even share to prevent single-number spikes."
+                  recommended="Connect 2+ numbers for campaigns > 200 contacts"
+                  whyItMatters="Parallel multi-number dispatch reduces sending time and keeps each SIM well under daily spam caps."
+                />
               </h3>
               <p className="text-[11px] text-slate-400">
                 {selectedInstances.length >= 2
@@ -870,6 +894,10 @@ export default function MultiMessageRotationEditor({
               <Plus className="w-3.5 h-3.5" />
               <span>Add Custom Message</span>
             </button>
+            <InfoButton
+              title="Add Custom Message"
+              description="Manually add another message variation (up to 20 total) with your own custom wording or media."
+            />
           </div>
         </div>
 
@@ -954,6 +982,10 @@ export default function MultiMessageRotationEditor({
               <span className="font-bold text-slate-200 flex items-center gap-1.5">
                 <Shuffle className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Simulated Parallel Send Sequence</span>
+                <InfoButton
+                  title="Simulated Send Sequence"
+                  description="Live preview showing which WhatsApp number will send which message variation to your contacts in real time."
+                />
               </span>
               <span className="text-[10px] text-slate-400 font-mono">
                 Click any chip to preview message in phone simulator

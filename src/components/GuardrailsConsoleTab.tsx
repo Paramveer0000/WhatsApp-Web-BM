@@ -34,6 +34,7 @@ import {
   FileText
 } from 'lucide-react';
 import { toast } from '@/lib/toast';
+import InfoButton from './InfoButton';
 import { 
   ResponsiveContainer, 
   AreaChart, 
@@ -579,6 +580,11 @@ export function GuardrailsConsoleTab() {
                   className="rounded border-slate-700 text-emerald-500 focus:ring-emerald-500"
                 />
                 <span>Strict Mode</span>
+                <InfoButton
+                  title="Strict Mode"
+                  description="Enforces anti-ban guardrails strictly, preventing any override that might risk the account."
+                  recommended="Keep disabled for flexible sending, enable for high-risk accounts"
+                />
               </label>
             </div>
 
@@ -587,7 +593,7 @@ export function GuardrailsConsoleTab() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Clock className="w-4 h-4 text-emerald-400" />
-                  <h4 className="text-sm font-bold text-white">2.1 Message Pacing & Human Delay Curves</h4>
+                  <h4 className="text-sm font-bold text-white flex items-center"><span>2.1 Message Pacing & Human Delay Curves</span><InfoButton title="Message Pacing & Delays" description="Randomized pauses between messages that mimic natural human texting behavior." recommended="12s min, 25s max" whyItMatters="Sending without random delays gets accounts flagged as automated bots." /></h4>
                 </div>
                 <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">
                   {currentConfig.pacing.distribution}
@@ -706,7 +712,7 @@ export function GuardrailsConsoleTab() {
                     className="rounded border-slate-700 text-emerald-500 focus:ring-emerald-500 mt-0.5"
                   />
                   <div>
-                    <span className="font-bold block">Typing Simulation</span>
+                    <span className="font-bold flex items-center"><span>Typing Simulation</span><InfoButton title="Typing Simulation" description="Broadcasts WhatsApp composing status for 2-4s before sending each message." recommended="Keep enabled" /></span>
                     <span className="text-[11px] text-slate-400">
                       Sends &quot;composing...&quot; status 40ms per character
                     </span>
@@ -719,7 +725,7 @@ export function GuardrailsConsoleTab() {
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
               <div className="flex items-center gap-2">
                 <Zap className="w-4 h-4 text-emerald-400" />
-                <h4 className="text-sm font-bold text-white">2.2 Batch Cooldowns & Sending Windows</h4>
+                <h4 className="text-sm font-bold text-white flex items-center"><span>2.2 Batch Cooldowns & Sending Windows</span><InfoButton title="Batch Cooldowns & Windows" description="Automatic resting periods and daytime sending window policies (09:00 - 20:00)." recommended="09:00 - 20:00 daytime window" whyItMatters="Late-night messages trigger high spam report rates from recipients." /></h4>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
