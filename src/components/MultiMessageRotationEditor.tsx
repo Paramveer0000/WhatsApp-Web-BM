@@ -46,6 +46,7 @@ import {
 } from '@/lib/distribution';
 import { countSpintaxVariations } from '@/lib/spintax';
 import { toast } from '@/lib/toast';
+import InfoButton from './InfoButton';
 
 interface MultiMessageRotationEditorProps {
   distributionMode: DistributionMode;
@@ -1156,8 +1157,14 @@ export default function MultiMessageRotationEditor({
           <div className="p-4 pt-1 border-t border-slate-800/80 space-y-4 text-xs">
             {/* Rotation Mode */}
             <div>
-              <label className="block text-[11px] font-semibold text-slate-300 mb-1.5">
-                Rotation Order Mode
+              <label className="flex items-center text-[11px] font-semibold text-slate-300 mb-1.5">
+                <span>Rotation Order Mode</span>
+                <InfoButton
+                  title="Rotation Order Mode"
+                  description="Controls how different message variations are sent to contacts. Rotating variations ensures no two consecutive contacts receive identical text."
+                  recommended="Rotate in Order"
+                  whyItMatters="Meta's algorithms scan for identical text blasts. Rotating variations makes sending look organic."
+                />
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <button
@@ -1214,9 +1221,14 @@ export default function MultiMessageRotationEditor({
                   onChange={(e) => onStaggerVariationsChange && onStaggerVariationsChange(e.target.checked)}
                   className="rounded text-emerald-600 focus:ring-emerald-500"
                 />
-                <div>
-                  <span className="font-bold text-slate-200 block text-[11px]">
-                    Stagger Variations
+                <div className="flex-1">
+                  <span className="font-bold text-slate-200 flex items-center text-[11px]">
+                    <span>Stagger Variations</span>
+                    <InfoButton
+                      title="Stagger Variations"
+                      description="If using multiple numbers, Number 1 sends Variation A, while Number 2 starts at Variation B, preventing cross-number collisions."
+                      recommended="Keep checked"
+                    />
                   </span>
                   <span className="text-[10px] text-slate-400">
                     Number 1 starts at M1, Number 2 at M2
@@ -1231,9 +1243,14 @@ export default function MultiMessageRotationEditor({
                   onChange={(e) => onFailoverEnabledChange && onFailoverEnabledChange(e.target.checked)}
                   className="rounded text-emerald-600 focus:ring-emerald-500"
                 />
-                <div>
-                  <span className="font-bold text-slate-200 block text-[11px]">
-                    Failover Protection
+                <div className="flex-1">
+                  <span className="font-bold text-slate-200 flex items-center text-[11px]">
+                    <span>Failover Protection</span>
+                    <InfoButton
+                      title="Failover Protection"
+                      description="If one of your connected WhatsApp numbers goes offline or runs out of battery, the queue automatically fails over to other healthy numbers without halting."
+                      recommended="Keep checked"
+                    />
                   </span>
                   <span className="text-[10px] text-slate-400">
                     Auto-migrates queue if a number disconnects
@@ -1248,9 +1265,14 @@ export default function MultiMessageRotationEditor({
                   onChange={(e) => onStickyConversationsChange && onStickyConversationsChange(e.target.checked)}
                   className="rounded text-emerald-600 focus:ring-emerald-500"
                 />
-                <div>
-                  <span className="font-bold text-slate-200 block text-[11px]">
-                    Sticky Conversations
+                <div className="flex-1">
+                  <span className="font-bold text-slate-200 flex items-center text-[11px]">
+                    <span>Sticky Conversations</span>
+                    <InfoButton
+                      title="Sticky Conversations"
+                      description="Ensures contacts who previously messaged with Number A will continue receiving follow-ups from Number A rather than getting confused by a new number."
+                      recommended="Keep checked"
+                    />
                   </span>
                   <span className="text-[10px] text-slate-400">
                     Keeps prior contacts on same number

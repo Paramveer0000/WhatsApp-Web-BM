@@ -8,6 +8,7 @@ export type MessageStatus =
   | 'SENT'
   | 'DELIVERED'
   | 'READ'
+  | 'REPLIED'
   | 'FAILED'
   | 'RETRY_WAIT'
   | 'UNCERTAIN'
@@ -27,6 +28,7 @@ export const STATUS_RANKS: Record<MessageStatus, number> = {
   SENT: 50,
   DELIVERED: 60,
   READ: 70,
+  REPLIED: 80,
 };
 
 export interface TransitionPatch {

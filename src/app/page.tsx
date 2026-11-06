@@ -78,6 +78,7 @@ import {
   LayoutGrid,
   Sun,
   Moon,
+  HelpCircle,
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -102,6 +103,8 @@ import { SystemLogsConsole } from '@/components/SystemLogsConsole';
 import { ManualAddContactModal } from '@/components/ManualAddContactModal';
 import { EditContactModal } from '@/components/EditContactModal';
 import { CreateTemplateModal } from '@/components/CreateTemplateModal';
+import InfoButton from '@/components/InfoButton';
+import HelpGuideModal from '@/components/HelpGuideModal';
 import { toast } from '@/lib/toast';
 import { api } from '@/lib/api';
 
@@ -133,6 +136,7 @@ export default function AppDashboard() {
   const [inspectRecipient, setInspectRecipient] = useState<any>(null);
 
   // Modals State
+  const [showHelpModal, setShowHelpModal] = useState(false);
   const [qrModalInstance, setQrModalInstance] = useState<string | null>(null);
   const [newInstanceModal, setNewInstanceModal] = useState(false);
   const [newInstanceName, setNewInstanceName] = useState('');
@@ -1259,6 +1263,17 @@ export default function AppDashboard() {
               )}
             </button>
 
+            {/* Guide & Help Button */}
+            <button
+              type="button"
+              onClick={() => setShowHelpModal(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-300 hover:text-white text-xs font-semibold transition cursor-pointer shadow-sm"
+              title="Open Beginner Guide & Feature Dictionary"
+            >
+              <HelpCircle className="w-3.5 h-3.5 text-blue-400" />
+              <span className="hidden sm:inline">Guide & Help</span>
+            </button>
+
             {/* Privacy Mode Toggle (Shift+P) */}
             <button
               type="button"
@@ -2134,7 +2149,7 @@ export default function AppDashboard() {
                     <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-400">1. Campaign Details</h3>
                     
                     <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1">Campaign Name</label>
+                      <label className="flex items-center text-xs font-semibold text-slate-300 mb-1"><span>Campaign Name</span><InfoButton title="Campaign Name" description="A descriptive name for your campaign (e.g. 'Diwali Offer'). Used in delivery reports and tracking." recommended="Keep it short and recognizable" /></label>
                       <input
                         type="text"
                         required
@@ -2148,7 +2163,7 @@ export default function AppDashboard() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {/* Instance Selection */}
                       <div>
-                        <label className="block text-xs font-semibold text-slate-300 mb-1">WhatsApp Instance</label>
+                        <label className="flex items-center text-xs font-semibold text-slate-300 mb-1"><span>WhatsApp Instance</span><InfoButton title="WhatsApp Instance" description="Choose which linked WhatsApp number will send the messages. If you select multiple instances, BulkFlow shares contacts among them." recommended="Select 1 or more green (Connected) instances" whyItMatters="Distributing messages across numbers keeps each SIM well below WhatsApp's daily spam threshold." /></label>
                         <select
                           multiple
                           value={wizInstances}
@@ -2172,7 +2187,7 @@ export default function AppDashboard() {
                       {/* Audience Selection */}
                       <div>
                         <div className="flex flex-wrap items-center justify-between gap-1 mb-1.5">
-                          <label className="block text-xs font-semibold text-slate-300">Target Audience</label>
+                          <label className="flex items-center text-xs font-semibold text-slate-300"><span>Target Audience</span><InfoButton title="Target Audience" description="Select who receives this campaign: a pre-uploaded Contact List, all stored contacts, or direct copy-pasted phone numbers." recommended="Use Contact Lists for segmented campaigns" /></label>
                           <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[10px]">
                             <button
                               type="button"
@@ -2345,7 +2360,7 @@ export default function AppDashboard() {
 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono text-xs">
                       <div>
-                        <label className="text-[11px] text-slate-400">Min Delay (s)</label>
+                        <label className="flex items-center text-[11px] text-slate-400"><span>Min Delay (s)</span><InfoButton title="Min Delay" description="Minimum seconds to pause before sending the next message. Mimics human typing." recommended="12 seconds" whyItMatters="Instant automated blasts trigger WhatsApp's spam detection." /></label>
                         <input
                           type="number"
                           value={minDelay}
@@ -2354,7 +2369,7 @@ export default function AppDashboard() {
                         />
                       </div>
                       <div>
-                        <label className="text-[11px] text-slate-400">Max Delay (s)</label>
+                        <label className="flex items-center text-[11px] text-slate-400"><span>Max Delay (s)</span><InfoButton title="Max Delay" description="Maximum seconds to wait. The engine picks a random time between Min and Max Delay for every message." recommended="25 seconds" whyItMatters="Randomized delays (jitter) ensure messages do not look automated to WhatsApp." /></label>
                         <input
                           type="number"
                           value={maxDelay}
@@ -2363,7 +2378,7 @@ export default function AppDashboard() {
                         />
                       </div>
                       <div>
-                        <label className="text-[11px] text-slate-400">Batch Size</label>
+                        <label className="flex items-center text-[11px] text-slate-400"><span>Batch Size</span><InfoButton title="Batch Size" description="Number of messages sent before the engine takes an automated cooldown pause." recommended="30 messages" /></label>
                         <input
                           type="number"
                           value={batchSize}
@@ -2372,7 +2387,7 @@ export default function AppDashboard() {
                         />
                       </div>
                       <div>
-                        <label className="text-[11px] text-slate-400">Batch Pause (s)</label>
+                        <label className="flex items-center text-[11px] text-slate-400"><span>Batch Pause (s)</span><InfoButton title="Batch Pause" description="Cooldown period in seconds after each batch is finished (e.g. 300s = 5 minutes)." recommended="300s (5 minutes)" whyItMatters="Cooldown pauses let the WhatsApp socket rest and prevent temporary rate limits." /></label>
                         <input
                           type="number"
                           value={batchDelay}
@@ -2391,7 +2406,7 @@ export default function AppDashboard() {
                           onChange={(e) => setIsScheduled(e.target.checked)}
                           className="rounded text-emerald-600 focus:ring-emerald-500"
                         />
-                        <span className="font-semibold text-slate-200">Schedule this campaign for automatic execution</span>
+                        <span className="font-semibold text-slate-200 flex items-center"><span>Schedule this campaign for automatic execution</span><InfoButton title="Scheduled Dispatch" description="Enables you to set up your campaign now and let the system send it automatically at a future date and time." recommended="Choose daytime hours (09:00 - 20:00)" /></span>
                       </label>
 
                       {isScheduled && (
@@ -3518,7 +3533,7 @@ export default function AppDashboard() {
                         {/* Daily Quota Bar */}
                         <div className="space-y-1 font-mono text-[11px]">
                           <div className="flex justify-between text-slate-400">
-                            <span>Today's Sent</span>
+                            <span className="flex items-center"><span>Today's Sent</span><InfoButton title="Daily Quota & Progress" description="The maximum recommended messages this number should send per 24 hours." recommended="50-100 for newer numbers, up to 200 for established business numbers" whyItMatters="Sending 250+ messages/day on a single number significantly increases account ban risk." /></span>
                             <span>{inst.todaySent || 0} / {inst.dailyQuota || 200}</span>
                           </div>
                           <div className="w-full bg-slate-950 h-1.5 rounded-full overflow-hidden">
@@ -4036,6 +4051,12 @@ export default function AppDashboard() {
           </div>
         </div>
       )}
+
+      {/* Beginner Help & Guide Modal */}
+      <HelpGuideModal
+        isOpen={showHelpModal}
+        onClose={() => setShowHelpModal(false)}
+      />
 
     </div>
   );
