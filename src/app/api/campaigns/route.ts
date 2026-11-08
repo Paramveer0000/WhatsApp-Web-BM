@@ -554,3 +554,46 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const user = await getSessionUser();
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const body = await req.json().catch(() => ({}));
+    const ids = Array.isArray(body.ids) ? body.ids : [];
+
+    if (ids.length === 0) {
+      return NextResponse.json({ error: 'No campaign IDs provided' }, { status: 400 });
+    }
+
+    // Abort active runners
+    for (const id of ids) {
+      campaignRunner.requestAbort(id);
+    }
+
+    // Cascading delete campaigns
+    const deleted = await db.campaign.deleteMany({
+      where: { id: { in: ids } },
+    });
+
+    await db.auditLog.create({
+      data: {
+        userId: user.id,
+        userEmail: user.email,
+        action: 'CAMPAIGN_BULK_DELETE',
+        entity: 'CAMPAIGN',
+        details: JSON.stringify({ ids, count: deleted.count }),
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      count: deleted.count,
+      message: `Deleted ${deleted.count} campaign(s) successfully`,
+    });
+  } catch (err: any) {
+    logger.error({ err }, 'Error in bulk DELETE /api/campaigns');
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}

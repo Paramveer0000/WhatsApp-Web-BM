@@ -225,6 +225,7 @@ export default function AppDashboard() {
     listName: string;
   } | null>(null);
   const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
+  const [selectedCampaignIds, setSelectedCampaignIds] = useState<string[]>([]);
   const [wizManualNumbers, setWizManualNumbers] = useState('');
   const [wizTemplate, setWizTemplate] = useState(
     `{Hi|Hello|Dear} {name|Valued Customer},\n\nWe are pleased to share our newest updates with your team at *{company|your company}*!\n\nUse code: ~OLDCODE~ \`SPECIAL20\` for _20% off_ your order.\n\n{Best regards|Warm wishes},\nMarketing Team`
@@ -370,13 +371,27 @@ export default function AppDashboard() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // Keep browser URL perfectly in sync with active tab
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const currentParam = new URLSearchParams(window.location.search).get('tab');
+      const expectedParam = currentTab === 'overview' ? null : currentTab;
+      if (currentParam !== expectedParam) {
+        const newUrl = currentTab === 'overview' ? window.location.pathname : `/?tab=${currentTab}`;
+        window.history.replaceState(null, '', newUrl);
+      }
+    }
+  }, [currentTab]);
+
   // Fetch initial data
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
       const tab = urlParams.get('tab');
-      if (tab) {
+      if (tab && tab !== 'overview') {
         setCurrentTab(tab as TabType);
+      } else {
+        setCurrentTab('overview');
       }
     }
 
@@ -1144,12 +1159,7 @@ export default function AppDashboard() {
 
           {/* Guardrails (Between Instances and Reports) */}
           <button
-            onClick={() => {
-              setCurrentTab('guardrails');
-              if (typeof window !== 'undefined') {
-                window.history.replaceState(null, '', '/?tab=guardrails');
-              }
-            }}
+            onClick={() => setCurrentTab('guardrails')}
             className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition cursor-pointer ${
               currentTab === 'guardrails'
                 ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
@@ -1730,11 +1740,74 @@ export default function AppDashboard() {
                 </div>
               </div>
 
+              {/* Bulk Selection Action Bar for Campaigns */}
+              {selectedCampaignIds.length > 0 && (
+                <div className="bg-emerald-950/60 border border-emerald-500/40 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs mb-3 shadow-lg animate-in fade-in">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <span className="font-bold text-white">
+                      {selectedCampaignIds.length} campaign{selectedCampaignIds.length !== 1 ? 's' : ''} selected
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!confirm(`Permanently delete ${selectedCampaignIds.length} selected campaign(s)? This will also remove recipient logs for these campaigns.`)) return;
+                        try {
+                          const res = await fetch('/api/campaigns', {
+                            method: 'DELETE',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ ids: selectedCampaignIds }),
+                          });
+                          const data = await res.json();
+                          if (data.success) {
+                            toast.success(data.message || `Deleted ${selectedCampaignIds.length} campaign(s)`);
+                            setSelectedCampaignIds([]);
+                            loadCampaigns();
+                          } else {
+                            toast.error(data.error || 'Failed to delete campaigns');
+                          }
+                        } catch (err: any) {
+                          toast.error(err.message || 'Failed to delete campaigns');
+                        }
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-950/60 hover:bg-rose-900/60 text-rose-300 border border-rose-500/30 rounded-lg transition cursor-pointer font-bold shadow"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Delete Selected</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCampaignIds([])}
+                      className="px-2.5 py-1 text-slate-400 hover:text-white transition cursor-pointer"
+                    >
+                      Deselect All
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Campaigns Table */}
               <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
                 <table className="w-full text-left text-xs text-slate-300">
                   <thead className="bg-slate-950 text-slate-400 font-mono text-[11px] uppercase border-b border-slate-800">
                     <tr>
+                      <th className="p-4 w-10">
+                        <input
+                          type="checkbox"
+                          checked={campaigns.length > 0 && selectedCampaignIds.length === campaigns.length}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedCampaignIds(campaigns.map((c) => c.id));
+                            } else {
+                              setSelectedCampaignIds([]);
+                            }
+                          }}
+                          className="rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                          title="Select All Campaigns"
+                        />
+                      </th>
                       <th className="p-4">Campaign Name</th>
                       <th className="p-4">Status</th>
                       <th className="p-4">Progress</th>
@@ -1745,13 +1818,27 @@ export default function AppDashboard() {
                   <tbody className="divide-y divide-slate-800/60 font-sans">
                     {campaigns.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="p-8 text-center text-slate-500 text-xs">
+                        <td colSpan={6} className="p-8 text-center text-slate-500 text-xs">
                           No campaigns created yet. Click "Create Campaign" to begin.
                         </td>
                       </tr>
                     ) : (
                       campaigns.map((camp) => (
                         <tr key={camp.id} className="hover:bg-slate-850/60 transition">
+                          <td className="p-4 w-10">
+                            <input
+                              type="checkbox"
+                              checked={selectedCampaignIds.includes(camp.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedCampaignIds([...selectedCampaignIds, camp.id]);
+                                } else {
+                                  setSelectedCampaignIds(selectedCampaignIds.filter((id) => id !== camp.id));
+                                }
+                              }}
+                              className="rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                            />
+                          </td>
                           <td className="p-4">
                             <span className="font-bold text-white">{camp.name}</span>
                             <p className="text-[11px] text-slate-400 font-mono">ID: {camp.id.slice(0, 8)}...</p>
@@ -1803,6 +1890,29 @@ export default function AppDashboard() {
                             >
                               CSV
                             </a>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (!confirm(`Delete campaign "${camp.name}"? This will delete all recipient logs for this campaign.`)) return;
+                                try {
+                                  const res = await fetch(`/api/campaigns/${camp.id}`, { method: 'DELETE' });
+                                  const data = await res.json();
+                                  if (data.success) {
+                                    toast.success(`Campaign "${camp.name}" deleted`);
+                                    setSelectedCampaignIds(selectedCampaignIds.filter((id) => id !== camp.id));
+                                    loadCampaigns();
+                                  } else {
+                                    toast.error(data.error || 'Failed to delete campaign');
+                                  }
+                                } catch (err: any) {
+                                  toast.error(err.message || 'Failed to delete campaign');
+                                }
+                              }}
+                              className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-950/60 text-slate-400 hover:text-rose-400 transition cursor-pointer inline-flex items-center"
+                              title="Delete campaign"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           </td>
                         </tr>
                       ))
@@ -4172,9 +4282,6 @@ export default function AppDashboard() {
                 type="button"
                 onClick={() => {
                   setCurrentTab('guardrails');
-                  if (typeof window !== 'undefined') {
-                    window.history.replaceState(null, '', '/?tab=guardrails');
-                  }
                   setCommandPaletteOpen(false);
                 }}
                 className="w-full text-left px-3 py-2 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white flex items-center gap-2 cursor-pointer"
@@ -4221,12 +4328,7 @@ export default function AppDashboard() {
           <span>Replies</span>
         </button>
         <button
-          onClick={() => {
-            setCurrentTab('instances');
-            if (typeof window !== 'undefined') {
-              window.history.replaceState(null, '', '/?tab=instances');
-            }
-          }}
+          onClick={() => setCurrentTab('instances')}
           className={`flex flex-col items-center gap-1 text-[10px] ${
             currentTab === 'instances' ? 'text-emerald-400' : 'text-slate-400'
           }`}
@@ -4235,12 +4337,7 @@ export default function AppDashboard() {
           <span>Instances</span>
         </button>
         <button
-          onClick={() => {
-            setCurrentTab('guardrails');
-            if (typeof window !== 'undefined') {
-              window.history.replaceState(null, '', '/?tab=guardrails');
-            }
-          }}
+          onClick={() => setCurrentTab('guardrails')}
           className={`flex flex-col items-center gap-1 text-[10px] ${
             currentTab === 'guardrails' ? 'text-emerald-400 font-bold' : 'text-slate-400'
           }`}
@@ -4249,12 +4346,7 @@ export default function AppDashboard() {
           <span>Guardrails</span>
         </button>
         <button
-          onClick={() => {
-            setCurrentTab('settings');
-            if (typeof window !== 'undefined') {
-              window.history.replaceState(null, '', '/?tab=settings');
-            }
-          }}
+          onClick={() => setCurrentTab('settings')}
           className={`flex flex-col items-center gap-1 text-[10px] ${
             currentTab === 'settings' ? 'text-emerald-400' : 'text-slate-400'
           }`}
