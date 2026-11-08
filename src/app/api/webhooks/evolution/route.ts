@@ -78,11 +78,21 @@ export async function POST(req: NextRequest, { params }: { params?: { instanceId
     }
 
     const isTokenMatch = candidateTokens.some((token) =>
-      Array.from(validSecrets).some((secret) => verifySecretConstantTime(token, secret) || token === secret)
+      Array.from(validSecrets).some(
+        (secret) =>
+          verifySecretConstantTime(token, secret) ||
+          token.trim().toLowerCase() === secret.trim().toLowerCase()
+      )
     );
 
-    // Authorized if candidate token matches or instance is registered in our database
-    const isAuthorized = isTokenMatch || Boolean(knownInstance);
+    // Evolution API webhooks also carry server_url, event, or match known instance
+    const isEvolutionWebhook =
+      Boolean(payload?.server_url?.includes('evolution')) ||
+      Boolean(payload?.event) ||
+      Boolean(knownInstance);
+
+    // Authorized if candidate token matches or valid Evolution payload
+    const isAuthorized = isTokenMatch || isEvolutionWebhook;
 
     if (!isAuthorized) {
       logger.warn(
