@@ -104,3 +104,4 @@ export const DELETE = withApi(async function (
     message: 'Bot deleted successfully',
   });
 });
+

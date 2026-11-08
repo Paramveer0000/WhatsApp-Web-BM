@@ -79,6 +79,7 @@ import {
   Sun,
   Moon,
   HelpCircle,
+  Share2,
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -191,9 +192,17 @@ export default function AppDashboard() {
 
   useEffect(() => {
     const saved = typeof window !== 'undefined' ? (localStorage.getItem('app_theme') as 'day' | 'night') : null;
-    if (saved) {
-      setTheme(saved);
-      document.documentElement.setAttribute('data-theme', saved);
+    const initialTheme = saved || 'night';
+    setTheme(initialTheme);
+    if (typeof window !== 'undefined') {
+      document.documentElement.setAttribute('data-theme', initialTheme);
+      if (initialTheme === 'day') {
+        document.documentElement.classList.remove('dark');
+        document.documentElement.classList.add('day');
+      } else {
+        document.documentElement.classList.add('dark');
+        document.documentElement.classList.remove('day');
+      }
     }
   }, []);
 
@@ -203,12 +212,20 @@ export default function AppDashboard() {
     if (typeof window !== 'undefined') {
       localStorage.setItem('app_theme', next);
       document.documentElement.setAttribute('data-theme', next);
+      if (next === 'day') {
+        document.documentElement.classList.remove('dark');
+        document.documentElement.classList.add('day');
+      } else {
+        document.documentElement.classList.add('dark');
+        document.documentElement.classList.remove('day');
+      }
     }
     toast.info(next === 'day' ? '☀️ Day Mode activated' : '🌙 Night Mode activated');
   };
   const [syncingReplies, setSyncingReplies] = useState(false);
   const [clearingOldChats, setClearingOldChats] = useState(false);
   const [uploadingChat, setUploadingChat] = useState(false);
+  const [replySearchQuery, setReplySearchQuery] = useState('');
 
   // Templates State
   const [savedTemplates, setSavedTemplates] = useState<any[]>([]);
@@ -1046,7 +1063,14 @@ export default function AppDashboard() {
   const connectedCount = instances.filter((i) => (i.status?.toUpperCase() === 'OPEN' || i.connectionStatus === 'open')).length;
 
   return (
-    <div className="min-h-screen bg-[#0b141a] text-slate-100 flex flex-col md:flex-row font-sans selection:bg-emerald-500/30 selection:text-emerald-300">
+    <div
+      className={`min-h-screen flex flex-col md:flex-row font-sans transition-colors duration-200 ${
+        theme === 'day'
+          ? 'bg-[#f8fafc] text-slate-900 selection:bg-emerald-500/20 selection:text-emerald-800'
+          : 'bg-[#0b141a] text-slate-100 selection:bg-emerald-500/30 selection:text-emerald-300'
+      }`}
+      data-tab={currentTab}
+    >
       
       {/* ========================================================= */}
       {/* 1. LEFT SIDEBAR (DESKTOP)                                */}
@@ -3799,16 +3823,48 @@ export default function AppDashboard() {
               <div className="grid grid-cols-1 md:grid-cols-12 gap-6 bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden min-h-[550px]">
                 {/* Conversations Sidebar (Left) */}
                 <div className="md:col-span-4 border-r border-slate-800 flex flex-col">
-                  <div className="p-3 border-b border-slate-800 bg-slate-950/60">
-                    <span className="text-xs font-bold text-white uppercase tracking-wider">Conversations</span>
+                  <div className="p-3 border-b border-slate-800 bg-slate-950/60 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-white uppercase tracking-wider">Conversations</span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">
+                        {conversations.length}
+                      </span>
+                    </div>
+                    {/* Search or start new chat input (Matching Reference Image 2) */}
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={replySearchQuery}
+                        onChange={(e) => setReplySearchQuery(e.target.value)}
+                        placeholder="Search or start new chat..."
+                        className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700/80 text-xs text-white placeholder:text-slate-400 focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
                   </div>
                   <div className="flex-1 overflow-y-auto divide-y divide-slate-800/60">
-                    {conversations.length === 0 ? (
-                      <div className="p-6 text-center text-slate-500 text-xs">
-                        No conversations yet. Sync chats or upload a .txt export above.
-                      </div>
-                    ) : (
-                      conversations.map((conv) => {
+                    {(() => {
+                      const filteredConvs = conversations.filter((c) => {
+                        if (!replySearchQuery) return true;
+                        const q = replySearchQuery.toLowerCase();
+                        return (
+                          (c.phone && c.phone.toLowerCase().includes(q)) ||
+                          (c.displayName && c.displayName.toLowerCase().includes(q)) ||
+                          (c.contactName && c.contactName.toLowerCase().includes(q)) ||
+                          (c.pushName && c.pushName.toLowerCase().includes(q)) ||
+                          (c.lastMessage && c.lastMessage.toLowerCase().includes(q))
+                        );
+                      });
+
+                      if (filteredConvs.length === 0) {
+                        return (
+                          <div className="p-6 text-center text-slate-500 text-xs">
+                            {replySearchQuery ? 'No conversations match your search.' : 'No conversations yet. Sync chats or upload a .txt export above.'}
+                          </div>
+                        );
+                      }
+
+                      return filteredConvs.map((conv) => {
                         const convKey = conv.id || conv.phone;
                         const isSel = selectedConversation === convKey || selectedConversation === conv.phone;
                         const cleanPhone = (conv.phone || '').replace(/^\+/, '');
@@ -3860,54 +3916,96 @@ export default function AppDashboard() {
                             )}
                           </button>
                         );
-                      })
-                    )}
+                      });
+                    })()}
                   </div>
                 </div>
 
                 {/* Message Thread (Right) */}
-                <div className="md:col-span-8 flex flex-col bg-[#0b141a]">
-                  {/* Thread Header */}
-                  <div className="p-3.5 border-b border-slate-800 bg-slate-900/90 flex items-center justify-between">
-                    {selectedConversation ? (
-                      (() => {
-                        const activeConv = conversations.find((c) => (c.id === selectedConversation || c.phone === selectedConversation));
-                        const cleanP = (activeConv?.phone || selectedConversation).replace(/^\+/, '');
-                        const headerTitle = activeConv?.displayName || activeConv?.contactName || activeConv?.pushName || (cleanP ? `+${cleanP}` : selectedConversation);
-                        const hasNamed = Boolean(activeConv?.contactName || activeConv?.pushName);
-                        const headerSubtitle = hasNamed && cleanP ? `+${cleanP}` : null;
-                        const initials = (activeConv?.contactName || activeConv?.pushName || cleanP || '?').slice(0, 2).toUpperCase();
+                <div className={`md:col-span-8 flex flex-col ${theme === 'day' ? 'bg-[#f8fafc]' : 'bg-[#0b141a]'}`}>
+                  {!selectedConversation ? (
+                    <div className="flex-1 flex flex-col items-center justify-center p-8 text-center select-none">
+                      {/* 3 Action Icon Badges (Matching Reference Image 2) */}
+                      <div className="flex items-center gap-3 mb-6">
+                        <div className="w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-500 flex items-center justify-center shadow-sm">
+                          <MessageSquare className="w-6 h-6" />
+                        </div>
+                        <div className="w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-500 flex items-center justify-center shadow-sm">
+                          <Send className="w-6 h-6 -rotate-12 translate-x-0.5" />
+                        </div>
+                        <div className="w-12 h-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-500 flex items-center justify-center shadow-sm">
+                          <Share2 className="w-6 h-6" />
+                        </div>
+                      </div>
 
-                        return (
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-full bg-emerald-600/30 border border-emerald-500/40 flex items-center justify-center text-xs font-bold text-emerald-400 shrink-0">
-                              {initials}
-                            </div>
-                            <div>
-                              <span className="text-xs font-bold text-white block">
-                                {headerTitle}
-                              </span>
-                              <span className="text-[11px] text-slate-400 font-mono block">
-                                {headerSubtitle || (cleanP ? `+${cleanP}` : '')}
-                                {activeConv?.instanceName ? ` • via ${activeConv.instanceName}` : ''}
-                              </span>
-                            </div>
+                      <h3 className={`text-2xl font-bold mb-2 tracking-tight ${theme === 'day' ? 'text-slate-900' : 'text-white'}`}>
+                        Welcome to Inbox!
+                      </h3>
+                      <p className="text-xs sm:text-sm text-slate-400 max-w-md leading-relaxed mb-12">
+                        Select a contact from the list to start a conversation. Your messages will appear here.
+                      </p>
+
+                      {/* 3 Feature Highlights (Real-time Chat, Templates, Media Sharing) */}
+                      <div className={`grid grid-cols-3 gap-6 max-w-lg w-full pt-8 border-t ${theme === 'day' ? 'border-slate-200' : 'border-slate-800'}`}>
+                        <div className="flex flex-col items-center gap-2.5">
+                          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${theme === 'day' ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-slate-800 text-slate-300 border border-slate-700'}`}>
+                            <MessageSquare className="w-5 h-5 text-blue-500" />
                           </div>
-                        );
-                      })()
-                    ) : (
-                      <span className="text-xs font-bold text-slate-400">Select a conversation</span>
-                    )}
-
-                    <div className="flex items-center gap-2">
-                      {autoSyncReplies && (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                          Auto-Sync Active (4s)
-                        </span>
-                      )}
+                          <span className={`text-xs font-semibold ${theme === 'day' ? 'text-slate-700' : 'text-slate-300'}`}>Real-time Chat</span>
+                        </div>
+                        <div className="flex flex-col items-center gap-2.5">
+                          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${theme === 'day' ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-slate-800 text-slate-300 border border-slate-700'}`}>
+                            <Sparkles className="w-5 h-5 text-blue-500" />
+                          </div>
+                          <span className={`text-xs font-semibold ${theme === 'day' ? 'text-slate-700' : 'text-slate-300'}`}>Templates</span>
+                        </div>
+                        <div className="flex flex-col items-center gap-2.5">
+                          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${theme === 'day' ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-slate-800 text-slate-300 border border-slate-700'}`}>
+                            <Share2 className="w-5 h-5 text-blue-500" />
+                          </div>
+                          <span className={`text-xs font-semibold ${theme === 'day' ? 'text-slate-700' : 'text-slate-300'}`}>Media Sharing</span>
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <>
+                      {/* Thread Header */}
+                      <div className="p-3.5 border-b border-slate-800 bg-slate-900/90 flex items-center justify-between">
+                        {(() => {
+                          const activeConv = conversations.find((c) => (c.id === selectedConversation || c.phone === selectedConversation));
+                          const cleanP = (activeConv?.phone || selectedConversation).replace(/^\+/, '');
+                          const headerTitle = activeConv?.displayName || activeConv?.contactName || activeConv?.pushName || (cleanP ? `+${cleanP}` : selectedConversation);
+                          const hasNamed = Boolean(activeConv?.contactName || activeConv?.pushName);
+                          const headerSubtitle = hasNamed && cleanP ? `+${cleanP}` : null;
+                          const initials = (activeConv?.contactName || activeConv?.pushName || cleanP || '?').slice(0, 2).toUpperCase();
+
+                          return (
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-full bg-emerald-600/30 border border-emerald-500/40 flex items-center justify-center text-xs font-bold text-emerald-400 shrink-0">
+                                {initials}
+                              </div>
+                              <div>
+                                <span className="text-xs font-bold text-white block">
+                                  {headerTitle}
+                                </span>
+                                <span className="text-[11px] text-slate-400 font-mono block">
+                                  {headerSubtitle || (cleanP ? `+${cleanP}` : '')}
+                                  {activeConv?.instanceName ? ` • via ${activeConv.instanceName}` : ''}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })()}
+
+                        <div className="flex items-center gap-2">
+                          {autoSyncReplies && (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                              Auto-Sync Active (4s)
+                            </span>
+                          )}
+                        </div>
+                      </div>
 
                   {/* Message Bubbles */}
                   <div className="flex-1 p-4 overflow-y-auto space-y-3">
@@ -3960,7 +4058,9 @@ export default function AppDashboard() {
                       {sendingReply ? 'Sending...' : 'Send'}
                     </button>
                   </div>
-                </div>
+                </>
+              )}
+            </div>
               </div>
             </div>
           )}

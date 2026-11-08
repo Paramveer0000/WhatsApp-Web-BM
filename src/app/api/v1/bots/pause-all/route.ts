@@ -25,3 +25,4 @@ export const POST = withApi(async function (req: NextRequest) {
     return NextResponse.json({ success: true, message: `Paused ${updated.count} live bot(s)` });
   }
 });
+

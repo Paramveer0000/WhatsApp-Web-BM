@@ -54,3 +54,4 @@ export const PUT = withApi(async function (
     message: `Updated assignments to ${instanceIds.length} instance(s)`,
   });
 });
+

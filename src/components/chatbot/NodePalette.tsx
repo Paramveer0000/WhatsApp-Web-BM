@@ -178,3 +178,4 @@ export function NodePalette({ onAddNode }: NodePaletteProps) {
     </div>
   );
 }
+

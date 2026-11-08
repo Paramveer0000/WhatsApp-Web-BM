@@ -18,3 +18,4 @@ export const GET = withApi(async function (req: NextRequest) {
 
   return NextResponse.json({ success: true, templates });
 });
+
