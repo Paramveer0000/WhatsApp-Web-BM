@@ -56,7 +56,12 @@ import {
 } from '@/lib/guardrails';
 import { AiGuardrailAdvisorTab } from '@/components/AiGuardrailAdvisorTab';
 
-export function GuardrailsConsoleTab() {
+export interface GuardrailsConsoleTabProps {
+  onApplyToWizard?: (delays: { minDelay: number; maxDelay: number; batchSize: number; batchDelay: number }) => void;
+  onNavigateToCampaigns?: () => void;
+}
+
+export function GuardrailsConsoleTab({ onApplyToWizard, onNavigateToCampaigns }: GuardrailsConsoleTabProps = {}) {
   // Navigation & Scope State
   const [activeTab, setActiveTab] = useState<'config' | 'activity' | 'versions' | 'advisor'>('config');
   const [scope, setScope] = useState<'global' | 'instance' | 'campaign'>('global');
@@ -87,6 +92,9 @@ export function GuardrailsConsoleTab() {
   const [simStartTime, setSimStartTime] = useState(new Date().toISOString().slice(0, 16));
   const [simResult, setSimResult] = useState<SimulationResult | null>(null);
   const [runningSim, setRunningSim] = useState(false);
+  const [showApplyModal, setShowApplyModal] = useState(false);
+  const [selectedTargetCampaignId, setSelectedTargetCampaignId] = useState('');
+  const [applyingToCampaign, setApplyingToCampaign] = useState(false);
 
   // Activity & Version History
   const [events, setEvents] = useState<any[]>([]);
@@ -208,7 +216,7 @@ export function GuardrailsConsoleTab() {
       const data = await res.json();
       if (data.success) {
         setSimResult(data.simulation);
-        toast.success('Guardrails pacing simulation completed!', 'Simulation Ready');
+        toast.success('Guardrails pacing simulation completed! Click "Apply Changes to Campaign" to deploy.', 'Simulation Ready');
       } else {
         toast.error(data.error || 'Simulation failed', 'Simulation Error');
       }
@@ -216,6 +224,78 @@ export function GuardrailsConsoleTab() {
       toast.error(`Simulation failed: ${err.message}`, 'Simulation Error');
     } finally {
       setRunningSim(false);
+    }
+  };
+
+  const handleApplyToSpecificCampaign = async (campaignId: string) => {
+    if (!campaignId) {
+      toast.warning('Please select a campaign');
+      return;
+    }
+    setApplyingToCampaign(true);
+    try {
+      // 1. Save guardrail override for campaign scope
+      await fetch('/api/v1/guardrails', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scope: 'campaign',
+          scopeId: campaignId,
+          presetKey: selectedPreset,
+          config: currentConfig,
+          strictMode,
+          diffSummary: `Applied simulated pacing settings to campaign ${campaignId}`,
+        }),
+      });
+
+      // 2. Also update campaign's direct pacing parameters
+      const patchRes = await fetch(`/api/campaigns/${campaignId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          minDelay: currentConfig.pacing.minDelay,
+          maxDelay: currentConfig.pacing.maxDelay,
+          batchSize: currentConfig.batchCooldown.batchSizeMax,
+          batchDelay: currentConfig.batchCooldown.cooldownMinSec,
+          sendWindowStart: currentConfig.sendingWindow.startTime,
+          sendWindowEnd: currentConfig.sendingWindow.endTime,
+        }),
+      });
+
+      const patchData = await patchRes.json();
+      const targetCamp = campaigns.find((c) => c.id === campaignId);
+      const campName = targetCamp?.name || campaignId;
+      toast.success(`Guardrails & pacing successfully applied to "${campName}"!`, 'Applied to Campaign');
+      setShowApplyModal(false);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to apply to campaign');
+    } finally {
+      setApplyingToCampaign(false);
+    }
+  };
+
+  const handleApplyGloballyFromSim = async () => {
+    setApplyingToCampaign(true);
+    try {
+      await handleSave();
+      toast.success('Guardrails saved & actively running across all campaigns!', 'Applied Globally');
+      setShowApplyModal(false);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save guardrails');
+    } finally {
+      setApplyingToCampaign(false);
+    }
+  };
+
+  const handleApplyToCreator = () => {
+    if (onApplyToWizard) {
+      onApplyToWizard({
+        minDelay: currentConfig.pacing.minDelay,
+        maxDelay: currentConfig.pacing.maxDelay,
+        batchSize: currentConfig.batchCooldown.batchSizeMax,
+        batchDelay: currentConfig.batchCooldown.cooldownMinSec,
+      });
+      setShowApplyModal(false);
     }
   };
 
@@ -964,19 +1044,35 @@ export function GuardrailsConsoleTab() {
                 </div>
 
                 {simResult && (
-                  <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2 text-xs font-mono">
-                    <div className="flex justify-between text-slate-300">
-                      <span>Total Time:</span>
-                      <span className="text-emerald-400 font-bold">{(simResult.totalDurationMin / 60).toFixed(1)} hrs</span>
+                  <div className="space-y-2.5">
+                    <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2 text-xs font-mono">
+                      <div className="flex justify-between text-slate-300">
+                        <span>Total Time:</span>
+                        <span className="text-emerald-400 font-bold">{(simResult.totalDurationMin / 60).toFixed(1)} hrs</span>
+                      </div>
+                      <div className="flex justify-between text-slate-300">
+                        <span>Completion:</span>
+                        <span className="text-white">{new Date(simResult.expectedFinishTime).toLocaleTimeString()}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-300">
+                        <span>Long Breaks:</span>
+                        <span className="text-white">{simResult.longBreaksCount} pauses</span>
+                      </div>
                     </div>
-                    <div className="flex justify-between text-slate-300">
-                      <span>Completion:</span>
-                      <span className="text-white">{new Date(simResult.expectedFinishTime).toLocaleTimeString()}</span>
-                    </div>
-                    <div className="flex justify-between text-slate-300">
-                      <span>Long Breaks:</span>
-                      <span className="text-white">{simResult.longBreaksCount} pauses</span>
-                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (campaigns.length > 0 && !selectedTargetCampaignId) {
+                          setSelectedTargetCampaignId(campaigns[0].id);
+                        }
+                        setShowApplyModal(true);
+                      }}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 px-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl text-xs shadow-lg shadow-emerald-950/40 transition cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-300" />
+                      <span>Apply Changes to Campaign</span>
+                    </button>
                   </div>
                 )}
               </div>
@@ -1140,6 +1236,116 @@ export function GuardrailsConsoleTab() {
                 {saving ? 'Applying...' : 'Confirm & Apply Guardrails'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* Apply to Campaign Modal */}
+      {showApplyModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Apply Guardrails to Campaign</h3>
+                  <p className="text-[11px] text-slate-400">Deploy these simulated anti-ban pacing settings</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowApplyModal(false)}
+                className="text-slate-400 hover:text-white text-xs px-2 py-1 rounded-lg hover:bg-slate-800 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Pacing Summary Pills */}
+            <div className="grid grid-cols-3 gap-2 text-center text-xs">
+              <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800">
+                <div className="text-[10px] text-slate-400 uppercase font-mono">Delays</div>
+                <div className="font-bold text-emerald-400 mt-0.5">{currentConfig.pacing.minDelay}s - {currentConfig.pacing.maxDelay}s</div>
+              </div>
+              <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800">
+                <div className="text-[10px] text-slate-400 uppercase font-mono">Batch Size</div>
+                <div className="font-bold text-emerald-400 mt-0.5">{currentConfig.batchCooldown.batchSizeMin}-{currentConfig.batchCooldown.batchSizeMax} msgs</div>
+              </div>
+              <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800">
+                <div className="text-[10px] text-slate-400 uppercase font-mono">Cooldown</div>
+                <div className="font-bold text-emerald-400 mt-0.5">{Math.round(currentConfig.batchCooldown.cooldownMinSec / 60)} min</div>
+              </div>
+            </div>
+
+            {/* Action 1: Apply to Specific Campaign */}
+            <div className="p-3.5 bg-slate-950/70 border border-slate-800 rounded-2xl space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Option 1: Apply to Specific Campaign</span>
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono">Immediate update</span>
+              </div>
+              {campaigns.length === 0 ? (
+                <p className="text-xs text-slate-500 italic">No existing campaigns found.</p>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <select
+                    value={selectedTargetCampaignId}
+                    onChange={(e) => setSelectedTargetCampaignId(e.target.value)}
+                    className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white"
+                  >
+                    {campaigns.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({c.status})
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    disabled={applyingToCampaign || !selectedTargetCampaignId}
+                    onClick={() => handleApplyToSpecificCampaign(selectedTargetCampaignId)}
+                    className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition shrink-0 cursor-pointer shadow"
+                  >
+                    {applyingToCampaign ? 'Applying...' : 'Apply Now'}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Action 2: Apply Globally */}
+            <div className="p-3.5 bg-slate-950/70 border border-slate-800 rounded-2xl flex items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-bold text-white">Option 2: Apply Globally (All Campaigns)</div>
+                <div className="text-[11px] text-slate-400">All running and future campaigns will automatically follow these rules</div>
+              </div>
+              <button
+                type="button"
+                disabled={applyingToCampaign}
+                onClick={handleApplyGloballyFromSim}
+                className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-emerald-300 font-bold text-xs rounded-xl border border-emerald-500/30 transition shrink-0 cursor-pointer"
+              >
+                Save & Apply Global
+              </button>
+            </div>
+
+            {/* Action 3: Apply to Creator Wizard */}
+            {onApplyToWizard && (
+              <div className="p-3.5 bg-slate-950/70 border border-slate-800 rounded-2xl flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs font-bold text-white">Option 3: Create New Campaign with These Settings</div>
+                  <div className="text-[11px] text-slate-400">Loads these delay numbers into the Campaign Creator and opens the form</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleApplyToCreator}
+                  className="px-3.5 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-bold text-xs rounded-xl transition shrink-0 cursor-pointer shadow"
+                >
+                  Open in Creator →
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

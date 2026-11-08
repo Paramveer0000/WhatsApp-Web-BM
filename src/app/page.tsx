@@ -3831,7 +3831,17 @@ export default function AppDashboard() {
           {/* VIEW: ANTI-BAN GUARDRAILS                                 */}
           {/* ========================================================= */}
           {currentTab === 'guardrails' && (
-            <GuardrailsConsoleTab />
+            <GuardrailsConsoleTab
+              onApplyToWizard={(delays) => {
+                setMinDelay(delays.minDelay);
+                setMaxDelay(delays.maxDelay);
+                setBatchSize(delays.batchSize);
+                setBatchDelay(delays.batchDelay);
+                setCurrentTab('wizard');
+                toast.success('Pacing guardrails applied to Campaign Creator!', 'Guardrails Synced');
+              }}
+              onNavigateToCampaigns={() => setCurrentTab('campaigns')}
+            />
           )}
 
           {/* ========================================================= */}

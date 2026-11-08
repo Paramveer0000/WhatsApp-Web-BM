@@ -192,3 +192,31 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
+
+export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const user = await getSessionUser();
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const campaignId = params.id;
+    const body = await req.json();
+
+    const updated = await db.campaign.update({
+      where: { id: campaignId },
+      data: {
+        minDelay: body.minDelay !== undefined ? Number(body.minDelay) : undefined,
+        maxDelay: body.maxDelay !== undefined ? Number(body.maxDelay) : undefined,
+        batchBreakSize: body.batchBreakSize !== undefined ? Number(body.batchBreakSize) : body.batchSize !== undefined ? Number(body.batchSize) : undefined,
+        batchBreakDuration: body.batchBreakDuration !== undefined ? Number(body.batchBreakDuration) : body.batchDelay !== undefined ? Math.max(1, Math.round(Number(body.batchDelay) / 60)) : undefined,
+        sendWindowStart: body.sendWindowStart !== undefined ? body.sendWindowStart : undefined,
+        sendWindowEnd: body.sendWindowEnd !== undefined ? body.sendWindowEnd : undefined,
+        riskOverride: body.riskOverride !== undefined ? Boolean(body.riskOverride) : undefined,
+      },
+    });
+
+    return NextResponse.json({ success: true, campaign: updated });
+  } catch (err: any) {
+    logger.error({ err }, 'Error in PATCH /api/campaigns/[id]');
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
