@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   Clock,
   Layers,
+  ChevronDown,
 } from 'lucide-react';
 
 interface BotItem {
@@ -42,6 +43,7 @@ interface BotListViewProps {
   onDeleteBot: (botId: string) => void;
   onPauseAll: () => void;
   isPausingAll?: boolean;
+  onUpdateAssignments?: (botId: string, instanceIds: string[]) => Promise<void>;
 }
 
 export function BotListView({
@@ -54,8 +56,19 @@ export function BotListView({
   onDeleteBot,
   onPauseAll,
   isPausingAll,
+  onUpdateAssignments,
 }: BotListViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [openInstancePickerBotId, setOpenInstancePickerBotId] = useState<string | null>(null);
+
+  const handleToggleInstance = async (botId: string, instName: string, currentAssigned: string[]) => {
+    if (!onUpdateAssignments) return;
+    const exists = currentAssigned.includes(instName);
+    const next = exists
+      ? currentAssigned.filter((x) => x !== instName)
+      : [...currentAssigned, instName];
+    await onUpdateAssignments(botId, next);
+  };
 
   const filteredBots = bots.filter(
     (b) =>
@@ -219,16 +232,103 @@ export function BotListView({
 
                   {/* Metadata Chips */}
                   <div className="mt-4 pt-3 border-t border-slate-800/80 flex flex-wrap items-center gap-2 text-[10px] text-slate-400 font-mono">
-                    <span className="flex items-center gap-1 bg-slate-950 px-2 py-0.5 rounded-lg">
+                    <span className="flex items-center gap-1 bg-slate-950 px-2 py-0.5 rounded-lg border border-slate-800">
                       <Layers className="w-3 h-3 text-emerald-400" />
                       {bot.nodeCount} Nodes
                     </span>
-                    <span className="flex items-center gap-1 bg-slate-950 px-2 py-0.5 rounded-lg">
-                      <Smartphone className="w-3 h-3 text-sky-400" />
-                      {bot.assignedInstances.length > 0 ? `${bot.assignedInstances.length} Number(s)` : 'No Instance'}
-                    </span>
+
+                    {/* Interactive Instance Selector Chip & Dropdown */}
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpenInstancePickerBotId(openInstancePickerBotId === bot.id ? null : bot.id);
+                        }}
+                        className={`flex items-center gap-1.5 px-2 py-0.5 rounded-lg transition border cursor-pointer ${
+                          bot.assignedInstances.length > 0
+                            ? 'bg-sky-500/10 text-sky-400 border-sky-500/30 hover:bg-sky-500/20'
+                            : 'bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-white border-slate-800'
+                        }`}
+                        title="Click to assign or change WhatsApp instances for this chatbot"
+                      >
+                        <Smartphone className="w-3 h-3 text-sky-400" />
+                        <span className="font-semibold">
+                          {bot.assignedInstances.length > 0
+                            ? bot.assignedInstances.length === 1
+                              ? bot.assignedInstances[0]
+                              : `${bot.assignedInstances.length} Instances`
+                            : 'Select Instance'}
+                        </span>
+                        <ChevronDown className="w-2.5 h-2.5 opacity-70" />
+                      </button>
+
+                      {/* Dropdown Menu */}
+                      {openInstancePickerBotId === bot.id && (
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          className="absolute bottom-full left-0 mb-2 w-64 rounded-2xl bg-slate-900 border border-slate-700 shadow-2xl p-2.5 z-50 text-white animate-in fade-in zoom-in-95"
+                        >
+                          <div className="px-1 pb-2 mb-1.5 border-b border-slate-800 flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-slate-300">Assign WhatsApp Instances</span>
+                            <span className="text-[10px] text-slate-500 font-mono">
+                              {bot.assignedInstances.length} active
+                            </span>
+                          </div>
+
+                          <div className="max-h-48 overflow-y-auto space-y-1">
+                            {availableInstances.length === 0 ? (
+                              <p className="text-[11px] text-slate-500 p-2 text-center">
+                                No WhatsApp instances found. Go to Instances tab to create one.
+                              </p>
+                            ) : (
+                              availableInstances.map((inst) => {
+                                const isAssigned =
+                                  bot.assignedInstances.includes(inst.name) ||
+                                  bot.assignedInstances.includes(inst.id);
+                                return (
+                                  <label
+                                    key={inst.id}
+                                    className={`flex items-center justify-between p-2 rounded-xl text-xs transition cursor-pointer ${
+                                      isAssigned
+                                        ? 'bg-sky-500/15 text-sky-300 font-semibold'
+                                        : 'hover:bg-slate-800 text-slate-300'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2 truncate">
+                                      <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                                      <span className="truncate">{inst.name}</span>
+                                    </div>
+                                    <input
+                                      type="checkbox"
+                                      checked={isAssigned}
+                                      onChange={() =>
+                                        handleToggleInstance(bot.id, inst.name, bot.assignedInstances)
+                                      }
+                                      className="rounded border-slate-600 text-sky-500 focus:ring-sky-500 w-3.5 h-3.5 cursor-pointer"
+                                    />
+                                  </label>
+                                );
+                              })
+                            )}
+                          </div>
+
+                          <div className="mt-2 pt-2 border-t border-slate-800 flex items-center justify-between px-1">
+                            <span className="text-[10px] text-emerald-400 font-mono">Auto-saved</span>
+                            <button
+                              type="button"
+                              onClick={() => setOpenInstancePickerBotId(null)}
+                              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-[11px] font-semibold"
+                            >
+                              Done
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
                     {bot.latestVersion && (
-                      <span className="bg-slate-950 px-2 py-0.5 rounded-lg text-slate-300">
+                      <span className="bg-slate-950 px-2 py-0.5 rounded-lg text-slate-300 border border-slate-800">
                         v{bot.latestVersion}
                       </span>
                     )}

@@ -136,6 +136,30 @@ export function ChatbotStudioTab({ instances, toast }: ChatbotStudioTabProps) {
     }
   };
 
+  // Update Bot Instance Assignments
+  const handleUpdateAssignments = async (botId: string, instanceIds: string[]) => {
+    try {
+      const res = await fetch(`/api/v1/bots/${botId}/assignments`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instanceIds }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(
+          instanceIds.length > 0
+            ? `Assigned to ${instanceIds.join(', ')}`
+            : 'Unassigned from all instances'
+        );
+        loadBots();
+      } else {
+        toast.error(data.error || 'Failed to update assignments');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Error updating assignments');
+    }
+  };
+
   // Publish Bot
   const handlePublishBot = async (botId: string, note?: string) => {
     const res = await fetch(`/api/v1/bots/${botId}/publish`, {
@@ -204,6 +228,7 @@ export function ChatbotStudioTab({ instances, toast }: ChatbotStudioTabProps) {
         onDeleteBot={handleDeleteBot}
         onPauseAll={handlePauseAll}
         isPausingAll={isPausingAll}
+        onUpdateAssignments={handleUpdateAssignments}
       />
 
       <TemplateGalleryModal

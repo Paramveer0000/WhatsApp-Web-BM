@@ -34,6 +34,7 @@ import {
   Redo2,
   Send,
   HelpCircle,
+  ChevronDown,
 } from 'lucide-react';
 
 import { CustomNode } from './CustomNode';
@@ -107,6 +108,36 @@ function FlowEditorInner({
   const [selectedInstances, setSelectedInstances] = useState<string[]>(
     initialBot.assignments?.map((a: any) => a.instanceId) || []
   );
+  const [isInstanceDropdownOpen, setIsInstanceDropdownOpen] = useState(false);
+  const [isDayTheme, setIsDayTheme] = useState(false);
+
+  useEffect(() => {
+    const checkTheme = () => {
+      const dt = typeof document !== 'undefined' ? document.documentElement.getAttribute('data-theme') : null;
+      setIsDayTheme(dt === 'day');
+    };
+    checkTheme();
+    const observer = new MutationObserver(checkTheme);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
+  }, []);
+
+  const handleToggleInstance = async (instName: string) => {
+    const exists = selectedInstances.includes(instName);
+    const updated = exists
+      ? selectedInstances.filter((x) => x !== instName)
+      : [...selectedInstances, instName];
+    setSelectedInstances(updated);
+    try {
+      await fetch(`/api/v1/bots/${botId}/assignments`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instanceIds: updated }),
+      });
+    } catch (err: any) {
+      console.error('Error assigning instance:', err);
+    }
+  };
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialBot.flow?.nodes || []);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialBot.flow?.edges || []);
@@ -307,14 +338,28 @@ function FlowEditorInner({
   const selectedNode = (nodes.find((n) => n.id === selectedNodeId) as FlowNode) || null;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-120px)] bg-slate-950 text-white rounded-3xl overflow-hidden border border-slate-800 shadow-2xl animate-in fade-in">
+    <div
+      className={`flex flex-col h-[calc(100vh-120px)] rounded-3xl overflow-hidden border shadow-2xl animate-in fade-in transition-colors ${
+        isDayTheme
+          ? 'bg-white text-slate-900 border-slate-200 shadow-slate-200/50'
+          : 'bg-slate-950 text-white border-slate-800 shadow-2xl'
+      }`}
+    >
       {/* Top Navigation & Action Bar */}
-      <div className="bg-slate-900 border-b border-slate-800 px-4 py-2.5 flex items-center justify-between gap-4">
+      <div
+        className={`px-4 py-2.5 flex items-center justify-between gap-3 border-b transition-colors ${
+          isDayTheme ? 'bg-white border-slate-200' : 'bg-slate-900 border-slate-800'
+        }`}
+      >
         {/* Left: Back & Title Edit */}
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition cursor-pointer"
+            className={`p-2 rounded-xl transition cursor-pointer ${
+              isDayTheme
+                ? 'bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 border border-slate-200'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white'
+            }`}
             title="Back to Bots List"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -328,16 +373,20 @@ function FlowEditorInner({
                 setBotName(e.target.value);
                 markUnsaved();
               }}
-              className="bg-transparent font-bold text-white text-sm hover:bg-slate-800/60 px-2 py-0.5 rounded-lg border border-transparent hover:border-slate-700 focus:outline-none focus:border-emerald-500 transition max-w-xs"
+              className={`font-bold text-sm px-2 py-0.5 rounded-lg border focus:outline-none focus:border-emerald-500 transition min-w-[200px] max-w-sm ${
+                isDayTheme
+                  ? 'bg-transparent text-slate-900 hover:bg-slate-100 border-transparent hover:border-slate-300'
+                  : 'bg-transparent text-white hover:bg-slate-800/60 border-transparent hover:border-slate-700'
+              }`}
             />
             <div className="flex items-center gap-2 pl-2">
-              <span className="text-[10px] text-slate-400 font-mono">
+              <span className={`text-[10px] font-mono ${isDayTheme ? 'text-slate-500' : 'text-slate-400'}`}>
                 {saveStatus === 'saved' ? 'Saved' : saveStatus === 'saving' ? 'Saving...' : 'Unsaved changes'}
               </span>
               {validation && (
                 <span
                   className={`text-[10px] font-mono px-2 py-0.2 rounded-full ${
-                    validation.isValid ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400 font-bold'
+                    validation.isValid ? 'bg-emerald-500/20 text-emerald-500 font-medium' : 'bg-rose-500/20 text-rose-500 font-bold'
                   }`}
                 >
                   {validation.isValid ? 'Valid' : `${validation.errors.length} Issues`}
@@ -347,24 +396,134 @@ function FlowEditorInner({
           </div>
         </div>
 
-        {/* Center: Quick Toolbar */}
-        <div className="flex items-center gap-1.5 bg-slate-950 px-2 py-1 rounded-xl border border-slate-800">
-          <button
-            onClick={handleAutoLayout}
-            className="flex items-center gap-1 px-2.5 py-1 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg text-xs transition cursor-pointer"
-            title="Auto-arrange layout cleanly"
-          >
-            <Layout className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Auto Layout</span>
-          </button>
-          <div className="w-px h-4 bg-slate-800" />
-          <button
-            onClick={handleExportJson}
-            className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
-            title="Export flow as JSON"
-          >
-            <Download className="w-3.5 h-3.5" />
-          </button>
+        {/* Center: Quick Toolbar & Instance Selector */}
+        <div className="flex items-center gap-2">
+          {/* WhatsApp Instance Selector Dropdown */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setIsInstanceDropdownOpen(!isInstanceDropdownOpen)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-medium transition cursor-pointer ${
+                selectedInstances.length > 0
+                  ? isDayTheme
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-300 font-semibold shadow-2xs'
+                    : 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40 shadow-sm'
+                  : isDayTheme
+                  ? 'bg-slate-100 hover:bg-slate-200/70 text-slate-700 border-slate-300'
+                  : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-700'
+              }`}
+              title="Select WhatsApp instance(s) that run this chatbot"
+            >
+              <Smartphone className="w-3.5 h-3.5 text-sky-500 shrink-0" />
+              <span className="truncate max-w-[140px]">
+                {selectedInstances.length === 0
+                  ? 'Select Instance'
+                  : selectedInstances.length === 1
+                  ? `Instance: ${selectedInstances[0]}`
+                  : `${selectedInstances.length} Instances`}
+              </span>
+              <ChevronDown className="w-3 h-3 text-slate-400 shrink-0" />
+            </button>
+
+            {/* Dropdown Menu */}
+            {isInstanceDropdownOpen && (
+              <div
+                className={`absolute top-full left-0 mt-2 w-64 rounded-2xl border p-2.5 z-50 shadow-2xl animate-in fade-in zoom-in-95 ${
+                  isDayTheme ? 'bg-white border-slate-200 text-slate-900' : 'bg-slate-900 border-slate-800 text-white'
+                }`}
+              >
+                <div className={`px-2 pb-2 mb-1.5 border-b flex items-center justify-between ${
+                  isDayTheme ? 'border-slate-100 text-slate-500' : 'border-slate-800 text-slate-400'
+                }`}>
+                  <span className="text-[11px] font-bold uppercase tracking-wider">
+                    Select WhatsApp Instance
+                  </span>
+                  <span className="text-[10px] font-mono">
+                    {selectedInstances.length} active
+                  </span>
+                </div>
+
+                <div className="max-h-48 overflow-y-auto space-y-1">
+                  {availableInstances.length === 0 ? (
+                    <div className="p-3 text-center text-xs text-slate-400">
+                      No instances available. Create one in the Instances tab first.
+                    </div>
+                  ) : (
+                    availableInstances.map((inst) => {
+                      const isAssigned =
+                        selectedInstances.includes(inst.name) || selectedInstances.includes(inst.id);
+                      return (
+                        <label
+                          key={inst.id}
+                          className={`flex items-center justify-between px-2.5 py-2 rounded-xl text-xs transition cursor-pointer ${
+                            isAssigned
+                              ? isDayTheme
+                                ? 'bg-emerald-50 text-emerald-900 font-semibold'
+                                : 'bg-emerald-950/40 text-emerald-300 font-semibold'
+                              : isDayTheme
+                              ? 'hover:bg-slate-100 text-slate-700'
+                              : 'hover:bg-slate-800 text-slate-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                            <span className="truncate font-medium">{inst.name}</span>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={isAssigned}
+                            onChange={() => handleToggleInstance(inst.name)}
+                            className="rounded border-slate-400 text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5 cursor-pointer"
+                          />
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+
+                <div className={`mt-2 pt-2 border-t flex items-center justify-between px-1 ${
+                  isDayTheme ? 'border-slate-100' : 'border-slate-800'
+                }`}>
+                  <span className="text-[10px] text-emerald-500 font-mono">Auto-saved</span>
+                  <button
+                    type="button"
+                    onClick={() => setIsInstanceDropdownOpen(false)}
+                    className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-semibold transition cursor-pointer"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Auto Layout & Export */}
+          <div className={`flex items-center gap-1.5 px-2 py-1 rounded-xl border ${
+            isDayTheme ? 'bg-slate-100 border-slate-200' : 'bg-slate-950 border-slate-800'
+          }`}>
+            <button
+              onClick={handleAutoLayout}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs transition cursor-pointer ${
+                isDayTheme
+                  ? 'text-slate-700 hover:text-slate-900 hover:bg-white shadow-2xs'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              }`}
+              title="Auto-arrange layout cleanly"
+            >
+              <Layout className="w-3.5 h-3.5 text-emerald-500" />
+              <span>Auto Layout</span>
+            </button>
+            <div className={`w-px h-4 ${isDayTheme ? 'bg-slate-200' : 'bg-slate-800'}`} />
+            <button
+              onClick={handleExportJson}
+              className={`p-1.5 rounded-lg transition cursor-pointer ${
+                isDayTheme ? 'text-slate-600 hover:text-slate-900 hover:bg-white shadow-2xs' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+              title="Export flow as JSON"
+            >
+              <Download className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
 
         {/* Right: Test Simulator & Publish */}
@@ -374,17 +533,19 @@ function FlowEditorInner({
             className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer border ${
               isSimulatorOpen
                 ? 'bg-emerald-950/80 text-emerald-400 border-emerald-500/40 shadow-lg'
+                : isDayTheme
+                ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
                 : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
             }`}
           >
-            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+            <Sparkles className="w-3.5 h-3.5 text-emerald-500" />
             <span>{isSimulatorOpen ? 'Close Simulator' : 'Test Flow'}</span>
           </button>
 
           <button
             onClick={handlePublish}
             disabled={isPublishing}
-            className="flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-emerald-950/50 cursor-pointer"
+            className="flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-md shadow-emerald-950/30 cursor-pointer"
           >
             <Send className="w-3.5 h-3.5" />
             <span>{isPublishing ? 'Publishing...' : 'Publish'}</span>
@@ -413,15 +574,30 @@ function FlowEditorInner({
             snapGrid={[16, 16]}
             fitView
             fitViewOptions={{ padding: 0.2 }}
-            colorMode="dark"
-            className="bg-[#060b10]"
+            colorMode={isDayTheme ? 'light' : 'dark'}
+            className={isDayTheme ? 'bg-[#f8fafc]' : 'bg-[#060b10]'}
           >
-            <Background variant={BackgroundVariant.Dots} gap={16} size={1.2} color="#1e293b" />
-            <Controls className="!bg-slate-900 !border-slate-800 !text-white !rounded-xl" />
+            <Background
+              variant={BackgroundVariant.Dots}
+              gap={16}
+              size={1.2}
+              color={isDayTheme ? '#cbd5e1' : '#1e293b'}
+            />
+            <Controls
+              className={
+                isDayTheme
+                  ? '!bg-white !border-slate-200 !text-slate-700 !rounded-xl shadow-md'
+                  : '!bg-slate-900 !border-slate-800 !text-white !rounded-xl'
+              }
+            />
             <MiniMap
-              className="!bg-slate-900/90 !border-slate-800 !rounded-xl"
+              className={
+                isDayTheme
+                  ? '!bg-white/95 !border-slate-200 !rounded-xl shadow-lg'
+                  : '!bg-slate-900/90 !border-slate-800 !rounded-xl'
+              }
               nodeColor={(n: any) => ((n.data as any)?.nodeType?.startsWith?.('trigger_') ? '#f59e0b' : '#10b981')}
-              maskColor="rgba(2, 6, 23, 0.7)"
+              maskColor={isDayTheme ? 'rgba(241, 245, 249, 0.75)' : 'rgba(2, 6, 23, 0.7)'}
             />
           </ReactFlow>
         </div>

@@ -459,3 +459,76 @@ body {
 [data-theme="day"] ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
+
+/* ========================================================= */
+/* REACT FLOW & CHATBOT STUDIO DAY MODE                      */
+/* ========================================================= */
+[data-theme="day"] .react-flow {
+  background-color: #f8fafc !important;
+}
+
+[data-theme="day"] .react-flow__pane {
+  background-color: #f8fafc !important;
+}
+
+[data-theme="day"] .react-flow__controls {
+  background-color: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05) !important;
+  border-radius: 0.75rem !important;
+  overflow: hidden;
+}
+
+[data-theme="day"] .react-flow__controls-button {
+  background-color: #ffffff !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+  fill: #475569 !important;
+}
+
+[data-theme="day"] .react-flow__controls-button:hover {
+  background-color: #f1f5f9 !important;
+  fill: #0f172a !important;
+}
+
+[data-theme="day"] .react-flow__controls-button svg {
+  fill: #475569 !important;
+}
+
+[data-theme="day"] .react-flow__minimap {
+  background-color: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05) !important;
+  border-radius: 0.75rem !important;
+}
+
+[data-theme="day"] .react-flow__node {
+  color: #0f172a !important;
+}
+
+[data-theme="day"] .react-flow__node .bg-slate-900 {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05) !important;
+}
+
+[data-theme="day"] .react-flow__node .text-slate-300 {
+  color: #475569 !important;
+}
+
+[data-theme="day"] .react-flow__node .text-slate-400 {
+  color: #64748b !important;
+}
+
+[data-theme="day"] .react-flow__handle {
+  background-color: #ffffff !important;
+  border-color: #10b981 !important;
+}
+
+[data-theme="day"] .react-flow__handle:hover {
+  background-color: #10b981 !important;
+}
+
+[data-theme="day"] .react-flow__edge-path {
+  stroke: #94a3b8 !important;
+}
