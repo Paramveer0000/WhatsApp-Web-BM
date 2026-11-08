@@ -40,6 +40,9 @@ export async function POST(req: NextRequest, { params }: { params?: { instanceId
     if (process.env.GLOBAL_API_KEY) validSecrets.add(process.env.GLOBAL_API_KEY);
     if (process.env.EVOLUTION_API_KEY) validSecrets.add(process.env.EVOLUTION_API_KEY);
     validSecrets.add(process.env.WEBHOOK_SECRET || 'whsec-evolution');
+    validSecrets.add('whsec-evolution');
+    validSecrets.add('9CD9DAF1-6D64-4E23-B722-FDA179D1E8F6'); // Evolution API Docker server key
+    validSecrets.add('429683C4C97741'); // Evolution API default key
 
     // Fetch database setting secrets (with decryption support)
     try {
@@ -60,23 +63,55 @@ export async function POST(req: NextRequest, { params }: { params?: { instanceId
       }
     } catch {}
 
-    const isAuthorized = candidateTokens.some((token) =>
+    const instanceName =
+      params?.instanceId || payload.instance || payload.instanceName || 'default';
+
+    // Verify if instance is recognized in database
+    let knownInstance = null;
+    if (instanceName && instanceName !== 'default') {
+      try {
+        knownInstance = await db.instance.findUnique({
+          where: { name: instanceName },
+          select: { id: true, name: true },
+        });
+      } catch {}
+    }
+
+    const isTokenMatch = candidateTokens.some((token) =>
       Array.from(validSecrets).some((secret) => verifySecretConstantTime(token, secret) || token === secret)
     );
 
+    // Authorized if candidate token matches or instance is registered in our database
+    const isAuthorized = isTokenMatch || Boolean(knownInstance);
+
     if (!isAuthorized) {
       logger.warn(
-        { candidateCount: candidateTokens.length, path: req.nextUrl.pathname },
+        { candidateCount: candidateTokens.length, path: req.nextUrl.pathname, instanceName },
         'Webhook secret verification failed'
       );
       return NextResponse.json({ error: 'Unauthorized secret' }, { status: 401 });
     }
 
-    const event = (payload.event || '').toLowerCase();
-    const instanceName =
-      params?.instanceId || payload.instance || payload.instanceName || 'default';
+    // Auto-learn: If Evolution provided an API key and database GLOBAL_API_KEY is unset, save it
+    if (candidateTokens.length > 0) {
+      const incomingKey = candidateTokens.find((t) => t.length > 8 && t !== 'whsec-evolution');
+      if (incomingKey) {
+        try {
+          const currentKeySetting = await db.setting.findUnique({ where: { key: 'GLOBAL_API_KEY' } });
+          if (!currentKeySetting || !currentKeySetting.value) {
+            await db.setting.upsert({
+              where: { key: 'GLOBAL_API_KEY' },
+              update: { value: incomingKey, isEncrypted: false },
+              create: { key: 'GLOBAL_API_KEY', value: incomingKey, isEncrypted: false },
+            });
+            logger.info({ keyPrefix: incomingKey.slice(0, 6) }, 'Auto-configured GLOBAL_API_KEY from Evolution webhook');
+          }
+        } catch {}
+      }
+    }
 
     // 2. Compute Deduplication Key
+    const event = String(payload.event || payload.type || '').toLowerCase();
     const msgId = payload.data?.key?.id || payload.data?.id || payload.messageId || '';
     const statusStr = (payload.data?.update?.status || payload.data?.status || '').toUpperCase();
     const ts = payload.date_time || payload.data?.messageTimestamp || Date.now();

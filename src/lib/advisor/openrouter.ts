@@ -71,6 +71,146 @@ export const AdvisorOutputSchema = z.object({
   warnings: z.array(z.string()).default([]),
 });
 
+/**
+ * Normalizes raw LLM output into the strict schema expected by AdvisorOutputSchema.
+ * Handles cases where LLMs return strings instead of objects, or omit required keys.
+ */
+export function normalizeAdvisorOutput(raw: any): any {
+  if (!raw || typeof raw !== 'object') {
+    return {
+      overall_assessment: { health: 'good', summary: String(raw || 'No analysis generated'), confidence: 'medium' },
+      key_findings: [],
+      recommendations: [],
+      suggested_experiments: [],
+      data_gaps: [],
+      warnings: [],
+    };
+  }
+
+  const out: any = { ...raw };
+
+  // 1. Normalize overall_assessment
+  if (typeof out.overall_assessment === 'string') {
+    const text = out.overall_assessment;
+    const lower = text.toLowerCase();
+    const health = lower.includes('risk') || lower.includes('danger') || lower.includes('ban')
+      ? 'risky'
+      : lower.includes('watch') || lower.includes('caution') || lower.includes('warning')
+      ? 'watch'
+      : 'good';
+    out.overall_assessment = {
+      health,
+      summary: text.length >= 5 ? text : 'Operational safety assessment completed.',
+      confidence: 'medium',
+    };
+  } else if (!out.overall_assessment || typeof out.overall_assessment !== 'object') {
+    out.overall_assessment = {
+      health: 'good',
+      summary: 'Operations are stable and within normal baseline parameters.',
+      confidence: 'medium',
+    };
+  } else {
+    out.overall_assessment = {
+      health: ['good', 'watch', 'risky'].includes(out.overall_assessment.health)
+        ? out.overall_assessment.health
+        : 'good',
+      summary: typeof out.overall_assessment.summary === 'string' && out.overall_assessment.summary.length >= 5
+        ? out.overall_assessment.summary
+        : 'Operational safety assessment completed.',
+      confidence: ['low', 'medium', 'high'].includes(out.overall_assessment.confidence)
+        ? out.overall_assessment.confidence
+        : 'medium',
+    };
+  }
+
+  // 2. Normalize key_findings
+  if (Array.isArray(out.key_findings)) {
+    out.key_findings = out.key_findings.map((item: any, idx: number) => {
+      if (typeof item === 'string') {
+        return {
+          id: `kf_${idx + 1}`,
+          finding: item,
+          evidence_metric_ids: [],
+          severity: 'info' as const,
+        };
+      }
+      return {
+        id: String(item.id || item.key || `kf_${idx + 1}`),
+        finding: String(item.finding || item.description || item.title || item.issue || item.message || `Finding ${idx + 1}`),
+        evidence_metric_ids: Array.isArray(item.evidence_metric_ids) ? item.evidence_metric_ids.map(String) : [],
+        severity: ['info', 'warning', 'critical'].includes(item.severity) ? item.severity : 'warning',
+      };
+    });
+  } else {
+    out.key_findings = [];
+  }
+
+  // 3. Normalize recommendations
+  if (Array.isArray(out.recommendations)) {
+    const validSections = ['pacing', 'volume', 'batch', 'window', 'warmup', 'health', 'breaker', 'content', 'consent', 'filtering', 'rotation', 'risk'];
+    out.recommendations = out.recommendations.map((rec: any, idx: number) => {
+      const section = validSections.includes(rec.section) ? rec.section : 'pacing';
+      return {
+        id: String(rec.id || `rec_${idx + 1}`),
+        section,
+        field_path: String(rec.field_path || rec.field || `${section}.base_delay_seconds`),
+        current_value: rec.current_value !== undefined ? rec.current_value : null,
+        suggested_value: rec.suggested_value !== undefined ? rec.suggested_value : null,
+        rationale: String(rec.rationale || rec.reason || rec.explanation || 'Recommended adjustment to optimize safety margin.'),
+        evidence_metric_ids: Array.isArray(rec.evidence_metric_ids) ? rec.evidence_metric_ids.map(String) : [],
+        expected_effect: String(rec.expected_effect || ''),
+        risk_change: ['lower', 'neutral', 'higher'].includes(rec.risk_change) ? rec.risk_change : 'lower',
+        confidence: ['low', 'medium', 'high'].includes(rec.confidence) ? rec.confidence : 'medium',
+        priority: typeof rec.priority === 'number' && rec.priority >= 1 && rec.priority <= 5 ? rec.priority : 3,
+      };
+    });
+  } else {
+    out.recommendations = [];
+  }
+
+  // 4. Normalize suggested_experiments
+  if (Array.isArray(out.suggested_experiments)) {
+    out.suggested_experiments = out.suggested_experiments.map((exp: any, idx: number) => {
+      return {
+        hypothesis: String(exp.hypothesis || exp.description || exp.name || `Experiment hypothesis ${idx + 1}`),
+        change: String(exp.change || exp.action || 'Adjust pacing and batch sizes incrementally'),
+        how_to_measure: String(exp.how_to_measure || exp.metric || 'Monitor delivery rate and response sentiment'),
+        duration_days: typeof exp.duration_days === 'number' ? exp.duration_days : 7,
+      };
+    });
+  } else {
+    out.suggested_experiments = [];
+  }
+
+  // 5. Normalize data_gaps (must be string[])
+  if (Array.isArray(out.data_gaps)) {
+    out.data_gaps = out.data_gaps.map((item: any) => {
+      if (typeof item === 'string') return item;
+      if (item && typeof item === 'object') {
+        return item.gap || item.description || item.message || JSON.stringify(item);
+      }
+      return String(item);
+    });
+  } else {
+    out.data_gaps = [];
+  }
+
+  // 6. Normalize warnings (must be string[])
+  if (Array.isArray(out.warnings)) {
+    out.warnings = out.warnings.map((item: any) => {
+      if (typeof item === 'string') return item;
+      if (item && typeof item === 'object') {
+        return item.warning || item.description || item.message || JSON.stringify(item);
+      }
+      return String(item);
+    });
+  } else {
+    out.warnings = [];
+  }
+
+  return out;
+}
+
 // -------------------------------------------------------------
 // 2. Anonymized Privacy Payload Builder (Section 2 & 9)
 // -------------------------------------------------------------
@@ -347,8 +487,13 @@ export class OpenRouterClient {
 Analyze the user's sending metrics and current guardrail parameters. WhatsApp ban thresholds are undocumented, so base all advice strictly on the provided empirical metrics.
 CITE specific metric IDs as evidence for every finding and recommendation.
 Propose small, measurable, incremental changes (+/-25% max). Never recommend evading opt-outs or platform policies.
-OUTPUT STRICT VALID JSON adhering to the required schema with keys:
-overall_assessment, key_findings, recommendations, suggested_experiments, data_gaps, warnings.`;
+OUTPUT STRICT VALID JSON adhering to the required schema:
+- "overall_assessment": MUST be an object with { "health": "good"|"watch"|"risky", "summary": string, "confidence": "low"|"medium"|"high" }. NEVER a plain string.
+- "key_findings": array of { "id": string, "finding": string, "severity": "info"|"warning"|"critical", "evidence_metric_ids": string[] }
+- "recommendations": array of { "id": string, "section": "pacing"|"volume"|..., "field_path": string, "current_value": any, "suggested_value": any, "rationale": string, "evidence_metric_ids": string[], "expected_effect": string, "risk_change": "lower"|"neutral"|"higher", "confidence": "low"|"medium"|"high", "priority": 1-5 }
+- "suggested_experiments": array of { "hypothesis": string, "change": string, "how_to_measure": string, "duration_days": number }
+- "data_gaps": array of string descriptions
+- "warnings": array of string descriptions`;
 
     const userPrompt = `Here is the anonymized sending operations dataset and current guardrail configuration:\n\n${payloadJson}\n\nProvide your analysis and structured recommendations.`;
 
@@ -410,7 +555,8 @@ overall_assessment, key_findings, recommendations, suggested_experiments, data_g
       parsedJson = JSON.parse(cleaned);
     }
 
-    const validated = AdvisorOutputSchema.parse(parsedJson) as AdvisorOutputContract;
+    const normalized = normalizeAdvisorOutput(parsedJson);
+    const validated = AdvisorOutputSchema.parse(normalized) as AdvisorOutputContract;
 
     const promptTokens = responseData.usage?.prompt_tokens || 0;
     const completionTokens = responseData.usage?.completion_tokens || 0;

@@ -8,6 +8,8 @@ import {
 import {
   buildAnonymizedAdvisorPayload,
   validateAndClampRecommendations,
+  normalizeAdvisorOutput,
+  AdvisorOutputSchema,
   AdvisorRecommendationItem,
 } from '../src/lib/advisor/openrouter';
 import { DEFAULT_GUARDRAIL_CONFIG } from '../src/lib/guardrails/types';
@@ -198,6 +200,55 @@ describe('AI Guardrail Advisor: Analytics & Privacy Engine', () => {
       expect(lockedRec).toBeUndefined();
 
       expect(discardedCount).toBe(2);
+    });
+  });
+
+  // -------------------------------------------------------------
+  // 5. LLM Output Resiliency & Schema Normalization
+  // -------------------------------------------------------------
+  describe('LLM Output Resiliency & Normalization', () => {
+    it('successfully normalizes unformatted/deviant LLM responses to strict schema', () => {
+      // Simulate raw payload returned by LLMs that triggered the previous runtime warning
+      const deviantLlmOutput = {
+        overall_assessment: 'Your campaign operations show moderate risk due to high failure rate.',
+        key_findings: [
+          { finding: 'High rate limit errors detected on carrier gateway' },
+          { finding: 'Opt-out volume increased over 3 days', severity: 'warning' },
+        ],
+        recommendations: [
+          {
+            field_path: 'pacing.minDelay',
+            current_value: 8,
+            suggested_value: 12,
+            rationale: 'Increase minimum delay to reduce burst traffic',
+          },
+        ],
+        suggested_experiments: [
+          { hypothesis: 'Spreading batch windows reduces flags', change: 'Double cooldown interval' },
+        ],
+        data_gaps: [
+          { gap: 'Read receipts not enabled on destination network' },
+        ],
+        warnings: [
+          { warning: 'Approaching daily volume threshold' },
+        ],
+      };
+
+      const normalized = normalizeAdvisorOutput(deviantLlmOutput);
+      expect(normalized.overall_assessment.health).toBe('risky');
+      expect(normalized.overall_assessment.summary).toBe(deviantLlmOutput.overall_assessment);
+      expect(normalized.key_findings[0].id).toBe('kf_1');
+      expect(normalized.key_findings[0].severity).toBe('warning');
+      expect(normalized.recommendations[0].id).toBe('rec_1');
+      expect(normalized.recommendations[0].section).toBe('pacing');
+      expect(typeof normalized.data_gaps[0]).toBe('string');
+      expect(typeof normalized.warnings[0]).toBe('string');
+
+      // Crucially, it must parse cleanly with AdvisorOutputSchema
+      const validated = AdvisorOutputSchema.parse(normalized);
+      expect(validated.overall_assessment.health).toBe('risky');
+      expect(validated.key_findings.length).toBe(2);
+      expect(validated.recommendations.length).toBe(1);
     });
   });
 });
