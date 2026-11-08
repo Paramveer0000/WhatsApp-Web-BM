@@ -6,6 +6,9 @@ import { EvolutionClient } from '@/lib/evolution';
 import { logger } from '@/lib/logger';
 import { withApi } from '@/lib/api-wrapper';
 
+const lastEvolutionSyncMap = new Map<string, number>();
+const AUTO_SYNC_COOLDOWN_MS = 12000; // 12 seconds cooldown between background Evolution API polls
+
 function extractMessageText(msgObj: any): string {
   if (!msgObj) return '';
   if (typeof msgObj === 'string') return msgObj;
@@ -80,46 +83,73 @@ export const GET = withApi(async function (req: NextRequest) {
   }
 
   // Check if we need to auto-sync for this instance from Evolution API
-  if (instanceName && instanceName !== 'ALL') {
-    const existingCount = await db.incomingMessage.count({ where: whereClause });
-    if (existingCount === 0 || syncParam) {
-      try {
-        const client = await EvolutionClient.fromDatabase();
-        const chats = await client.findChats(instanceName);
-        for (const c of chats) {
-          const rawId = c.id || c.remoteJid || '';
-          if (!rawId || rawId.includes('@g.us')) continue; // skip group chats
+  const now = Date.now();
+  const lastSync = lastEvolutionSyncMap.get(instanceName || '') || 0;
+  const isStale = (now - lastSync) > AUTO_SYNC_COOLDOWN_MS;
 
-          const cleanP = rawId.replace(/@s\.whatsapp\.net|@c\.us/g, '').replace(/[^0-9]/g, '');
-          if (!cleanP) continue;
+  if (instanceName && instanceName !== 'ALL' && (syncParam || isStale)) {
+    lastEvolutionSyncMap.set(instanceName, now);
+    try {
+      const client = await EvolutionClient.fromDatabase();
+      const chats = await client.findChats(instanceName);
+      for (const c of chats) {
+        const rawId = c.id || c.remoteJid || '';
+        if (!rawId || rawId.includes('@g.us') || rawId.includes('status@broadcast')) continue; // skip group chats & status
 
-          const text = extractMessageText(c.lastMessage);
-          const ts = c.lastMessage?.messageTimestamp
-            ? new Date(Number(c.lastMessage.messageTimestamp) * 1000)
-            : new Date();
+        let cleanP = rawId.replace(/@s\.whatsapp\.net|@c\.us|@lid/g, '').replace(/[^0-9]/g, '');
+        if (!cleanP) continue;
 
-          await db.incomingMessage.upsert({
-            where: { messageId: `WA_CHAT_${instanceName}_${cleanP}` },
-            update: {
-              body: text || 'WhatsApp Chat',
-              pushName: c.name || c.pushName || null,
-              receivedAt: ts,
+        // Resolve LID to recipient phone if available
+        if (rawId.includes('@lid')) {
+          const matchedRec = await db.campaignRecipient.findFirst({
+            where: {
+              OR: [
+                { remoteJid: rawId },
+                { evolutionMessageId: { contains: cleanP } },
+              ],
             },
-            create: {
-              messageId: `WA_CHAT_${instanceName}_${cleanP}`,
-              instanceName,
-              phone: cleanP,
-              remoteJid: rawId,
-              pushName: c.name || c.pushName || null,
-              body: text || 'WhatsApp Chat',
-              status: 'READ',
-              receivedAt: ts,
-            },
+            select: { phone: true, name: true },
           });
+          if (matchedRec?.phone) {
+            cleanP = matchedRec.phone.replace(/[^0-9]/g, '');
+          }
         }
-      } catch (err: any) {
-        logger.warn({ err: err.message, instanceName }, 'Auto-sync from Evolution API failed');
+
+        const text = extractMessageText(c.lastMessage);
+        const ts = c.lastMessage?.messageTimestamp
+          ? new Date(Number(c.lastMessage.messageTimestamp) * 1000)
+          : new Date();
+
+        const resolvedPush =
+          c.name ||
+          c.pushName ||
+          c.verifiedName ||
+          c.contact?.name ||
+          c.contact?.pushName ||
+          c.lastMessage?.pushName ||
+          null;
+
+        await db.incomingMessage.upsert({
+          where: { messageId: `WA_CHAT_${instanceName}_${cleanP}` },
+          update: {
+            body: text || 'WhatsApp Chat',
+            pushName: resolvedPush,
+            receivedAt: ts,
+          },
+          create: {
+            messageId: `WA_CHAT_${instanceName}_${cleanP}`,
+            instanceName,
+            phone: cleanP,
+            remoteJid: rawId,
+            pushName: resolvedPush,
+            body: text || 'WhatsApp Chat',
+            status: 'READ',
+            receivedAt: ts,
+          },
+        });
       }
+    } catch (err: any) {
+      logger.warn({ err: err.message, instanceName }, 'Auto-sync from Evolution API failed');
     }
   }
 
@@ -131,24 +161,91 @@ export const GET = withApi(async function (req: NextRequest) {
   });
 
   const contactMap = new Map<string, any>();
+  const phoneList: string[] = [];
+
   for (const msg of recentMessages) {
     if (!contactMap.has(msg.phone)) {
+      phoneList.push(msg.phone);
       contactMap.set(msg.phone, {
         id: msg.phone,
         phone: msg.phone,
-        pushName: msg.pushName,
+        pushName: msg.pushName && msg.pushName !== 'Me' ? msg.pushName : null,
         instanceName: msg.instanceName,
         lastMessage: msg.body,
         lastReceivedAt: msg.receivedAt,
         status: msg.status,
         isOptOut: msg.isOptOut,
       });
+    } else {
+      const existing = contactMap.get(msg.phone);
+      if (!existing.pushName && msg.pushName && msg.pushName !== 'Me') {
+        existing.pushName = msg.pushName;
+      }
     }
   }
 
+  // Batch resolve contact names from db.contact and db.campaignRecipient
+  const rawDigits = phoneList.map((p) => p.replace(/[^\d]/g, '')).filter(Boolean);
+  const candidatePhones = Array.from(new Set([
+    ...phoneList,
+    ...rawDigits,
+    ...rawDigits.map((p) => `+${p}`),
+  ]));
+
+  const [dbContacts, dbRecipients] = await Promise.all([
+    db.contact.findMany({
+      where: { phone: { in: candidatePhones } },
+      select: { phone: true, name: true, customFields: true },
+    }),
+    db.campaignRecipient.findMany({
+      where: { phone: { in: candidatePhones } },
+      select: { phone: true, name: true },
+      take: 500,
+    }),
+  ]);
+
+  const nameMap = new Map<string, { name: string; company?: string }>();
+  for (const c of dbContacts) {
+    if (c.name) {
+      const clean = c.phone.replace(/[^\d]/g, '');
+      let company = '';
+      if (c.customFields) {
+        try {
+          const cv = typeof c.customFields === 'string' ? JSON.parse(c.customFields) : c.customFields;
+          company = cv.company || cv.org || '';
+        } catch {}
+      }
+      nameMap.set(clean, { name: c.name, company });
+      nameMap.set(c.phone, { name: c.name, company });
+    }
+  }
+
+  for (const r of dbRecipients) {
+    if (r.name) {
+      const clean = r.phone.replace(/[^\d]/g, '');
+      if (!nameMap.has(clean)) nameMap.set(clean, { name: r.name });
+      if (!nameMap.has(r.phone)) nameMap.set(r.phone, { name: r.name });
+    }
+  }
+
+  const enrichedConversations = Array.from(contactMap.values()).map((conv) => {
+    const clean = conv.phone.replace(/[^\d]/g, '');
+    const matched = nameMap.get(clean) || nameMap.get(conv.phone);
+    const contactName = matched?.name || null;
+    const company = matched?.company || null;
+    const displayName = contactName || conv.pushName || (clean ? `+${clean}` : conv.phone);
+
+    return {
+      ...conv,
+      contactName,
+      company,
+      displayName,
+    };
+  });
+
   return NextResponse.json({
     success: true,
-    conversations: Array.from(contactMap.values()),
+    conversations: enrichedConversations,
     instanceFiltered: instanceName || 'ALL'
   });
 });
@@ -193,21 +290,45 @@ export const POST = withApi(async function (req: NextRequest) {
 
       for (const c of chats) {
         const rawId = c.id || c.remoteJid || '';
-        if (!rawId || rawId.includes('@g.us')) continue; // skip group chats
+        if (!rawId || rawId.includes('@g.us') || rawId.includes('status@broadcast')) continue; // skip group chats & status
 
-        const cleanPhone = rawId.replace(/@s\.whatsapp\.net|@c\.us/g, '').replace(/[^0-9]/g, '');
+        let cleanPhone = rawId.replace(/@s\.whatsapp\.net|@c\.us|@lid/g, '').replace(/[^0-9]/g, '');
         if (!cleanPhone) continue;
+
+        if (rawId.includes('@lid')) {
+          const matchedRec = await db.campaignRecipient.findFirst({
+            where: {
+              OR: [
+                { remoteJid: rawId },
+                { evolutionMessageId: { contains: cleanPhone } },
+              ],
+            },
+            select: { phone: true, name: true },
+          });
+          if (matchedRec?.phone) {
+            cleanPhone = matchedRec.phone.replace(/[^0-9]/g, '');
+          }
+        }
 
         const lastText = extractMessageText(c.lastMessage);
         const ts = c.lastMessage?.messageTimestamp
           ? new Date(Number(c.lastMessage.messageTimestamp) * 1000)
           : new Date();
 
+        const resolvedPush =
+          c.name ||
+          c.pushName ||
+          c.verifiedName ||
+          c.contact?.name ||
+          c.contact?.pushName ||
+          c.lastMessage?.pushName ||
+          null;
+
         await db.incomingMessage.upsert({
           where: { messageId: `WA_CHAT_${instanceName}_${cleanPhone}` },
           update: {
             body: lastText || 'WhatsApp Chat',
-            pushName: c.name || c.pushName || null,
+            pushName: resolvedPush,
             receivedAt: ts,
           },
           create: {
@@ -215,7 +336,7 @@ export const POST = withApi(async function (req: NextRequest) {
             instanceName,
             phone: cleanPhone,
             remoteJid: rawId,
-            pushName: c.name || c.pushName || null,
+            pushName: resolvedPush,
             body: lastText || 'WhatsApp Chat',
             status: 'READ',
             receivedAt: ts,

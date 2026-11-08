@@ -173,9 +173,39 @@ export const GET = withApi(async function (
 
   thread.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
 
+  // Resolve Contact Name & Metadata
+  const candidatePhones = Array.from(new Set([rawParam, cleanPhone, `+${cleanPhone}`].filter(Boolean)));
+  const [dbContact, dbRec] = await Promise.all([
+    db.contact.findFirst({
+      where: { phone: { in: candidatePhones } },
+      select: { name: true, customFields: true }
+    }),
+    db.campaignRecipient.findFirst({
+      where: { phone: { in: candidatePhones } },
+      select: { name: true }
+    })
+  ]);
+
+  let company: string | null = null;
+  if (dbContact?.customFields) {
+    try {
+      const cv = typeof dbContact.customFields === 'string' ? JSON.parse(dbContact.customFields) : dbContact.customFields;
+      company = cv.company || cv.org || null;
+    } catch {}
+  }
+
+  const contactName = dbContact?.name || dbRec?.name || null;
+  const pushNameMsg = incoming.find(m => m.pushName && m.pushName !== 'Me');
+  const pushName = pushNameMsg?.pushName || null;
+  const displayName = contactName || pushName || (cleanPhone ? `+${cleanPhone}` : rawParam);
+
   return NextResponse.json({
     success: true,
     phone: cleanPhone || rawParam,
+    contactName,
+    pushName,
+    displayName,
+    company,
     messages: thread
   });
 });

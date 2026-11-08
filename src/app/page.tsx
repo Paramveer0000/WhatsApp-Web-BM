@@ -184,6 +184,7 @@ export default function AppDashboard() {
   const [replyInputText, setReplyInputText] = useState('');
   const [replyInstance, setReplyInstance] = useState('');
   const [sendingReply, setSendingReply] = useState(false);
+  const [autoSyncReplies, setAutoSyncReplies] = useState(true);
   const [privacyMode, setPrivacyMode] = useState(false);
   const [theme, setTheme] = useState<'day' | 'night'>('night');
 
@@ -517,40 +518,76 @@ export default function AppDashboard() {
     }
   };
 
-  const loadConversations = async (inst = replyInstance) => {
+  const loadConversations = async (inst = replyInstance, options?: { preserveSelection?: boolean; silent?: boolean }) => {
     try {
       const q = inst && inst !== 'ALL' ? `?instanceName=${encodeURIComponent(inst)}` : '';
       const res = await fetch(`/api/replies${q}`);
       const data = await res.json();
-      if (res.ok && data.conversations) {
+      if (res.ok && Array.isArray(data.conversations)) {
         setConversations(data.conversations);
         if (data.conversations.length > 0) {
-          const firstId = data.conversations[0].id || data.conversations[0].phone;
-          setSelectedConversation(firstId);
-          loadConversationMessages(firstId, inst);
+          setSelectedConversation((prev) => {
+            if (options?.preserveSelection && prev) {
+              const stillExists = data.conversations.some((c: any) => (c.id === prev || c.phone === prev));
+              if (stillExists) return prev;
+            }
+            if (prev) {
+              const stillExists = data.conversations.some((c: any) => (c.id === prev || c.phone === prev));
+              if (stillExists) return prev;
+            }
+            const firstId = data.conversations[0].id || data.conversations[0].phone;
+            loadConversationMessages(firstId, inst, { silent: options?.silent });
+            return firstId;
+          });
         } else {
           setSelectedConversation('');
           setConversationMessages([]);
         }
       }
     } catch (err) {
-      console.error('Error loading conversations:', err);
+      if (!options?.silent) console.error('Error loading conversations:', err);
     }
   };
 
-  const loadConversationMessages = async (convId: string, inst = replyInstance) => {
+  const loadConversationMessages = async (convId: string, inst = replyInstance, options?: { silent?: boolean }) => {
     if (!convId) return;
     try {
       const q = inst && inst !== 'ALL' ? `?instanceName=${encodeURIComponent(inst)}` : '';
       const res = await fetch(`/api/replies/${encodeURIComponent(convId)}${q}`);
       const data = await res.json();
-      if (res.ok && data.messages) {
-        setConversationMessages(data.messages);
+      if (res.ok && Array.isArray(data.messages)) {
+        setConversationMessages((prev) => {
+          if (options?.silent && prev.length === data.messages.length) {
+            const lastPrev = prev[prev.length - 1];
+            const lastNext = data.messages[data.messages.length - 1];
+            if (lastPrev?.id === lastNext?.id && lastPrev?.text === lastNext?.text) {
+              return prev;
+            }
+          }
+          return data.messages;
+        });
       }
     } catch (err) {
-      console.error('Error loading conversation messages:', err);
+      if (!options?.silent) console.error('Error loading conversation messages:', err);
     }
   };
+
+  // Auto-sync replies interval when user is on 'replies' tab
+  useEffect(() => {
+    if (currentTab !== 'replies' || !autoSyncReplies || !replyInstance) return;
+
+    // Trigger initial silent refresh on entering
+    loadConversations(replyInstance, { preserveSelection: true, silent: true });
+
+    const interval = setInterval(() => {
+      loadConversations(replyInstance, { preserveSelection: true, silent: true });
+      if (selectedConversation) {
+        loadConversationMessages(selectedConversation, replyInstance, { silent: true });
+      }
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [currentTab, autoSyncReplies, replyInstance, selectedConversation]);
 
   // SSE Stream for Live Campaign
   useEffect(() => {
@@ -3684,6 +3721,21 @@ export default function AppDashboard() {
                 </div>
 
                 <div className="flex items-center gap-2">
+                  {/* Auto-Sync Live Toggle */}
+                  <button
+                    type="button"
+                    onClick={() => setAutoSyncReplies(!autoSyncReplies)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer border ${
+                      autoSyncReplies
+                        ? 'bg-emerald-950/60 text-emerald-400 border-emerald-500/40 hover:bg-emerald-900/60 shadow'
+                        : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                    }`}
+                    title="Toggle automatic real-time chat sync every 4 seconds"
+                  >
+                    <span className={`w-2 h-2 rounded-full ${autoSyncReplies ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                    <span>{autoSyncReplies ? 'Auto-Sync: Live' : 'Auto-Sync: Paused'}</span>
+                  </button>
+
                   {/* Clear Old Chats Button */}
                   <button
                     onClick={handleClearOldChats}
@@ -3736,6 +3788,12 @@ export default function AppDashboard() {
                       conversations.map((conv) => {
                         const convKey = conv.id || conv.phone;
                         const isSel = selectedConversation === convKey || selectedConversation === conv.phone;
+                        const cleanPhone = (conv.phone || '').replace(/^\+/, '');
+                        const title = conv.displayName || conv.contactName || conv.pushName || (cleanPhone ? `+${cleanPhone}` : 'Unknown Contact');
+                        const hasNamedTitle = Boolean(conv.contactName || conv.pushName);
+                        const subtitlePhone = hasNamedTitle && cleanPhone ? `+${cleanPhone}` : null;
+                        const initials = (conv.contactName || conv.pushName || cleanPhone || '?').slice(0, 2).toUpperCase();
+
                         return (
                           <button
                             key={convKey}
@@ -3743,16 +3801,39 @@ export default function AppDashboard() {
                               setSelectedConversation(convKey);
                               loadConversationMessages(convKey, replyInstance);
                             }}
-                            className={`w-full text-left p-3.5 transition cursor-pointer flex items-start justify-between ${
+                            className={`w-full text-left p-3.5 transition cursor-pointer flex items-start gap-3 ${
                               isSel ? 'bg-slate-800 border-l-4 border-emerald-500' : 'hover:bg-slate-850/40'
                             }`}
                           >
-                            <div className="truncate">
-                              <p className="text-xs font-bold text-white font-mono truncate">+{conv.phone}</p>
-                              <p className="text-[11px] text-slate-400 truncate mt-0.5">{conv.lastMessage || 'No message snippet'}</p>
+                            {/* Contact Avatar Circle */}
+                            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                              isSel ? 'bg-emerald-600 text-white shadow' : 'bg-slate-800 text-slate-300 border border-slate-700'
+                            }`}>
+                              {initials}
+                            </div>
+
+                            <div className="truncate flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-1">
+                                <p className="text-xs font-bold text-white truncate">
+                                  {title}
+                                </p>
+                                {conv.lastReceivedAt && (
+                                  <span className="text-[10px] text-slate-400 font-mono shrink-0">
+                                    {new Date(conv.lastReceivedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                )}
+                              </div>
+                              {subtitlePhone && (
+                                <p className="text-[11px] text-emerald-400 font-mono truncate font-medium">
+                                  {subtitlePhone} {conv.company ? `• ${conv.company}` : ''}
+                                </p>
+                              )}
+                              <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                                {conv.lastMessage || 'No message snippet'}
+                              </p>
                             </div>
                             {conv.status === 'UNREAD' && (
-                              <span className="w-2 h-2 rounded-full bg-teal-400 shrink-0 mt-1" />
+                              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0 mt-1 shadow-sm" />
                             )}
                           </button>
                         );
@@ -3764,10 +3845,45 @@ export default function AppDashboard() {
                 {/* Message Thread (Right) */}
                 <div className="md:col-span-8 flex flex-col bg-[#0b141a]">
                   {/* Thread Header */}
-                  <div className="p-3.5 border-b border-slate-800 bg-slate-900/80 flex items-center justify-between">
-                    <span className="text-xs font-bold text-white font-mono">
-                      {selectedConversation ? `Chat with +${conversations.find((c) => (c.id === selectedConversation || c.phone === selectedConversation))?.phone || selectedConversation}` : 'Select a conversation'}
-                    </span>
+                  <div className="p-3.5 border-b border-slate-800 bg-slate-900/90 flex items-center justify-between">
+                    {selectedConversation ? (
+                      (() => {
+                        const activeConv = conversations.find((c) => (c.id === selectedConversation || c.phone === selectedConversation));
+                        const cleanP = (activeConv?.phone || selectedConversation).replace(/^\+/, '');
+                        const headerTitle = activeConv?.displayName || activeConv?.contactName || activeConv?.pushName || (cleanP ? `+${cleanP}` : selectedConversation);
+                        const hasNamed = Boolean(activeConv?.contactName || activeConv?.pushName);
+                        const headerSubtitle = hasNamed && cleanP ? `+${cleanP}` : null;
+                        const initials = (activeConv?.contactName || activeConv?.pushName || cleanP || '?').slice(0, 2).toUpperCase();
+
+                        return (
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-full bg-emerald-600/30 border border-emerald-500/40 flex items-center justify-center text-xs font-bold text-emerald-400 shrink-0">
+                              {initials}
+                            </div>
+                            <div>
+                              <span className="text-xs font-bold text-white block">
+                                {headerTitle}
+                              </span>
+                              <span className="text-[11px] text-slate-400 font-mono block">
+                                {headerSubtitle || (cleanP ? `+${cleanP}` : '')}
+                                {activeConv?.instanceName ? ` • via ${activeConv.instanceName}` : ''}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })()
+                    ) : (
+                      <span className="text-xs font-bold text-slate-400">Select a conversation</span>
+                    )}
+
+                    <div className="flex items-center gap-2">
+                      {autoSyncReplies && (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          Auto-Sync Active (4s)
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Message Bubbles */}
