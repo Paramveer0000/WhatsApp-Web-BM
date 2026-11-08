@@ -6,6 +6,7 @@ import { decrypt } from '@/lib/crypto';
 import { logger } from '@/lib/logger';
 import { transitionMessage } from '@/lib/state-machine';
 import { EvolutionClient, CircuitBreaker } from '@/lib/evolution';
+import { processInboundBotMessage } from '@/lib/bot-runner';
 
 function verifySecretConstantTime(given: string, expected: string): boolean {
   try {
@@ -302,6 +303,22 @@ export async function POST(req: NextRequest, { params }: { params?: { instanceId
             }
           } catch (replyErr: any) {
             logger.warn({ err: replyErr.message }, 'Failed to link reply to campaign recipient');
+          }
+
+          // 6. Execute Chatbot Studio automated flow if assigned & active
+          if (!isOptOut) {
+            try {
+              await processInboundBotMessage({
+                instanceName,
+                phone,
+                text: cleanBody,
+                messageId,
+                pushName,
+                remoteJid,
+              });
+            } catch (botErr: any) {
+              logger.warn({ err: botErr.message, phone }, 'Chatbot flow evaluation encountered error');
+            }
           }
         }
       }

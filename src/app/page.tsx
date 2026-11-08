@@ -99,6 +99,7 @@ import CampaignVariantsLiveTab from '@/components/CampaignVariantsLiveTab';
 import { DistributionMode, RotationScope, VariantInput } from '@/lib/rotation';
 import { AllocationStrategy } from '@/lib/distribution';
 import { GuardrailsConsoleTab } from '@/components/GuardrailsConsoleTab';
+import { ChatbotStudioTab } from '@/components/chatbot/ChatbotStudioTab';
 import { SystemLogsConsole } from '@/components/SystemLogsConsole';
 import { ManualAddContactModal } from '@/components/ManualAddContactModal';
 import { EditContactModal } from '@/components/EditContactModal';
@@ -108,7 +109,7 @@ import HelpGuideModal from '@/components/HelpGuideModal';
 import { toast } from '@/lib/toast';
 import { api } from '@/lib/api';
 
-type TabType = 'overview' | 'campaigns' | 'live' | 'wizard' | 'contacts' | 'templates' | 'replies' | 'instances' | 'guardrails' | 'reports' | 'system' | 'settings';
+type TabType = 'overview' | 'campaigns' | 'live' | 'wizard' | 'contacts' | 'templates' | 'replies' | 'chatbot' | 'instances' | 'guardrails' | 'reports' | 'system' | 'settings';
 
 export default function AppDashboard() {
   const router = useRouter();
@@ -1173,6 +1174,27 @@ export default function AppDashboard() {
             )}
           </button>
 
+          {/* Chatbot Studio (Between Replies and Instances) */}
+          <button
+            onClick={() => setCurrentTab('chatbot')}
+            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition cursor-pointer ${
+              currentTab === 'chatbot'
+                ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                : 'text-slate-400 hover:text-white hover:bg-slate-850'
+            }`}
+            title="Chatbot Studio - Visual Flow Builder"
+          >
+            <div className="flex items-center gap-3">
+              <Bot className="w-4 h-4 shrink-0" />
+              {!sidebarCollapsed && <span>Chatbot Studio</span>}
+            </div>
+            {!sidebarCollapsed && (
+              <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-400 font-bold">
+                NEW
+              </span>
+            )}
+          </button>
+
           {/* Instances */}
           <button
             onClick={() => setCurrentTab('instances')}
@@ -1306,6 +1328,7 @@ export default function AppDashboard() {
               {currentTab === 'contacts' && 'Contacts & Lists'}
               {currentTab === 'templates' && 'Message Templates'}
               {currentTab === 'replies' && 'WhatsApp Replies Inbox'}
+              {currentTab === 'chatbot' && 'Chatbot Studio'}
               {currentTab === 'instances' && 'WhatsApp Instances'}
               {currentTab === 'guardrails' && 'Anti-Ban Guardrails'}
               {currentTab === 'reports' && 'Reports & Analytics'}
@@ -3943,6 +3966,16 @@ export default function AppDashboard() {
           )}
 
           {/* ========================================================= */}
+          {/* 9.5 VIEW: CHATBOT STUDIO (VISUAL FLOW BUILDER)            */}
+          {/* ========================================================= */}
+          {currentTab === 'chatbot' && (
+            <ChatbotStudioTab
+              instances={instances}
+              toast={toast}
+            />
+          )}
+
+          {/* ========================================================= */}
           {/* 10. VIEW: INSTANCES MANAGEMENT                            */}
           {/* ========================================================= */}
           {currentTab === 'instances' && (
@@ -4383,6 +4416,16 @@ export default function AppDashboard() {
               >
                 <MessageSquare className="w-4 h-4 text-teal-400" />
                 <span>View Replies Inbox & Chat</span>
+              </button>
+              <button
+                onClick={() => {
+                  setCurrentTab('chatbot');
+                  setCommandPaletteOpen(false);
+                }}
+                className="w-full text-left px-3 py-2 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white flex items-center gap-2"
+              >
+                <Bot className="w-4 h-4 text-emerald-400" />
+                <span>Open Chatbot Studio (Visual Flow Builder)</span>
               </button>
               <button
                 onClick={() => {

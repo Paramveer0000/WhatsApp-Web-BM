@@ -258,6 +258,9 @@ model IncomingMessage {
   isOptOut     Boolean   @default(false)
   remoteJid    String?
   campaignId   String?
+  botSessionId String?
+  botNodeId    String?
+  source       String?   @default("manual") // "campaign", "bot", "manual", "api"
   receivedAt   DateTime  @default(now())
 
   @@index([phone])
@@ -448,5 +451,132 @@ model WorkerHeartbeat {
   lastSeen  DateTime @default(now())
   metadata  String?  // JSON
 }
+
+// =========================================================
+// CHATBOT STUDIO (Visual Flow Builder & Runtime Models)
+// =========================================================
+
+model Flow {
+  id            String           @id @default(cuid())
+  name          String
+  description   String?
+  status        String           @default("draft") // "draft" | "live" | "paused" | "archived"
+  currentDraft  String           // JSON string of nodes, edges, viewport
+  liveVersionId String?
+  draftRevision Int              @default(1)
+  createdBy     String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  versions      FlowVersion[]
+  assignments   FlowAssignment[]
+  triggers      FlowTrigger[]
+  sessions      BotSession[]
+
+  @@index([status])
+}
+
+model FlowVersion {
+  id          String       @id @default(cuid())
+  flowId      String
+  version     Int
+  compiled    String       // JSON string of compiled executable flow
+  note        String?
+  publishedBy String?
+  publishedAt DateTime     @default(now())
+  flow        Flow         @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  sessions    BotSession[]
+
+  @@unique([flowId, version])
+  @@index([flowId])
+}
+
+model FlowAssignment {
+  id          String   @id @default(cuid())
+  flowId      String
+  instanceId  String
+  enabled     Boolean  @default(true)
+  priority    Int      @default(1)
+  activeHours String?  // JSON string
+  settings    String?  // JSON string
+  flow        Flow     @relation(fields: [flowId], references: [id], onDelete: Cascade)
+
+  @@unique([flowId, instanceId])
+  @@index([instanceId, enabled])
+}
+
+model FlowTrigger {
+  id        String @id @default(cuid())
+  flowId    String
+  type      String // "keyword" | "first_message" | "fallback" | "campaign_reply" | "webhook"
+  config    String // JSON string (keywords, matchMode, etc.)
+  priority  Int    @default(1)
+  flow      Flow   @relation(fields: [flowId], references: [id], onDelete: Cascade)
+
+  @@index([flowId, type])
+}
+
+model BotSession {
+  id             String       @id @default(cuid())
+  flowId         String
+  versionId      String?
+  instanceId     String
+  contactId      String?
+  phone          String
+  status         String       @default("active") // "active" | "waiting" | "handoff" | "completed" | "expired" | "error"
+  currentNodeId  String?
+  vars           String       @default("{}") // JSON string of variables
+  stepSeq        Int          @default(0)
+  startedAt      DateTime     @default(now())
+  lastInboundAt  DateTime     @default(now())
+  lastOutboundAt DateTime?
+  expiresAt      DateTime?
+  endReason      String?      // "completed" | "handoff" | "opt_out" | "error" | "timeout" | "cancelled"
+  flow           Flow         @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  version        FlowVersion? @relation(fields: [versionId], references: [id], onDelete: SetNull)
+  events         BotEvent[]
+
+  @@index([instanceId, phone, status])
+  @@index([status, expiresAt])
+}
+
+model BotEvent {
+  id         String     @id @default(cuid())
+  sessionId  String
+  stepSeq    Int
+  nodeId     String
+  type       String     // "node_entered" | "action_executed" | "user_input" | "error"
+  input      String?    // JSON string
+  output     String?    // JSON string
+  durationMs Int        @default(0)
+  error      String?
+  createdAt  DateTime   @default(now())
+  session    BotSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, stepSeq])
+  @@index([createdAt])
+}
+
+model KnowledgeSource {
+  id        String   @id @default(cuid())
+  flowId    String?
+  type      String   @default("faq") // "faq" | "text" | "doc"
+  title     String
+  content   String
+  chunks    String?  // JSON string array of chunks
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model FlowTemplate {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  name        String
+  description String
+  category    String   @default("general") // "lead_gen" | "support" | "sales" | "utility"
+  flow        String   // JSON string of nodes, edges
+  isBuiltin   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+}
+
 
 
