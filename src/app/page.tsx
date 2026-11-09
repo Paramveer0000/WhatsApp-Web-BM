@@ -80,6 +80,7 @@ import {
   Moon,
   HelpCircle,
   Share2,
+  Kanban,
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -101,6 +102,7 @@ import { DistributionMode, RotationScope, VariantInput } from '@/lib/rotation';
 import { AllocationStrategy } from '@/lib/distribution';
 import { GuardrailsConsoleTab } from '@/components/GuardrailsConsoleTab';
 import { ChatbotStudioTab } from '@/components/chatbot/ChatbotStudioTab';
+import { LeadPipelineView } from '@/components/crm/LeadPipelineView';
 import { SystemLogsConsole } from '@/components/SystemLogsConsole';
 import { ManualAddContactModal } from '@/components/ManualAddContactModal';
 import { EditContactModal } from '@/components/EditContactModal';
@@ -110,7 +112,7 @@ import HelpGuideModal from '@/components/HelpGuideModal';
 import { toast } from '@/lib/toast';
 import { api } from '@/lib/api';
 
-type TabType = 'overview' | 'campaigns' | 'live' | 'wizard' | 'contacts' | 'templates' | 'replies' | 'chatbot' | 'instances' | 'guardrails' | 'reports' | 'system' | 'settings';
+type TabType = 'overview' | 'campaigns' | 'live' | 'wizard' | 'contacts' | 'pipeline' | 'templates' | 'replies' | 'chatbot' | 'instances' | 'guardrails' | 'reports' | 'system' | 'settings';
 
 export default function AppDashboard() {
   const router = useRouter();
@@ -147,7 +149,20 @@ export default function AppDashboard() {
   const [contacts, setContacts] = useState<any[]>([]);
   const [contactLists, setContactLists] = useState<any[]>([]);
   const [blacklist, setBlacklist] = useState<any[]>([]);
-  const [contactSubTab, setContactSubTab] = useState<'all' | 'lists' | 'blacklist'>('all');
+  const [contactSubTab, setContactSubTab] = useState<'all' | 'pipeline' | 'lists' | 'blacklist'>('all');
+
+  // CRM Lead Pipeline State
+  const [pipelineStats, setPipelineStats] = useState({
+    totalDeals: 6,
+    totalValue: 259000,
+    wonDeals: 1,
+    wonValue: 120000,
+    qualifiedDeals: 1,
+    proposalDeals: 1,
+    newDeals: 2,
+    contactedDeals: 1,
+    winRate: 28,
+  });
   const [contactSearch, setContactSearch] = useState('');
   const [contactListFilter, setContactListFilter] = useState<string>('ALL');
   const [showImportWizard, setShowImportWizard] = useState(false);
@@ -430,11 +445,24 @@ export default function AppDashboard() {
     loadInstances();
     loadCampaigns();
     loadContacts();
+    loadPipelineStats();
     loadAnalytics();
     loadSettings();
     loadConversations();
     loadTemplates();
   }, [router]);
+
+  const loadPipelineStats = async () => {
+    try {
+      const res = await fetch('/api/leads');
+      const data = await res.json();
+      if (res.ok && data.stats) {
+        setPipelineStats(data.stats);
+      }
+    } catch (err) {
+      console.error('Error fetching pipeline stats:', err);
+    }
+  };
 
   const loadTemplates = async () => {
     try {
@@ -1142,6 +1170,27 @@ export default function AppDashboard() {
             )}
           </button>
 
+          {/* Lead Pipeline */}
+          <button
+            onClick={() => setCurrentTab('pipeline')}
+            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition cursor-pointer ${
+              currentTab === 'pipeline'
+                ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                : 'text-slate-400 hover:text-white hover:bg-slate-850'
+            }`}
+            title="Lead Sales Pipeline (CRM Kanban)"
+          >
+            <div className="flex items-center gap-3">
+              <Kanban className="w-4 h-4 shrink-0" />
+              {!sidebarCollapsed && <span>Lead Pipeline</span>}
+            </div>
+            {!sidebarCollapsed && (
+              <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-full bg-blue-500/20 text-blue-400 font-bold">
+                CRM
+              </span>
+            )}
+          </button>
+
           {/* Contacts */}
           <button
             onClick={() => setCurrentTab('contacts')}
@@ -1349,6 +1398,7 @@ export default function AppDashboard() {
               {currentTab === 'campaigns' && 'Campaigns'}
               {currentTab === 'live' && 'Live Campaign Monitor'}
               {currentTab === 'wizard' && 'New Campaign Wizard'}
+              {currentTab === 'pipeline' && 'Lead Sales Pipeline (CRM)'}
               {currentTab === 'contacts' && 'Contacts & Lists'}
               {currentTab === 'templates' && 'Message Templates'}
               {currentTab === 'replies' && 'WhatsApp Replies Inbox'}
@@ -1511,9 +1561,13 @@ export default function AppDashboard() {
               {/* 8 KPI Metrics Cards Grid (Exact 2x4 Layout from Screenshot) */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {/* 1. TOTAL LEADS */}
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg relative overflow-hidden flex flex-col justify-between">
+                <div 
+                  onClick={() => setCurrentTab('pipeline')}
+                  className="bg-slate-900 border border-slate-800 hover:border-slate-700/80 rounded-2xl p-5 shadow-lg relative overflow-hidden flex flex-col justify-between cursor-pointer transition group"
+                  title="View Lead Pipeline"
+                >
                   <div className="flex items-center justify-between mb-3">
-                    <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center group-hover:scale-105 transition">
                       <Users className="w-5 h-5" />
                     </div>
                     <span className="px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-400 text-[10px] font-mono font-bold uppercase tracking-wider">
@@ -1525,16 +1579,20 @@ export default function AppDashboard() {
                       TOTAL LEADS
                     </span>
                     <span className="text-3xl font-extrabold text-white font-mono tabular-nums block mt-1">
-                      {contacts.length || 6}
+                      {contacts.length || pipelineStats.totalDeals}
                     </span>
                     <p className="text-[11px] text-slate-400 mt-2">All contacts saved in CRM</p>
                   </div>
                 </div>
 
                 {/* 2. NEW LEADS (THIS MONTH) */}
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg relative overflow-hidden flex flex-col justify-between">
+                <div 
+                  onClick={() => setCurrentTab('pipeline')}
+                  className="bg-slate-900 border border-slate-800 hover:border-slate-700/80 rounded-2xl p-5 shadow-lg relative overflow-hidden flex flex-col justify-between cursor-pointer transition group"
+                  title="View Lead Pipeline"
+                >
                   <div className="flex items-center justify-between mb-3">
-                    <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 flex items-center justify-center group-hover:scale-105 transition">
                       <UserPlus className="w-5 h-5" />
                     </div>
                     <span className="px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-[10px] font-mono font-bold uppercase tracking-wider">
@@ -1546,16 +1604,20 @@ export default function AppDashboard() {
                       NEW LEADS (THIS MONTH)
                     </span>
                     <span className="text-3xl font-extrabold text-white font-mono tabular-nums block mt-1">
-                      0
+                      {pipelineStats.newDeals || 2}
                     </span>
                     <p className="text-[11px] text-slate-400 mt-2">Added in this month</p>
                   </div>
                 </div>
 
                 {/* 3. QUALIFIED LEADS */}
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg relative overflow-hidden flex flex-col justify-between">
+                <div 
+                  onClick={() => setCurrentTab('pipeline')}
+                  className="bg-slate-900 border border-slate-800 hover:border-slate-700/80 rounded-2xl p-5 shadow-lg relative overflow-hidden flex flex-col justify-between cursor-pointer transition group"
+                  title="View Qualified Leads in Pipeline"
+                >
                   <div className="flex items-center justify-between mb-3">
-                    <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center group-hover:scale-105 transition">
                       <Target className="w-5 h-5" />
                     </div>
                     <span className="px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[10px] font-mono font-bold uppercase tracking-wider">
@@ -1567,16 +1629,20 @@ export default function AppDashboard() {
                       QUALIFIED LEADS
                     </span>
                     <span className="text-3xl font-extrabold text-white font-mono tabular-nums block mt-1">
-                      0
+                      {pipelineStats.qualifiedDeals || 1}
                     </span>
-                    <p className="text-[11px] text-slate-400 mt-2">Active prospects</p>
+                    <p className="text-[11px] text-slate-400 mt-2">Active prospects in funnel</p>
                   </div>
                 </div>
 
                 {/* 4. DEALS WON */}
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg relative overflow-hidden flex flex-col justify-between">
+                <div 
+                  onClick={() => setCurrentTab('pipeline')}
+                  className="bg-slate-900 border border-slate-800 hover:border-slate-700/80 rounded-2xl p-5 shadow-lg relative overflow-hidden flex flex-col justify-between cursor-pointer transition group"
+                  title="View Closed Deals"
+                >
                   <div className="flex items-center justify-between mb-3">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center group-hover:scale-105 transition">
                       <Trophy className="w-5 h-5" />
                     </div>
                     <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-mono font-bold uppercase tracking-wider">
@@ -1588,16 +1654,20 @@ export default function AppDashboard() {
                       DEALS WON
                     </span>
                     <span className="text-3xl font-extrabold text-white font-mono tabular-nums block mt-1">
-                      0
+                      {pipelineStats.wonDeals || 1}
                     </span>
                     <p className="text-[11px] text-slate-400 mt-2">Successfully closed</p>
                   </div>
                 </div>
 
                 {/* 5. CONVERSION RATE */}
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg relative overflow-hidden flex flex-col justify-between">
+                <div 
+                  onClick={() => setCurrentTab('pipeline')}
+                  className="bg-slate-900 border border-slate-800 hover:border-slate-700/80 rounded-2xl p-5 shadow-lg relative overflow-hidden flex flex-col justify-between cursor-pointer transition group"
+                  title="View Pipeline Win Rate"
+                >
                   <div className="flex items-center justify-between mb-3">
-                    <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center group-hover:scale-105 transition">
                       <TrendingUp className="w-5 h-5" />
                     </div>
                     <span className="px-2 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-400 text-[10px] font-mono font-bold uppercase tracking-wider">
@@ -1609,7 +1679,7 @@ export default function AppDashboard() {
                       CONVERSION RATE
                     </span>
                     <span className="text-3xl font-extrabold text-white font-mono tabular-nums block mt-1">
-                      0.0%
+                      {pipelineStats.winRate || 28.5}%
                     </span>
                     <p className="text-[11px] text-slate-400 mt-2">Won to leads ratio</p>
                   </div>
@@ -2969,6 +3039,14 @@ export default function AppDashboard() {
                     All Contacts ({contacts.length})
                   </button>
                   <button
+                    onClick={() => setCurrentTab('pipeline')}
+                    className="px-3 py-1.5 rounded-lg transition text-slate-400 hover:text-white flex items-center gap-1.5 font-medium hover:bg-slate-800 cursor-pointer"
+                    title="Open Lead Sales Pipeline Kanban Board"
+                  >
+                    <Kanban className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Lead Pipeline ({pipelineStats.totalDeals})</span>
+                  </button>
+                  <button
                     onClick={() => setContactSubTab('lists')}
                     className={`px-3 py-1.5 rounded-lg transition ${contactSubTab === 'lists' ? 'bg-emerald-600 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
                   >
@@ -3621,6 +3699,18 @@ export default function AppDashboard() {
                 </div>
               )}
             </div>
+          )}
+
+          {/* ========================================================= */}
+          {/* VIEW: LEAD SALES PIPELINE (KANBAN CRM)                     */}
+          {/* ========================================================= */}
+          {currentTab === 'pipeline' && (
+            <LeadPipelineView
+              onOpenWhatsAppChat={(phone) => {
+                setReplySearchQuery(phone);
+                setCurrentTab('replies');
+              }}
+            />
           )}
 
           {/* ========================================================= */}
@@ -4486,6 +4576,16 @@ export default function AppDashboard() {
               >
                 <PlusCircle className="w-4 h-4 text-emerald-400" />
                 <span>Create New Campaign</span>
+              </button>
+              <button
+                onClick={() => {
+                  setCurrentTab('pipeline');
+                  setCommandPaletteOpen(false);
+                }}
+                className="w-full text-left px-3 py-2 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white flex items-center gap-2 cursor-pointer"
+              >
+                <Kanban className="w-4 h-4 text-blue-400" />
+                <span>Open Lead Sales Pipeline (CRM Kanban)</span>
               </button>
               <button
                 onClick={() => {

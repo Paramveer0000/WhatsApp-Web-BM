@@ -78,6 +78,26 @@ model ContactList {
   contacts    ListContact[]
 }
 
+model LeadDeal {
+  id              String    @id @default(cuid())
+  title           String
+  value           Float     @default(0)
+  currency        String    @default("INR")
+  stage           String    @default("NEW_LEAD") // "NEW_LEAD" | "CONTACTED" | "QUALIFIED" | "PROPOSAL" | "WON" | "LOST"
+  contactName     String?
+  contactPhone    String
+  tags            String?   // JSON array string
+  notes           String?
+  assignedTo      String?   @default("Unassigned")
+  priority        String    @default("MEDIUM") // "LOW" | "MEDIUM" | "HIGH"
+  expectedCloseAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([stage])
+  @@index([contactPhone])
+}
+
 model ListContact {
   listId    String
   contactId String

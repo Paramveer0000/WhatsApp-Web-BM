@@ -145,3 +145,4 @@ To make BulkFlow superior to Zolo Suit in every operational category, the follow
    * Add a toggle on the Contacts page between **Table View** and **Kanban Pipeline** (`New Lead`, `Engaged`, `Qualified`, `Proposal`, `Customer`).
 3. **Agent Assignment in Shared Inbox (`/replies`):**
    * Allow conversations in the shared inbox to be assigned to specific team operators with an "Assigned to Me / Unassigned" quick filter tab.
+
