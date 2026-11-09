@@ -3,6 +3,7 @@ import { logger } from '@/lib/logger';
 import { EvolutionClient } from '@/lib/evolution';
 import { step } from '@/lib/flow/engine';
 import { FlowDefinition, EngineSession, InboundEvent, EngineAction } from '@/lib/flow/schema';
+import { isSafeUrl } from '@/lib/security';
 
 // In-memory rate limiting to prevent bot ping-pong loops
 const contactReplyTracker = new Map<string, number[]>();
@@ -291,6 +292,22 @@ export async function processInboundBotMessage(params: {
               receivedAt: new Date(),
             },
           }).catch(() => {});
+        } else if (action.type === 'call_http') {
+          const urlCheck = isSafeUrl(action.url);
+          if (!urlCheck.safe) {
+            logger.warn({ url: action.url, reason: urlCheck.reason }, '[BotRunner] Blocked unsafe outbound HTTP request (SSRF protection)');
+          } else {
+            try {
+              const res = await fetch(action.url, {
+                method: action.method || 'POST',
+                headers: { 'Content-Type': 'application/json', ...(action.headers || {}) },
+                body: action.body,
+              });
+              logger.info({ url: action.url, status: res.status }, '[BotRunner] Dispatched webhook HTTP action successfully');
+            } catch (httpErr: any) {
+              logger.error({ url: action.url, err: httpErr.message }, '[BotRunner] Outbound HTTP action failed');
+            }
+          }
         } else if (action.type === 'opt_out') {
           if (action.confirmationText) {
             await client.sendText(instanceName, cleanPhone, action.confirmationText);

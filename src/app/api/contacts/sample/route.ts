@@ -1,5 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
+import { getSessionUser } from '@/lib/auth';
+import { sanitizeCsvCell } from '@/lib/security';
 import * as XLSX from 'xlsx';
 
 const SAMPLE_CONTACTS = [
@@ -11,6 +13,11 @@ const SAMPLE_CONTACTS = [
 ];
 
 export async function GET(req: NextRequest) {
+  const user = await getSessionUser();
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const { searchParams } = new URL(req.url);
   const format = (searchParams.get('format') || 'csv').toLowerCase();
 

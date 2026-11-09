@@ -105,6 +105,9 @@ export async function DELETE(req: NextRequest) {
   try {
     const user = await getSessionUser();
     if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    if (user.role !== 'ADMIN') {
+      return NextResponse.json({ success: false, error: 'Forbidden: Admin access required to purge logs' }, { status: 403 });
+    }
 
     await ensureDbSchema();
     const { searchParams } = new URL(req.url);

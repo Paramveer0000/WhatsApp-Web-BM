@@ -235,12 +235,14 @@ export default function AppDashboard() {
         document.documentElement.classList.remove('day');
       }
     }
-    toast.info(next === 'day' ? '☀️ Day Mode activated' : '🌙 Night Mode activated');
+    toast.clearAll();
+    toast.info(next === 'day' ? '☀️ Day Mode activated' : '🌙 Night Mode activated', undefined, 2000);
   };
   const [syncingReplies, setSyncingReplies] = useState(false);
   const [clearingOldChats, setClearingOldChats] = useState(false);
   const [uploadingChat, setUploadingChat] = useState(false);
   const [replySearchQuery, setReplySearchQuery] = useState('');
+  const [inboxFilterTab, setInboxFilterTab] = useState<'all' | 'active' | 'inactive'>('all');
 
   // Templates State
   const [savedTemplates, setSavedTemplates] = useState<any[]>([]);
@@ -3834,9 +3836,9 @@ export default function AppDashboard() {
           {currentTab === 'replies' && (
             <div className="space-y-6">
               {/* Top Controls: Instance Selector & Upload Chat / Sync */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className={`${theme === 'day' ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-900 border-slate-800 shadow-xl'} border rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4`}>
                 <div className="flex items-center gap-3">
-                  <span className="text-xs font-semibold text-slate-300">Reply Instance:</span>
+                  <span className={`text-xs font-semibold ${theme === 'day' ? 'text-slate-700' : 'text-slate-300'}`}>Reply Instance:</span>
                   <select
                     value={replyInstance}
                     onChange={(e) => {
@@ -3844,7 +3846,7 @@ export default function AppDashboard() {
                       setReplyInstance(newInst);
                       loadConversations(newInst);
                     }}
-                    className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-emerald-500"
+                    className={`${theme === 'day' ? 'bg-slate-50 border-slate-200 text-slate-800' : 'bg-slate-950 border-slate-800 text-white'} border rounded-xl px-3 py-1.5 text-xs font-mono focus:outline-none focus:border-emerald-500`}
                   >
                     {instances.map((i) => {
                       const isConn = i.status?.toUpperCase() === 'OPEN' || i.connectionStatus === 'open';
@@ -3864,12 +3866,16 @@ export default function AppDashboard() {
                     onClick={() => setAutoSyncReplies(!autoSyncReplies)}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer border ${
                       autoSyncReplies
-                        ? 'bg-emerald-950/60 text-emerald-400 border-emerald-500/40 hover:bg-emerald-900/60 shadow'
+                        ? theme === 'day'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-300 shadow-2xs'
+                          : 'bg-emerald-950/60 text-emerald-400 border-emerald-500/40 hover:bg-emerald-900/60 shadow'
+                        : theme === 'day'
+                        ? 'bg-slate-100 text-slate-600 border-slate-200'
                         : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
                     }`}
                     title="Toggle automatic real-time chat sync every 4 seconds"
                   >
-                    <span className={`w-2 h-2 rounded-full ${autoSyncReplies ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                    <span className={`w-2 h-2 rounded-full ${autoSyncReplies ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
                     <span>{autoSyncReplies ? 'Auto-Sync: Live' : 'Auto-Sync: Paused'}</span>
                   </button>
 
@@ -3877,7 +3883,11 @@ export default function AppDashboard() {
                   <button
                     onClick={handleClearOldChats}
                     disabled={clearingOldChats}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-rose-950/50 text-slate-300 hover:text-rose-400 border border-slate-700/60 rounded-xl text-xs font-medium transition cursor-pointer"
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition cursor-pointer border ${
+                      theme === 'day'
+                        ? 'bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 border-slate-200'
+                        : 'bg-slate-800 hover:bg-rose-950/50 text-slate-300 hover:text-rose-400 border-slate-700/60'
+                    }`}
                     title="Clear old chats from disconnected or previous instances"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -3885,8 +3895,12 @@ export default function AppDashboard() {
                   </button>
 
                   {/* Upload Previous Chat Button */}
-                  <label className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-medium transition cursor-pointer">
-                    <FileText className="w-3.5 h-3.5 text-emerald-400" />
+                  <label className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition cursor-pointer border ${
+                    theme === 'day'
+                      ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                      : 'bg-slate-800 hover:bg-slate-700 text-white border-transparent'
+                  }`}>
+                    <FileText className="w-3.5 h-3.5 text-emerald-500" />
                     <span>{uploadingChat ? 'Uploading...' : 'Upload Chat (.txt)'}</span>
                     <input
                       type="file"
@@ -3910,17 +3924,18 @@ export default function AppDashboard() {
               </div>
 
               {/* 2-Pane Chat Layout */}
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden min-h-[550px]">
+              <div className={`grid grid-cols-1 md:grid-cols-12 gap-0 ${theme === 'day' ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-900 border-slate-800 shadow-xl'} border rounded-2xl overflow-hidden min-h-[580px]`}>
                 {/* Conversations Sidebar (Left) */}
-                <div className="md:col-span-4 border-r border-slate-800 flex flex-col">
-                  <div className="p-3 border-b border-slate-800 bg-slate-950/60 space-y-2">
+                <div className={`md:col-span-4 border-r ${theme === 'day' ? 'border-slate-200 bg-white' : 'border-slate-800 bg-slate-900'} flex flex-col`}>
+                  <div className={`p-3.5 border-b ${theme === 'day' ? 'border-slate-200 bg-slate-50/70' : 'border-slate-800 bg-slate-950/60'} space-y-2.5`}>
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-white uppercase tracking-wider">Conversations</span>
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">
+                      <span className={`text-xs font-bold uppercase tracking-wider ${theme === 'day' ? 'text-slate-800' : 'text-white'}`}>Conversations</span>
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${theme === 'day' ? 'bg-slate-200 text-slate-700 font-semibold' : 'bg-slate-800 text-slate-300'}`}>
                         {conversations.length}
                       </span>
                     </div>
-                    {/* Search or start new chat input (Matching Reference Image 2) */}
+
+                    {/* Search Bar (Matching Reference Image 2) */}
                     <div className="relative">
                       <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                       <input
@@ -3928,13 +3943,57 @@ export default function AppDashboard() {
                         value={replySearchQuery}
                         onChange={(e) => setReplySearchQuery(e.target.value)}
                         placeholder="Search or start new chat..."
-                        className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700/80 text-xs text-white placeholder:text-slate-400 focus:outline-none focus:border-emerald-500"
+                        className={`w-full pl-8 pr-3 py-1.5 rounded-xl border text-xs focus:outline-none focus:border-blue-500 transition ${
+                          theme === 'day'
+                            ? 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'
+                            : 'bg-slate-900 border-slate-700/80 text-white placeholder:text-slate-400'
+                        }`}
                       />
                     </div>
+
+                    {/* Filter Tabs: [ All ] [ Active ] [ Inactive ] (Matching Zolo Suit Image 2) */}
+                    <div className={`flex items-center p-0.5 rounded-xl border ${theme === 'day' ? 'bg-slate-100/90 border-slate-200' : 'bg-slate-950/80 border-slate-800'}`}>
+                      <button
+                        type="button"
+                        onClick={() => setInboxFilterTab('all')}
+                        className={`flex-1 py-1 text-center rounded-lg text-xs font-semibold transition ${
+                          inboxFilterTab === 'all'
+                            ? theme === 'day' ? 'bg-white text-blue-600 shadow-2xs' : 'bg-slate-800 text-white shadow'
+                            : theme === 'day' ? 'text-slate-500 hover:text-slate-800' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        All
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setInboxFilterTab('active')}
+                        className={`flex-1 py-1 text-center rounded-lg text-xs font-semibold transition ${
+                          inboxFilterTab === 'active'
+                            ? theme === 'day' ? 'bg-white text-blue-600 shadow-2xs' : 'bg-slate-800 text-white shadow'
+                            : theme === 'day' ? 'text-slate-500 hover:text-slate-800' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        Active
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setInboxFilterTab('inactive')}
+                        className={`flex-1 py-1 text-center rounded-lg text-xs font-semibold transition ${
+                          inboxFilterTab === 'inactive'
+                            ? theme === 'day' ? 'bg-white text-blue-600 shadow-2xs' : 'bg-slate-800 text-white shadow'
+                            : theme === 'day' ? 'text-slate-500 hover:text-slate-800' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        Inactive
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex-1 overflow-y-auto divide-y divide-slate-800/60">
+
+                  <div className={`flex-1 overflow-y-auto divide-y ${theme === 'day' ? 'divide-slate-100' : 'divide-slate-800/60'}`}>
                     {(() => {
                       const filteredConvs = conversations.filter((c) => {
+                        if (inboxFilterTab === 'active' && c.status === 'READ' && !c.lastReceivedAt) return false;
+                        if (inboxFilterTab === 'inactive' && c.status !== 'READ') return false;
                         if (!replySearchQuery) return true;
                         const q = replySearchQuery.toLowerCase();
                         return (
@@ -3948,7 +4007,7 @@ export default function AppDashboard() {
 
                       if (filteredConvs.length === 0) {
                         return (
-                          <div className="p-6 text-center text-slate-500 text-xs">
+                          <div className={`p-8 text-center text-xs ${theme === 'day' ? 'text-slate-400' : 'text-slate-500'}`}>
                             {replySearchQuery ? 'No conversations match your search.' : 'No conversations yet. Sync chats or upload a .txt export above.'}
                           </div>
                         );
@@ -3970,39 +4029,54 @@ export default function AppDashboard() {
                               setSelectedConversation(convKey);
                               loadConversationMessages(convKey, replyInstance);
                             }}
-                            className={`w-full text-left p-3.5 transition cursor-pointer flex items-start gap-3 ${
-                              isSel ? 'bg-slate-800 border-l-4 border-emerald-500' : 'hover:bg-slate-850/40'
+                            className={`w-full text-left p-3.5 transition cursor-pointer flex items-start gap-2.5 relative ${
+                              isSel
+                                ? theme === 'day'
+                                  ? 'bg-blue-50/80 border-l-4 border-blue-600'
+                                  : 'bg-slate-800 border-l-4 border-emerald-500'
+                                : theme === 'day'
+                                ? 'hover:bg-slate-50/80'
+                                : 'hover:bg-slate-850/40'
                             }`}
                           >
+                            {/* Active green status indicator dot on the left side (as in Image 2) */}
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 self-center shrink-0" />
+
                             {/* Contact Avatar Circle */}
                             <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-                              isSel ? 'bg-emerald-600 text-white shadow' : 'bg-slate-800 text-slate-300 border border-slate-700'
+                              isSel
+                                ? 'bg-blue-600 text-white shadow'
+                                : theme === 'day'
+                                ? 'bg-blue-600/90 text-white'
+                                : 'bg-slate-800 text-slate-300 border border-slate-700'
                             }`}>
                               {initials}
                             </div>
 
                             <div className="truncate flex-1 min-w-0">
                               <div className="flex items-center justify-between gap-1">
-                                <p className="text-xs font-bold text-white truncate">
+                                <p className={`text-xs font-bold truncate ${theme === 'day' ? 'text-slate-900' : 'text-white'}`}>
                                   {title}
                                 </p>
                                 {conv.lastReceivedAt && (
-                                  <span className="text-[10px] text-slate-400 font-mono shrink-0">
+                                  <span className={`text-[10px] font-mono shrink-0 ${theme === 'day' ? 'text-slate-500' : 'text-slate-400'}`}>
                                     {new Date(conv.lastReceivedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                   </span>
                                 )}
                               </div>
                               {subtitlePhone && (
-                                <p className="text-[11px] text-emerald-400 font-mono truncate font-medium">
+                                <p className={`text-[11px] font-mono truncate font-medium ${theme === 'day' ? 'text-blue-600' : 'text-emerald-400'}`}>
                                   {subtitlePhone} {conv.company ? `• ${conv.company}` : ''}
                                 </p>
                               )}
-                              <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                              <p className={`text-[11px] truncate mt-0.5 ${theme === 'day' ? 'text-slate-600' : 'text-slate-400'}`}>
                                 {conv.lastMessage || 'No message snippet'}
                               </p>
                             </div>
                             {conv.status === 'UNREAD' && (
-                              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0 mt-1 shadow-sm" />
+                              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-600 text-white shrink-0 mt-1 shadow-2xs">
+                                1
+                              </span>
                             )}
                           </button>
                         );
@@ -4038,19 +4112,19 @@ export default function AppDashboard() {
                       {/* 3 Feature Highlights (Real-time Chat, Templates, Media Sharing) */}
                       <div className={`grid grid-cols-3 gap-6 max-w-lg w-full pt-8 border-t ${theme === 'day' ? 'border-slate-200' : 'border-slate-800'}`}>
                         <div className="flex flex-col items-center gap-2.5">
-                          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${theme === 'day' ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-slate-800 text-slate-300 border border-slate-700'}`}>
+                          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${theme === 'day' ? 'bg-blue-50 text-blue-600 border border-blue-100 shadow-2xs' : 'bg-slate-800 text-slate-300 border border-slate-700'}`}>
                             <MessageSquare className="w-5 h-5 text-blue-500" />
                           </div>
                           <span className={`text-xs font-semibold ${theme === 'day' ? 'text-slate-700' : 'text-slate-300'}`}>Real-time Chat</span>
                         </div>
                         <div className="flex flex-col items-center gap-2.5">
-                          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${theme === 'day' ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-slate-800 text-slate-300 border border-slate-700'}`}>
+                          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${theme === 'day' ? 'bg-blue-50 text-blue-600 border border-blue-100 shadow-2xs' : 'bg-slate-800 text-slate-300 border border-slate-700'}`}>
                             <Sparkles className="w-5 h-5 text-blue-500" />
                           </div>
                           <span className={`text-xs font-semibold ${theme === 'day' ? 'text-slate-700' : 'text-slate-300'}`}>Templates</span>
                         </div>
                         <div className="flex flex-col items-center gap-2.5">
-                          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${theme === 'day' ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-slate-800 text-slate-300 border border-slate-700'}`}>
+                          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${theme === 'day' ? 'bg-blue-50 text-blue-600 border border-blue-100 shadow-2xs' : 'bg-slate-800 text-slate-300 border border-slate-700'}`}>
                             <Share2 className="w-5 h-5 text-blue-500" />
                           </div>
                           <span className={`text-xs font-semibold ${theme === 'day' ? 'text-slate-700' : 'text-slate-300'}`}>Media Sharing</span>
@@ -4060,7 +4134,11 @@ export default function AppDashboard() {
                   ) : (
                     <>
                       {/* Thread Header */}
-                      <div className="p-3.5 border-b border-slate-800 bg-slate-900/90 flex items-center justify-between">
+                      <div className={`p-3.5 border-b flex items-center justify-between ${
+                        theme === 'day'
+                          ? 'border-slate-200 bg-white'
+                          : 'border-slate-800 bg-slate-900/90'
+                      }`}>
                         {(() => {
                           const activeConv = conversations.find((c) => (c.id === selectedConversation || c.phone === selectedConversation));
                           const cleanP = (activeConv?.phone || selectedConversation).replace(/^\+/, '');
@@ -4071,14 +4149,16 @@ export default function AppDashboard() {
 
                           return (
                             <div className="flex items-center gap-3">
-                              <div className="w-9 h-9 rounded-full bg-emerald-600/30 border border-emerald-500/40 flex items-center justify-center text-xs font-bold text-emerald-400 shrink-0">
+                              <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                                theme === 'day' ? 'bg-blue-600 text-white shadow-2xs' : 'bg-emerald-600/30 border border-emerald-500/40 text-emerald-400'
+                              }`}>
                                 {initials}
                               </div>
                               <div>
-                                <span className="text-xs font-bold text-white block">
+                                <span className={`text-xs font-bold block ${theme === 'day' ? 'text-slate-900' : 'text-white'}`}>
                                   {headerTitle}
                                 </span>
-                                <span className="text-[11px] text-slate-400 font-mono block">
+                                <span className={`text-[11px] font-mono block ${theme === 'day' ? 'text-slate-500' : 'text-slate-400'}`}>
                                   {headerSubtitle || (cleanP ? `+${cleanP}` : '')}
                                   {activeConv?.instanceName ? ` • via ${activeConv.instanceName}` : ''}
                                 </span>
@@ -4089,8 +4169,8 @@ export default function AppDashboard() {
 
                         <div className="flex items-center gap-2">
                           {autoSyncReplies && (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                               Auto-Sync Active (4s)
                             </span>
                           )}
@@ -4113,14 +4193,18 @@ export default function AppDashboard() {
                             className={`flex ${isOutgoing ? 'justify-end' : 'justify-start'}`}
                           >
                             <div
-                              className={`max-w-[75%] rounded-2xl px-3.5 py-2 text-xs shadow ${
+                              className={`max-w-[75%] rounded-2xl px-3.5 py-2 text-xs shadow-2xs ${
                                 isOutgoing
-                                  ? 'bg-[#005c4b] text-white rounded-tr-none'
+                                  ? theme === 'day'
+                                    ? 'bg-[#d9fdd3] text-slate-900 rounded-tr-none border border-emerald-200/50 shadow-2xs'
+                                    : 'bg-[#005c4b] text-white rounded-tr-none'
+                                  : theme === 'day'
+                                  ? 'bg-white text-slate-900 rounded-tl-none border border-slate-200 shadow-2xs'
                                   : 'bg-[#202c33] text-slate-200 rounded-tl-none'
                               }`}
                             >
                               <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
-                              <span className="text-[10px] text-slate-400 block text-right mt-1 font-mono">
+                              <span className={`text-[10px] block text-right mt-1 font-mono ${theme === 'day' ? 'text-slate-500' : 'text-slate-400'}`}>
                                 {new Date(timeStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                               </span>
                             </div>
@@ -4131,14 +4215,20 @@ export default function AppDashboard() {
                   </div>
 
                   {/* Reply Input Bar */}
-                  <div className="p-3 border-t border-slate-800 bg-slate-900 flex items-center gap-2">
+                  <div className={`p-3 border-t flex items-center gap-2 ${
+                    theme === 'day' ? 'border-slate-200 bg-white' : 'border-slate-800 bg-slate-900'
+                  }`}>
                     <input
                       type="text"
                       value={replyInputText}
                       onChange={(e) => setReplyInputText(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handleSendReply()}
                       placeholder="Type a WhatsApp reply..."
-                      className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white"
+                      className={`flex-1 rounded-xl px-3 py-2 text-xs border ${
+                        theme === 'day'
+                          ? 'bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-500'
+                          : 'bg-slate-950 border-slate-800 text-white focus:outline-none focus:border-emerald-500'
+                      }`}
                     />
                     <button
                       onClick={handleSendReply}

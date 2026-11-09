@@ -692,3 +692,4 @@ export function LeadPipelineView({ onOpenWhatsAppChat }: LeadPipelineViewProps) 
     </div>
   );
 }
+

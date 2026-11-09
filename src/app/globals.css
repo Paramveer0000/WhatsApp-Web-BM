@@ -463,15 +463,39 @@ body {
 /* ========================================================= */
 /* REACT FLOW & CHATBOT STUDIO DAY MODE                      */
 /* ========================================================= */
-[data-theme="day"] .react-flow {
+[data-theme="day"] .react-flow,
+.day .react-flow,
+[data-theme="day"] .xy-flow,
+.day .xy-flow {
+  background-color: #f8fafc !important;
+  --xy-background-color: #f8fafc !important;
+  --xy-background-color-default: #f8fafc !important;
+  --xy-pane-background-color-default: #f8fafc !important;
+  --xy-minimap-background-color-default: #ffffff !important;
+  --xy-minimap-mask-background-color-default: rgba(241, 245, 249, 0.75) !important;
+}
+
+[data-theme="day"] .react-flow__pane,
+.day .react-flow__pane,
+[data-theme="day"] .react-flow__renderer,
+.day .react-flow__renderer,
+[data-theme="day"] .react-flow__viewport,
+.day .react-flow__viewport {
   background-color: #f8fafc !important;
 }
 
-[data-theme="day"] .react-flow__pane {
+[data-theme="day"] .react-flow__background,
+.day .react-flow__background {
   background-color: #f8fafc !important;
 }
 
-[data-theme="day"] .react-flow__controls {
+[data-theme="day"] .react-flow__background pattern circle,
+.day .react-flow__background pattern circle {
+  fill: #94a3b8 !important;
+}
+
+[data-theme="day"] .react-flow__controls,
+.day .react-flow__controls {
   background-color: #ffffff !important;
   border: 1px solid #e2e8f0 !important;
   box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05) !important;
@@ -479,56 +503,87 @@ body {
   overflow: hidden;
 }
 
-[data-theme="day"] .react-flow__controls-button {
+[data-theme="day"] .react-flow__controls-button,
+.day .react-flow__controls-button {
   background-color: #ffffff !important;
   border-bottom: 1px solid #f1f5f9 !important;
   fill: #475569 !important;
 }
 
-[data-theme="day"] .react-flow__controls-button:hover {
+[data-theme="day"] .react-flow__controls-button:hover,
+.day .react-flow__controls-button:hover {
   background-color: #f1f5f9 !important;
   fill: #0f172a !important;
 }
 
-[data-theme="day"] .react-flow__controls-button svg {
+[data-theme="day"] .react-flow__controls-button svg,
+.day .react-flow__controls-button svg {
   fill: #475569 !important;
 }
 
-[data-theme="day"] .react-flow__minimap {
+[data-theme="day"] .react-flow__minimap,
+.day .react-flow__minimap {
   background-color: #ffffff !important;
   border: 1px solid #e2e8f0 !important;
   box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05) !important;
   border-radius: 0.75rem !important;
 }
 
-[data-theme="day"] .react-flow__node {
+[data-theme="day"] .react-flow__minimap-mask,
+.day .react-flow__minimap-mask {
+  fill: rgba(241, 245, 249, 0.75) !important;
+}
+
+[data-theme="day"] .react-flow__node,
+.day .react-flow__node {
   color: #0f172a !important;
 }
 
-[data-theme="day"] .react-flow__node .bg-slate-900 {
+[data-theme="day"] .react-flow__node p,
+.day .react-flow__node p {
+  color: #334155 !important;
+}
+
+[data-theme="day"] .react-flow__node .border-slate-800,
+.day .react-flow__node .border-slate-800 {
+  border-color: #e2e8f0 !important;
+}
+
+[data-theme="day"] .react-flow__node .bg-slate-950\/40,
+.day .react-flow__node .bg-slate-950\/40 {
+  background-color: #f1f5f9 !important;
+}
+
+[data-theme="day"] .react-flow__node .bg-slate-900,
+.day .react-flow__node .bg-slate-900 {
   background-color: #ffffff !important;
   border-color: #cbd5e1 !important;
   color: #0f172a !important;
   box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05) !important;
 }
 
-[data-theme="day"] .react-flow__node .text-slate-300 {
+[data-theme="day"] .react-flow__node .text-slate-300,
+.day .react-flow__node .text-slate-300 {
   color: #475569 !important;
 }
 
-[data-theme="day"] .react-flow__node .text-slate-400 {
+[data-theme="day"] .react-flow__node .text-slate-400,
+.day .react-flow__node .text-slate-400 {
   color: #64748b !important;
 }
 
-[data-theme="day"] .react-flow__handle {
+[data-theme="day"] .react-flow__handle,
+.day .react-flow__handle {
   background-color: #ffffff !important;
   border-color: #10b981 !important;
 }
 
-[data-theme="day"] .react-flow__handle:hover {
+[data-theme="day"] .react-flow__handle:hover,
+.day .react-flow__handle:hover {
   background-color: #10b981 !important;
 }
 
-[data-theme="day"] .react-flow__edge-path {
+[data-theme="day"] .react-flow__edge-path,
+.day .react-flow__edge-path {
   stroke: #94a3b8 !important;
 }

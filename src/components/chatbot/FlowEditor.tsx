@@ -109,16 +109,29 @@ function FlowEditorInner({
     initialBot.assignments?.map((a: any) => a.instanceId) || []
   );
   const [isInstanceDropdownOpen, setIsInstanceDropdownOpen] = useState(false);
-  const [isDayTheme, setIsDayTheme] = useState(false);
+  const [isDayTheme, setIsDayTheme] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('app_theme');
+      if (saved) return saved === 'day';
+      return (
+        document.documentElement.getAttribute('data-theme') === 'day' ||
+        document.documentElement.classList.contains('day')
+      );
+    }
+    return false;
+  });
 
   useEffect(() => {
     const checkTheme = () => {
-      const dt = typeof document !== 'undefined' ? document.documentElement.getAttribute('data-theme') : null;
-      setIsDayTheme(dt === 'day');
+      if (typeof document !== 'undefined') {
+        const dt = document.documentElement.getAttribute('data-theme');
+        const isDay = dt === 'day' || document.documentElement.classList.contains('day');
+        setIsDayTheme(isDay);
+      }
     };
     checkTheme();
     const observer = new MutationObserver(checkTheme);
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class'] });
     return () => observer.disconnect();
   }, []);
 
@@ -575,13 +588,17 @@ function FlowEditorInner({
             fitView
             fitViewOptions={{ padding: 0.2 }}
             colorMode={isDayTheme ? 'light' : 'dark'}
-            className={isDayTheme ? 'bg-[#f8fafc]' : 'bg-[#060b10]'}
+            className={isDayTheme ? '!bg-[#f8fafc]' : '!bg-[#060b10]'}
+            style={{
+              backgroundColor: isDayTheme ? '#f8fafc' : '#060b10',
+            }}
           >
             <Background
               variant={BackgroundVariant.Dots}
               gap={16}
               size={1.2}
-              color={isDayTheme ? '#cbd5e1' : '#1e293b'}
+              color={isDayTheme ? '#94a3b8' : '#1e293b'}
+              bgColor={isDayTheme ? '#f8fafc' : '#060b10'}
             />
             <Controls
               className={
@@ -598,6 +615,7 @@ function FlowEditorInner({
               }
               nodeColor={(n: any) => ((n.data as any)?.nodeType?.startsWith?.('trigger_') ? '#f59e0b' : '#10b981')}
               maskColor={isDayTheme ? 'rgba(241, 245, 249, 0.75)' : 'rgba(2, 6, 23, 0.7)'}
+              bgColor={isDayTheme ? '#ffffff' : '#0f172a'}
             />
           </ReactFlow>
         </div>

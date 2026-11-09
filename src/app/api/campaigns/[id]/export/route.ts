@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSessionUser } from '@/lib/auth';
+import { sanitizeCsvCell } from '@/lib/security';
 import * as XLSX from 'xlsx';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
@@ -31,19 +32,19 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     });
 
     const exportRows = recipients.map((r) => ({
-      Recipient_Name: r.name || '',
-      Phone: r.phone,
-      Status: r.status,
-      variant_label: r.variant?.label || `Message ${r.variant?.position || r.variantIndex + 1}`,
+      Recipient_Name: sanitizeCsvCell(r.name || ''),
+      Phone: sanitizeCsvCell(r.phone),
+      Status: sanitizeCsvCell(r.status),
+      variant_label: sanitizeCsvCell(r.variant?.label || `Message ${r.variant?.position || r.variantIndex + 1}`),
       variant_position: r.variant?.position || r.variantIndex + 1,
       rotation_index: r.rotationIndex || r.variantIndex + 1,
-      Instance_Used: r.instanceUsed || '',
+      Instance_Used: sanitizeCsvCell(r.instanceUsed || ''),
       Sent_At: r.sentAt ? r.sentAt.toISOString() : '',
       Delivered_At: r.deliveredAt ? r.deliveredAt.toISOString() : '',
       Read_At: r.readAt ? r.readAt.toISOString() : '',
       Replied: r.status === 'REPLIED' ? 'YES' : 'NO',
-      Error_Details: r.lastError || '',
-      Rendered_Message: r.renderedMessage || '',
+      Error_Details: sanitizeCsvCell(r.lastError || ''),
+      Rendered_Message: sanitizeCsvCell(r.renderedMessage || ''),
     }));
 
     const cleanCampName = campaign.name.replace(/[^a-zA-Z0-9_-]/g, '_');
