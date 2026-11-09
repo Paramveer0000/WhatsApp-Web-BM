@@ -385,3 +385,4 @@ export const DEFAULT_HUMANIZER_PROFILE: HumanizerProfile = {
   scope: 'global',
   version: 1,
 };
+

@@ -48,3 +48,4 @@ export function validateParaphraseTokens(originalText: string, candidateText: st
 
   return true;
 }
+

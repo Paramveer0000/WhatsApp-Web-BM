@@ -45,3 +45,4 @@ export function mergeBurst(fragments: InboundFragment[]): {
     lastTimestamp: sorted[sorted.length - 1].timestamp,
   };
 }
+

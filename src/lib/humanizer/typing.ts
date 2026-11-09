@@ -54,3 +54,4 @@ export function computeTypingDurationMs(options: TypingModelOptions): {
     hesitationMs,
   };
 }
+
