@@ -109,6 +109,7 @@ import { LeadPipelineView } from '@/components/crm/LeadPipelineView';
 import { MediaLibraryView } from '@/components/media/MediaLibraryView';
 import { TaskManagementView } from '@/components/tasks/TaskManagementView';
 import { QuickRepliesView } from '@/components/quick-replies/QuickRepliesView';
+import { IndustryTemplatesView } from '@/components/templates/IndustryTemplatesView';
 import { SystemLogsConsole } from '@/components/SystemLogsConsole';
 import { ManualAddContactModal } from '@/components/ManualAddContactModal';
 import { EditContactModal } from '@/components/EditContactModal';
@@ -3930,118 +3931,24 @@ export default function AppDashboard() {
           {currentTab === 'tasks' && <TaskManagementView />}
 
           {/* ========================================================= */}
-          {/* 8. VIEW: TEMPLATES LIBRARY                                */}
+          {/* 8. VIEW: TEMPLATES LIBRARY (INDUSTRY-WISE & CUSTOM)       */}
           {/* ========================================================= */}
           {currentTab === 'templates' && (
-            <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-lg font-bold text-white">Message Templates</h2>
-                  <p className="text-xs text-slate-400">Ready-made copy and your custom saved WhatsApp campaign templates</p>
-                </div>
-                <button
-                  onClick={() => setShowCreateTemplateModal(true)}
-                  className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-md shadow-emerald-950/40 cursor-pointer self-start sm:self-auto"
-                >
-                  <Sparkles className="w-4 h-4" />
-                  <span>+ Create Template</span>
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {/* Custom Saved Templates */}
-                {savedTemplates.map((tmpl) => {
-                  let cat = 'Custom';
-                  if (tmpl.tags) {
-                    try {
-                      const parsed = JSON.parse(tmpl.tags);
-                      if (Array.isArray(parsed) && parsed[0]) cat = parsed[0];
-                    } catch {}
-                  }
-                  return (
-                    <div
-                      key={tmpl.id}
-                      className="bg-slate-900 border border-emerald-500/30 rounded-2xl p-5 shadow-xl flex flex-col justify-between space-y-4 hover:border-emerald-500/60 transition relative"
-                    >
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 uppercase tracking-wider">
-                            {cat} (Custom)
-                          </span>
-                          <button
-                            onClick={async () => {
-                              if (!confirm(`Delete template "${tmpl.name}"?`)) return;
-                              await fetch(`/api/templates/${tmpl.id}`, { method: 'DELETE' });
-                              loadTemplates();
-                            }}
-                            className="text-slate-500 hover:text-rose-400 p-1 transition"
-                            title="Delete custom template"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                        <h3 className="text-sm font-bold text-white">{tmpl.name}</h3>
-                        <div className="bg-[#0b141a] p-3 rounded-xl border border-slate-800/80 text-xs text-slate-300 font-mono mt-3 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
-                          {tmpl.content}
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={() => {
-                          setWizTemplate(tmpl.content);
-                          if (tmpl.mediaType) setWizMediaType(tmpl.mediaType);
-                          setCurrentTab('wizard');
-                        }}
-                        className="w-full py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
-                      >
-                        <span>Use in New Campaign →</span>
-                      </button>
-                    </div>
-                  );
-                })}
-
-                {/* Built-in Sample Templates */}
-                {sampleTemplates.map((tmpl) => (
-                  <div
-                    key={tmpl.id}
-                    className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col justify-between space-y-4 hover:border-slate-700 transition"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-300 uppercase tracking-wider">
-                          {tmpl.category} (Sample)
-                        </span>
-                        <span className="text-[11px] font-mono text-slate-400">{tmpl.usageCount} sent</span>
-                      </div>
-                      <h3 className="text-sm font-bold text-white">{tmpl.title}</h3>
-                      <div className="bg-[#0b141a] p-3 rounded-xl border border-slate-800/80 text-xs text-slate-300 font-mono mt-3 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
-                        {tmpl.content}
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => {
-                        setWizTemplate(tmpl.content);
-                        setWizMediaType(tmpl.mediaType);
-                        setCurrentTab('wizard');
-                      }}
-                      className="w-full py-2 bg-slate-800 hover:bg-emerald-600 text-white rounded-xl text-xs font-semibold transition cursor-pointer"
-                    >
-                      Use in New Campaign →
-                    </button>
-                  </div>
-                ))}
-              </div>
-
-              {/* Create Template Modal */}
-              <CreateTemplateModal
-                isOpen={showCreateTemplateModal}
-                onClose={() => setShowCreateTemplateModal(false)}
-                onTemplateSaved={() => {
-                  loadTemplates();
-                }}
-              />
-            </div>
+            <IndustryTemplatesView
+              savedTemplates={savedTemplates}
+              onReloadSavedTemplates={loadTemplates}
+              onUseInCampaign={(content, mediaType, templateTitle) => {
+                setWizTemplate(content);
+                if (mediaType && (mediaType === 'image' || mediaType === 'video' || mediaType === 'document' || mediaType === 'text')) {
+                  setWizMediaType(mediaType);
+                }
+                if (templateTitle) {
+                  setWizName(`Campaign-${templateTitle.slice(0, 15).replace(/[^a-zA-Z0-9]/g, '_')}`);
+                }
+                setCurrentTab('wizard');
+                toast.success('Template loaded into Campaign Wizard! 🚀');
+              }}
+            />
           )}
 
           {/* ========================================================= */}
