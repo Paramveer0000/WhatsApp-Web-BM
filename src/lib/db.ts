@@ -60,10 +60,15 @@ export async function ensureDbSchema(): Promise<void> {
       "CREATE TABLE IF NOT EXISTS MediaAsset (id TEXT PRIMARY KEY, sha256 TEXT NOT NULL UNIQUE, mime TEXT NOT NULL, size INTEGER NOT NULL, path TEXT NOT NULL, url TEXT, data TEXT, title TEXT, fileName TEXT, category TEXT DEFAULT 'image', tags TEXT DEFAULT '[]', createdAt DATETIME DEFAULT CURRENT_TIMESTAMP, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP)",
 
       // Reseller SaaS Clients table
-      "CREATE TABLE IF NOT EXISTS ResellerClient (id TEXT PRIMARY KEY, companyName TEXT NOT NULL, slug TEXT NOT NULL UNIQUE, ownerName TEXT NOT NULL, ownerEmail TEXT NOT NULL UNIQUE, ownerPhone TEXT, passwordHash TEXT NOT NULL, planName TEXT DEFAULT 'Starter', status TEXT DEFAULT 'ACTIVE', billingCycle TEXT DEFAULT 'MONTHLY', price REAL DEFAULT 0, currency TEXT DEFAULT 'INR', renewalDate DATETIME, maxInstances INTEGER DEFAULT 1, maxContacts INTEGER DEFAULT 5000, monthlyMsgCap INTEGER DEFAULT 10000, walletBalance REAL DEFAULT 0, hasCrmPipeline INTEGER DEFAULT 1, hasChatbot INTEGER DEFAULT 1, hasMultiWarmup INTEGER DEFAULT 1, hasDamMedia INTEGER DEFAULT 1, hasAiResponder INTEGER DEFAULT 0, customDomain TEXT, brandColor TEXT DEFAULT '#0c57e4', logoUrl TEXT, createdAt DATETIME DEFAULT CURRENT_TIMESTAMP, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP)",
+      "CREATE TABLE IF NOT EXISTS ResellerClient (id TEXT PRIMARY KEY, companyName TEXT NOT NULL, slug TEXT NOT NULL UNIQUE, ownerName TEXT NOT NULL, ownerEmail TEXT NOT NULL UNIQUE, ownerPhone TEXT, passwordHash TEXT NOT NULL, planName TEXT DEFAULT 'Starter', status TEXT DEFAULT 'ACTIVE', billingCycle TEXT DEFAULT 'MONTHLY', price REAL DEFAULT 0, currency TEXT DEFAULT 'INR', renewalDate DATETIME, maxInstances INTEGER DEFAULT 1, maxContacts INTEGER DEFAULT 5000, monthlyMsgCap INTEGER DEFAULT 10000, walletBalance REAL DEFAULT 0, hasCrmPipeline INTEGER DEFAULT 1, hasChatbot INTEGER DEFAULT 1, hasMultiWarmup INTEGER DEFAULT 1, hasDamMedia INTEGER DEFAULT 1, hasAiResponder INTEGER DEFAULT 0, customDomain TEXT, brandColor TEXT DEFAULT '#0c57e4', logoUrl TEXT, aiApiKey TEXT, aiModel TEXT DEFAULT 'anthropic/claude-3.5-haiku', webhookUrl TEXT, webhookSecret TEXT, createdAt DATETIME DEFAULT CURRENT_TIMESTAMP, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP)",
       "CREATE INDEX IF NOT EXISTS idx_reseller_client_status ON ResellerClient(status)",
       "CREATE INDEX IF NOT EXISTS idx_reseller_client_email ON ResellerClient(ownerEmail)",
       "CREATE INDEX IF NOT EXISTS idx_reseller_client_slug ON ResellerClient(slug)",
+
+      // WhatsApp Number Warmer Sessions (Peer-to-Peer Dialogues)
+      "CREATE TABLE IF NOT EXISTS NumberWarmerSession (id TEXT PRIMARY KEY, instanceA TEXT NOT NULL, instanceB TEXT NOT NULL, phoneA TEXT, phoneB TEXT, status TEXT DEFAULT 'IDLE', dailyCap INTEGER DEFAULT 25, todayExchanges INTEGER DEFAULT 0, topic TEXT DEFAULT 'casual', minDelaySeconds INTEGER DEFAULT 45, maxDelaySeconds INTEGER DEFAULT 90, useAi INTEGER DEFAULT 0, aiPrompt TEXT, lastExchangedAt DATETIME, nextScheduledAt DATETIME, logs TEXT DEFAULT '[]', clientId TEXT, createdAt DATETIME DEFAULT CURRENT_TIMESTAMP, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP)",
+      "CREATE INDEX IF NOT EXISTS idx_warmer_status ON NumberWarmerSession(status)",
+      "CREATE INDEX IF NOT EXISTS idx_warmer_client ON NumberWarmerSession(clientId)",
     ];
 
     for (const sql of tableStatements) {
@@ -73,6 +78,10 @@ export async function ensureDbSchema(): Promise<void> {
     }
 
     // 2. Safely add missing columns if not present (prevents 'duplicate column name' Prisma errors)
+    await addColumnSafely('ResellerClient', 'aiApiKey', 'TEXT');
+    await addColumnSafely('ResellerClient', 'aiModel', "TEXT DEFAULT 'anthropic/claude-3.5-haiku'");
+    await addColumnSafely('ResellerClient', 'webhookUrl', 'TEXT');
+    await addColumnSafely('ResellerClient', 'webhookSecret', 'TEXT');
     await addColumnSafely('MediaAsset', 'title', 'TEXT');
     await addColumnSafely('MediaAsset', 'fileName', 'TEXT');
     await addColumnSafely('MediaAsset', 'category', "TEXT DEFAULT 'image'");

@@ -670,11 +670,44 @@ model ResellerClient {
   brandColor      String    @default("#0c57e4")
   logoUrl         String?
 
+  // Isolated Tenant Settings & Integrations
+  aiApiKey        String?
+  aiModel         String?   @default("anthropic/claude-3.5-haiku")
+  webhookUrl      String?
+  webhookSecret   String?
+
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
   @@index([status])
   @@index([ownerEmail])
+}
+
+// Peer-to-Peer WhatsApp Number Warmer Session Model
+model NumberWarmerSession {
+  id               String    @id @default(cuid())
+  instanceA        String
+  instanceB        String
+  phoneA           String?
+  phoneB           String?
+  status           String    @default("IDLE") // "IDLE", "RUNNING", "PAUSED", "COMPLETED"
+  dailyCap         Int       @default(25)
+  todayExchanges   Int       @default(0)
+  topic            String    @default("casual") // "casual", "business", "tech", "travel", "lifestyle"
+  minDelaySeconds  Int       @default(45)
+  maxDelaySeconds  Int       @default(90)
+  useAi            Boolean   @default(false)
+  aiPrompt         String?
+  lastExchangedAt  DateTime?
+  nextScheduledAt  DateTime?
+  logs             String    @default("[]") // JSON string of dialogue exchange history
+  clientId         String?
+
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([status])
+  @@index([clientId])
 }
 
 

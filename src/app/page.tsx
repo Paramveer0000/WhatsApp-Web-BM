@@ -85,6 +85,7 @@ import {
   FolderOpen,
   CheckSquare,
   ChevronDown,
+  Flame,
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -112,6 +113,8 @@ import { TaskManagementView } from '@/components/tasks/TaskManagementView';
 import { QuickRepliesView } from '@/components/quick-replies/QuickRepliesView';
 import { IndustryTemplatesView } from '@/components/templates/IndustryTemplatesView';
 import { ResellerClientsView } from '@/components/reseller/ResellerClientsView';
+import { NumberWarmerView } from '@/components/warmer/NumberWarmerView';
+import { ClientSettingsView } from '@/components/settings/ClientSettingsView';
 import { SystemLogsConsole } from '@/components/SystemLogsConsole';
 import { ManualAddContactModal } from '@/components/ManualAddContactModal';
 import { EditContactModal } from '@/components/EditContactModal';
@@ -133,6 +136,7 @@ type TabType =
   | 'replies'
   | 'media'
   | 'quick-replies'
+  | 'warmer'
   | 'reseller-clients'
   | 'chatbot'
   | 'instances'
@@ -167,7 +171,7 @@ export default function AppDashboard() {
 
   // Auto-expand relevant sidebar section when currentTab changes
   useEffect(() => {
-    if (['replies', 'instances', 'media', 'quick-replies'].includes(currentTab)) {
+    if (['replies', 'instances', 'media', 'quick-replies', 'warmer'].includes(currentTab)) {
       setOpenSections((prev) => ({ ...prev, communication: true }));
     } else if (['campaigns', 'live', 'wizard', 'templates'].includes(currentTab)) {
       setOpenSections((prev) => ({ ...prev, campaigns: true }));
@@ -517,7 +521,7 @@ export default function AppDashboard() {
   // Role Guard: Prevent client users from accessing system or reseller admin screens
   useEffect(() => {
     if (currentUser?.role === 'CLIENT') {
-      if (['reseller-clients', 'system', 'settings'].includes(currentTab)) {
+      if (['reseller-clients', 'system'].includes(currentTab)) {
         setCurrentTab('overview');
       }
     }
@@ -1331,6 +1335,27 @@ export default function AppDashboard() {
                     {!sidebarCollapsed && <span>Quick Replies</span>}
                   </div>
                 </button>
+
+                {/* Peer-to-Peer Number Warmer */}
+                <button
+                  onClick={() => setCurrentTab('warmer')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
+                    currentTab === 'warmer'
+                      ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                  }`}
+                  title="Peer-to-Peer WhatsApp Number Warmer"
+                >
+                  <div className="flex items-center gap-3">
+                    <Flame className="w-4 h-4 shrink-0 text-orange-400" />
+                    {!sidebarCollapsed && <span>Number Warmer</span>}
+                  </div>
+                  {!sidebarCollapsed && (
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-orange-500/15 border border-orange-500/30 text-orange-400 font-bold">
+                      Anti-Ban
+                    </span>
+                  )}
+                </button>
               </div>
             )}
           </div>
@@ -1633,6 +1658,26 @@ export default function AppDashboard() {
               )}
             </div>
           )}
+
+          {/* Workspace Settings (For Client Tenants) */}
+          {currentUser?.role === 'CLIENT' && (
+            <div className="space-y-1">
+              <button
+                onClick={() => setCurrentTab('settings')}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
+                  currentTab === 'settings'
+                    ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                }`}
+                title="Workspace Settings, AI Keys & Webhooks"
+              >
+                <div className="flex items-center gap-3">
+                  <SettingsIcon className="w-4 h-4 shrink-0 text-slate-400" />
+                  {!sidebarCollapsed && <span>Workspace Settings</span>}
+                </div>
+              </button>
+            </div>
+          )}
         </nav>
 
         {/* Sidebar Footer */}
@@ -1719,13 +1764,14 @@ export default function AppDashboard() {
               {currentTab === 'replies' && 'WhatsApp Replies Inbox'}
               {currentTab === 'media' && 'Media Library DAM'}
               {currentTab === 'quick-replies' && 'Quick Replies & Canned Messages'}
+              {currentTab === 'warmer' && 'Peer-to-Peer WhatsApp Number Warmer'}
               {currentTab === 'reseller-clients' && 'SaaS Reseller Clients & Tenants'}
               {currentTab === 'chatbot' && 'Chatbot Studio'}
               {currentTab === 'instances' && 'WhatsApp Instances'}
               {currentTab === 'guardrails' && 'Anti-Ban Guardrails'}
               {currentTab === 'reports' && 'Reports & Analytics'}
               {currentTab === 'system' && 'System Health & Engine'}
-              {currentTab === 'settings' && 'Gateway Settings'}
+              {currentTab === 'settings' && (currentUser?.role === 'CLIENT' ? 'Workspace Settings' : 'Gateway & System Settings')}
             </h1>
           </div>
 
@@ -4618,6 +4664,11 @@ export default function AppDashboard() {
           {currentTab === 'quick-replies' && <QuickRepliesView />}
 
           {/* ========================================================= */}
+          {/* VIEW: PEER-TO-PEER WHATSAPP NUMBER WARMER                 */}
+          {/* ========================================================= */}
+          {currentTab === 'warmer' && <NumberWarmerView />}
+
+          {/* ========================================================= */}
           {/* VIEW: RESELLER SAAS CLIENTS & TENANTS                     */}
           {/* ========================================================= */}
           {currentTab === 'reseller-clients' && <ResellerClientsView />}
@@ -4841,6 +4892,9 @@ export default function AppDashboard() {
           {/* 13. VIEW: SETTINGS                                        */}
           {/* ========================================================= */}
           {currentTab === 'settings' && (
+            currentUser?.role === 'CLIENT' ? (
+              <ClientSettingsView />
+            ) : (
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -5000,6 +5054,7 @@ export default function AppDashboard() {
                 </div>
               </form>
             </div>
+            )
           )}
         </main>
       </div>
@@ -5083,6 +5138,16 @@ export default function AppDashboard() {
               >
                 <MessageSquare className="w-4 h-4 text-teal-400" />
                 <span>View Replies Inbox & Chat</span>
+              </button>
+              <button
+                onClick={() => {
+                  setCurrentTab('warmer');
+                  setCommandPaletteOpen(false);
+                }}
+                className="w-full text-left px-3 py-2 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white flex items-center gap-2"
+              >
+                <Flame className="w-4 h-4 text-orange-400" />
+                <span>Open Peer-to-Peer Number Warmer</span>
               </button>
               {currentUser?.role !== 'CLIENT' && (
                 <button
