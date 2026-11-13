@@ -58,6 +58,12 @@ export async function ensureDbSchema(): Promise<void> {
 
       // Media Asset table (DAM)
       "CREATE TABLE IF NOT EXISTS MediaAsset (id TEXT PRIMARY KEY, sha256 TEXT NOT NULL UNIQUE, mime TEXT NOT NULL, size INTEGER NOT NULL, path TEXT NOT NULL, url TEXT, data TEXT, title TEXT, fileName TEXT, category TEXT DEFAULT 'image', tags TEXT DEFAULT '[]', createdAt DATETIME DEFAULT CURRENT_TIMESTAMP, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP)",
+
+      // Reseller SaaS Clients table
+      "CREATE TABLE IF NOT EXISTS ResellerClient (id TEXT PRIMARY KEY, companyName TEXT NOT NULL, slug TEXT NOT NULL UNIQUE, ownerName TEXT NOT NULL, ownerEmail TEXT NOT NULL UNIQUE, ownerPhone TEXT, passwordHash TEXT NOT NULL, planName TEXT DEFAULT 'Starter', status TEXT DEFAULT 'ACTIVE', billingCycle TEXT DEFAULT 'MONTHLY', price REAL DEFAULT 0, currency TEXT DEFAULT 'INR', renewalDate DATETIME, maxInstances INTEGER DEFAULT 1, maxContacts INTEGER DEFAULT 5000, monthlyMsgCap INTEGER DEFAULT 10000, walletBalance REAL DEFAULT 0, hasCrmPipeline INTEGER DEFAULT 1, hasChatbot INTEGER DEFAULT 1, hasMultiWarmup INTEGER DEFAULT 1, hasDamMedia INTEGER DEFAULT 1, hasAiResponder INTEGER DEFAULT 0, customDomain TEXT, brandColor TEXT DEFAULT '#0c57e4', logoUrl TEXT, createdAt DATETIME DEFAULT CURRENT_TIMESTAMP, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP)",
+      "CREATE INDEX IF NOT EXISTS idx_reseller_client_status ON ResellerClient(status)",
+      "CREATE INDEX IF NOT EXISTS idx_reseller_client_email ON ResellerClient(ownerEmail)",
+      "CREATE INDEX IF NOT EXISTS idx_reseller_client_slug ON ResellerClient(slug)",
     ];
 
     for (const sql of tableStatements) {
@@ -133,6 +139,139 @@ export async function ensureDbSchema(): Promise<void> {
 
         for (const qr of DEFAULT_QUICK_REPLIES) {
           await db.quickReply.create({ data: qr });
+        }
+      }
+    } catch {}
+
+    // 4. Seed default Reseller SaaS Clients if table is empty
+    try {
+      const clientCount = await db.resellerClient.count();
+      if (clientCount === 0) {
+        const DEFAULT_RESELLER_CLIENTS = [
+          {
+            companyName: 'Acme Retail Brands Ltd',
+            slug: 'acme-retail',
+            ownerName: 'Vikram Malhotra',
+            ownerEmail: 'vikram@acmeretail.in',
+            ownerPhone: '919812345678',
+            passwordHash: '$2a$10$wT0/y6wM7WkCjA8mPZ8x2eL6/j7F6Q2f9T1e6v2F7n2z9q7d2v2K6', // hashed 'Client@123'
+            planName: 'Growth',
+            status: 'ACTIVE',
+            billingCycle: 'MONTHLY',
+            price: 3999,
+            currency: 'INR',
+            renewalDate: new Date(Date.now() + 3600000 * 24 * 22),
+            maxInstances: 3,
+            maxContacts: 25000,
+            monthlyMsgCap: 50000,
+            walletBalance: 4250,
+            hasCrmPipeline: true,
+            hasChatbot: true,
+            hasMultiWarmup: true,
+            hasDamMedia: true,
+            hasAiResponder: true,
+            brandColor: '#0c57e4',
+          },
+          {
+            companyName: 'Skyline Real Estate Group',
+            slug: 'skyline-realty',
+            ownerName: 'Amanpreet Virdi',
+            ownerEmail: 'aman@skylinerealty.com',
+            ownerPhone: '919872551020',
+            passwordHash: '$2a$10$wT0/y6wM7WkCjA8mPZ8x2eL6/j7F6Q2f9T1e6v2F7n2z9q7d2v2K6',
+            planName: 'Enterprise',
+            status: 'ACTIVE',
+            billingCycle: 'ANNUAL',
+            price: 35000,
+            currency: 'INR',
+            renewalDate: new Date(Date.now() + 3600000 * 24 * 180),
+            maxInstances: 10,
+            maxContacts: 100000,
+            monthlyMsgCap: 250000,
+            walletBalance: 12800,
+            hasCrmPipeline: true,
+            hasChatbot: true,
+            hasMultiWarmup: true,
+            hasDamMedia: true,
+            hasAiResponder: true,
+            brandColor: '#0c57e4',
+          },
+          {
+            companyName: 'Apex Coaching Institute',
+            slug: 'apex-coaching',
+            ownerName: 'Dr. R. K. Sharma',
+            ownerEmail: 'contact@apexcoaching.edu',
+            ownerPhone: '919412389012',
+            passwordHash: '$2a$10$wT0/y6wM7WkCjA8mPZ8x2eL6/j7F6Q2f9T1e6v2F7n2z9q7d2v2K6',
+            planName: 'Starter',
+            status: 'ACTIVE',
+            billingCycle: 'MONTHLY',
+            price: 1499,
+            currency: 'INR',
+            renewalDate: new Date(Date.now() + 3600000 * 24 * 14),
+            maxInstances: 1,
+            maxContacts: 5000,
+            monthlyMsgCap: 15000,
+            walletBalance: 1500,
+            hasCrmPipeline: true,
+            hasChatbot: false,
+            hasMultiWarmup: false,
+            hasDamMedia: true,
+            hasAiResponder: false,
+            brandColor: '#0c57e4',
+          },
+          {
+            companyName: 'Nexa Media Agency',
+            slug: 'nexa-media',
+            ownerName: 'Paramveer Singh',
+            ownerEmail: 'param@nexamedia.agency',
+            ownerPhone: '919907127762',
+            passwordHash: '$2a$10$wT0/y6wM7WkCjA8mPZ8x2eL6/j7F6Q2f9T1e6v2F7n2z9q7d2v2K6',
+            planName: 'Custom VIP',
+            status: 'ACTIVE',
+            billingCycle: 'MONTHLY',
+            price: 7500,
+            currency: 'INR',
+            renewalDate: new Date(Date.now() + 3600000 * 24 * 28),
+            maxInstances: 6,
+            maxContacts: 50000,
+            monthlyMsgCap: 100000,
+            walletBalance: 8400,
+            hasCrmPipeline: true,
+            hasChatbot: true,
+            hasMultiWarmup: true,
+            hasDamMedia: true,
+            hasAiResponder: true,
+            brandColor: '#0c57e4',
+          },
+          {
+            companyName: 'Metro Healthcare & Diagnostics',
+            slug: 'metro-health',
+            ownerName: 'Dr. Simran Kaur',
+            ownerEmail: 'care@metrohealth.org',
+            ownerPhone: '919876501234',
+            passwordHash: '$2a$10$wT0/y6wM7WkCjA8mPZ8x2eL6/j7F6Q2f9T1e6v2F7n2z9q7d2v2K6',
+            planName: 'Growth',
+            status: 'TRIAL',
+            billingCycle: 'MONTHLY',
+            price: 3999,
+            currency: 'INR',
+            renewalDate: new Date(Date.now() + 3600000 * 24 * 3), // Trial ends in 3 days
+            maxInstances: 2,
+            maxContacts: 10000,
+            monthlyMsgCap: 20000,
+            walletBalance: 500,
+            hasCrmPipeline: true,
+            hasChatbot: true,
+            hasMultiWarmup: true,
+            hasDamMedia: true,
+            hasAiResponder: false,
+            brandColor: '#0c57e4',
+          },
+        ];
+
+        for (const client of DEFAULT_RESELLER_CLIENTS) {
+          await db.resellerClient.create({ data: client });
         }
       }
     } catch {}

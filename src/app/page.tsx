@@ -58,6 +58,7 @@ import {
   Shield,
   MessageCircle,
   FileDown,
+  Building2,
   Check,
   AlertTriangle,
   X,
@@ -110,6 +111,7 @@ import { MediaLibraryView } from '@/components/media/MediaLibraryView';
 import { TaskManagementView } from '@/components/tasks/TaskManagementView';
 import { QuickRepliesView } from '@/components/quick-replies/QuickRepliesView';
 import { IndustryTemplatesView } from '@/components/templates/IndustryTemplatesView';
+import { ResellerClientsView } from '@/components/reseller/ResellerClientsView';
 import { SystemLogsConsole } from '@/components/SystemLogsConsole';
 import { ManualAddContactModal } from '@/components/ManualAddContactModal';
 import { EditContactModal } from '@/components/EditContactModal';
@@ -131,6 +133,7 @@ type TabType =
   | 'replies'
   | 'media'
   | 'quick-replies'
+  | 'reseller-clients'
   | 'chatbot'
   | 'instances'
   | 'guardrails'
@@ -153,6 +156,7 @@ export default function AppDashboard() {
     communication: true,
     campaigns: true,
     crm: true,
+    reseller: true,
     automation: true,
     system: false,
   });
@@ -169,6 +173,8 @@ export default function AppDashboard() {
       setOpenSections((prev) => ({ ...prev, campaigns: true }));
     } else if (['pipeline', 'contacts', 'tasks'].includes(currentTab)) {
       setOpenSections((prev) => ({ ...prev, crm: true }));
+    } else if (['reseller-clients'].includes(currentTab)) {
+      setOpenSections((prev) => ({ ...prev, reseller: true }));
     } else if (['chatbot', 'guardrails'].includes(currentTab)) {
       setOpenSections((prev) => ({ ...prev, automation: true }));
     } else if (['reports', 'system', 'settings'].includes(currentTab)) {
@@ -1437,6 +1443,47 @@ export default function AppDashboard() {
             )}
           </div>
 
+          {/* Section: SaaS Reseller */}
+          <div className="space-y-1">
+            {!sidebarCollapsed ? (
+              <button
+                type="button"
+                onClick={() => toggleSection('reseller')}
+                className="w-full flex items-center justify-between px-3 py-1.5 text-[11px] font-semibold tracking-wider text-slate-400 uppercase hover:text-slate-200 transition"
+              >
+                <span>SaaS Reseller</span>
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${openSections.reseller ? '' : '-rotate-90'}`} />
+              </button>
+            ) : (
+              <div className="h-px bg-slate-800 my-2 mx-1" />
+            )}
+
+            {(openSections.reseller || sidebarCollapsed) && (
+              <div className="space-y-1 pl-1">
+                {/* Reseller Clients */}
+                <button
+                  onClick={() => setCurrentTab('reseller-clients')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
+                    currentTab === 'reseller-clients'
+                      ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                  }`}
+                  title="White-Label Clients & SaaS Tenants"
+                >
+                  <div className="flex items-center gap-3">
+                    <Building2 className="w-4 h-4 shrink-0 text-blue-400" />
+                    {!sidebarCollapsed && <span>Tenants & Clients</span>}
+                  </div>
+                  {!sidebarCollapsed && (
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#0c57e4]/20 border border-[#0c57e4]/40 text-blue-400 font-bold">
+                      SaaS
+                    </span>
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
+
           {/* Section 4: Automation & AI */}
           <div className="space-y-1">
             {!sidebarCollapsed ? (
@@ -1605,6 +1652,7 @@ export default function AppDashboard() {
               {currentTab === 'replies' && 'WhatsApp Replies Inbox'}
               {currentTab === 'media' && 'Media Library DAM'}
               {currentTab === 'quick-replies' && 'Quick Replies & Canned Messages'}
+              {currentTab === 'reseller-clients' && 'SaaS Reseller Clients & Tenants'}
               {currentTab === 'chatbot' && 'Chatbot Studio'}
               {currentTab === 'instances' && 'WhatsApp Instances'}
               {currentTab === 'guardrails' && 'Anti-Ban Guardrails'}
@@ -4466,6 +4514,11 @@ export default function AppDashboard() {
           {currentTab === 'quick-replies' && <QuickRepliesView />}
 
           {/* ========================================================= */}
+          {/* VIEW: RESELLER SAAS CLIENTS & TENANTS                     */}
+          {/* ========================================================= */}
+          {currentTab === 'reseller-clients' && <ResellerClientsView />}
+
+          {/* ========================================================= */}
           {/* 9.5 VIEW: CHATBOT STUDIO (VISUAL FLOW BUILDER)            */}
           {/* ========================================================= */}
           {currentTab === 'chatbot' && (
@@ -4926,6 +4979,16 @@ export default function AppDashboard() {
               >
                 <MessageSquare className="w-4 h-4 text-teal-400" />
                 <span>View Replies Inbox & Chat</span>
+              </button>
+              <button
+                onClick={() => {
+                  setCurrentTab('reseller-clients');
+                  setCommandPaletteOpen(false);
+                }}
+                className="w-full text-left px-3 py-2 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white flex items-center gap-2"
+              >
+                <Building2 className="w-4 h-4 text-blue-400" />
+                <span>SaaS Reseller Clients & Tenants</span>
               </button>
               <button
                 onClick={() => {

@@ -634,5 +634,49 @@ model FlowTemplate {
   createdAt   DateTime @default(now())
 }
 
+// Multi-Tenant Reseller & SaaS Client Management Model
+model ResellerClient {
+  id              String    @id @default(cuid())
+  companyName     String
+  slug            String    @unique
+  ownerName       String
+  ownerEmail      String    @unique
+  ownerPhone      String?
+  passwordHash    String
+
+  // Subscription & Tier
+  planName        String    @default("Starter") // "Starter", "Growth", "Enterprise", "Custom"
+  status          String    @default("ACTIVE")  // "ACTIVE", "SUSPENDED", "TRIAL", "EXPIRED"
+  billingCycle    String    @default("MONTHLY") // "MONTHLY", "ANNUAL", "LIFETIME"
+  price           Float     @default(0)
+  currency        String    @default("INR")
+  renewalDate     DateTime?
+
+  // Resource Quotas
+  maxInstances    Int       @default(1)
+  maxContacts     Int       @default(5000)
+  monthlyMsgCap   Int       @default(10000)
+  walletBalance   Float     @default(0)
+
+  // Feature Access Flags
+  hasCrmPipeline  Boolean   @default(true)
+  hasChatbot      Boolean   @default(true)
+  hasMultiWarmup  Boolean   @default(true)
+  hasDamMedia     Boolean   @default(true)
+  hasAiResponder  Boolean   @default(false)
+
+  // White-Label Customization
+  customDomain    String?
+  brandColor      String    @default("#0c57e4")
+  logoUrl         String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([status])
+  @@index([ownerEmail])
+}
+
+
 
 
