@@ -1,20 +1,46 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 import { cookies } from 'next/headers';
 import { db } from './db';
 import { NextRequest, NextResponse } from 'next/server';
 
-let runtimeSecret = process.env.JWT_SECRET;
-if (!runtimeSecret) {
-  if (process.env.NODE_ENV === 'production') {
-    // Generate an ephemeral strong 256-bit secret so attackers cannot forge tokens using known fallbacks
-    runtimeSecret = crypto.randomBytes(32).toString('hex');
-  } else {
-    runtimeSecret = 'fallback-jwt-secret-key-12345';
+function resolveJwtSecret(): string {
+  // 1. Explicit JWT_SECRET from environment
+  if (process.env.JWT_SECRET && process.env.JWT_SECRET.trim().length > 0) {
+    return process.env.JWT_SECRET.trim();
+  }
+
+  // 2. Stable APP_SECRET from environment
+  if (process.env.APP_SECRET && process.env.APP_SECRET.trim().length > 0) {
+    return process.env.APP_SECRET.trim();
+  }
+
+  // 3. Persistent secret file stored in the persistent volume (/app/prisma)
+  // Ensures secrets survive container rebuilds, redeploys, and worker process spawns!
+  try {
+    const prismaDir = path.join(process.cwd(), 'prisma');
+    const secretFile = path.join(prismaDir, '.jwt_secret');
+    if (fs.existsSync(secretFile)) {
+      const saved = fs.readFileSync(secretFile, 'utf8').trim();
+      if (saved) return saved;
+    }
+
+    const generated = crypto.randomBytes(32).toString('hex');
+    try {
+      if (!fs.existsSync(prismaDir)) fs.mkdirSync(prismaDir, { recursive: true });
+      fs.writeFileSync(secretFile, generated, 'utf8');
+    } catch {}
+    return generated;
+  } catch {
+    // 4. Stable deterministic production fallback
+    return 'bulkflow-production-jwt-stable-secret-2026-v2';
   }
 }
-const JWT_SECRET = runtimeSecret;
+
+const JWT_SECRET = resolveJwtSecret();
 const COOKIE_NAME = 'wa_bulk_session';
 
 export interface UserSession {

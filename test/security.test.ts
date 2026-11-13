@@ -52,5 +52,40 @@ describe('Security Controls & Hardening', () => {
       expect(sanitizeCsvCell(null)).toBe('');
     });
   });
+
+  describe('JWT Session Stability', () => {
+    it('signs and verifies user session tokens correctly', async () => {
+      const { signToken, verifyToken } = await import('../src/lib/auth');
+      const mockUser = {
+        id: 'usr_123',
+        email: 'admin@example.com',
+        name: 'Admin',
+        role: 'ADMIN' as const,
+      };
+
+      const token = signToken(mockUser);
+      expect(typeof token).toBe('string');
+      expect(token.length).toBeGreaterThan(20);
+
+      const verified = verifyToken(token);
+      expect(verified).not.toBeNull();
+      expect(verified?.id).toBe(mockUser.id);
+      expect(verified?.email).toBe(mockUser.email);
+      expect(verified?.role).toBe('ADMIN');
+    });
+
+    it('rejects tampered tokens cleanly', async () => {
+      const { signToken, verifyToken } = await import('../src/lib/auth');
+      const token = signToken({
+        id: 'usr_456',
+        email: 'user@example.com',
+        role: 'OPERATOR' as const,
+      });
+
+      const tampered = token.slice(0, -5) + 'xxxxx';
+      const verified = verifyToken(tampered);
+      expect(verified).toBeNull();
+    });
+  });
 });
 
