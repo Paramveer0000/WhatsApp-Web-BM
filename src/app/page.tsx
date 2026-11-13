@@ -86,6 +86,8 @@ import {
   CheckSquare,
   ChevronDown,
   Flame,
+  Columns as ColumnsIcon,
+  Tag as TagIcon,
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -115,6 +117,9 @@ import { IndustryTemplatesView } from '@/components/templates/IndustryTemplatesV
 import { ResellerClientsView } from '@/components/reseller/ResellerClientsView';
 import { NumberWarmerView } from '@/components/warmer/NumberWarmerView';
 import { ClientSettingsView } from '@/components/settings/ClientSettingsView';
+import { CrmTagsView } from '@/components/crm/CrmTagsView';
+import { SmartColumnsView } from '@/components/crm/SmartColumnsView';
+import { EnhancedContactsView } from '@/components/crm/EnhancedContactsView';
 import { SystemLogsConsole } from '@/components/SystemLogsConsole';
 import { ManualAddContactModal } from '@/components/ManualAddContactModal';
 import { EditContactModal } from '@/components/EditContactModal';
@@ -132,6 +137,8 @@ type TabType =
   | 'contacts'
   | 'pipeline'
   | 'tasks'
+  | 'crm-tags'
+  | 'crm-columns'
   | 'templates'
   | 'replies'
   | 'media'
@@ -175,7 +182,7 @@ export default function AppDashboard() {
       setOpenSections((prev) => ({ ...prev, communication: true }));
     } else if (['campaigns', 'live', 'wizard', 'templates'].includes(currentTab)) {
       setOpenSections((prev) => ({ ...prev, campaigns: true }));
-    } else if (['pipeline', 'contacts', 'tasks'].includes(currentTab)) {
+    } else if (['pipeline', 'contacts', 'tasks', 'crm-tags', 'crm-columns'].includes(currentTab)) {
       setOpenSections((prev) => ({ ...prev, crm: true }));
     } else if (['reseller-clients'].includes(currentTab)) {
       setOpenSections((prev) => ({ ...prev, reseller: true }));
@@ -1430,30 +1437,7 @@ export default function AppDashboard() {
 
             {(openSections.crm || sidebarCollapsed) && (
               <div className="space-y-1 pl-1">
-                {/* Lead Pipeline */}
-                {(currentUser?.role !== 'CLIENT' || currentUser?.hasCrmPipeline !== false) && (
-                  <button
-                    onClick={() => setCurrentTab('pipeline')}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
-                      currentTab === 'pipeline'
-                        ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
-                        : 'text-slate-400 hover:text-white hover:bg-slate-850'
-                    }`}
-                    title="Lead Sales Pipeline (CRM Kanban)"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Kanban className="w-4 h-4 shrink-0 text-blue-400" />
-                      {!sidebarCollapsed && <span>Lead Pipeline</span>}
-                    </div>
-                    {!sidebarCollapsed && (
-                      <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-full bg-blue-500/20 text-blue-400 font-bold">
-                        CRM
-                      </span>
-                    )}
-                  </button>
-                )}
-
-                {/* Contacts & Lists */}
+                {/* All Leads (Contacts & CRM Database) */}
                 <button
                   onClick={() => setCurrentTab('contacts')}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
@@ -1461,11 +1445,11 @@ export default function AppDashboard() {
                       ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
                       : 'text-slate-400 hover:text-white hover:bg-slate-850'
                   }`}
-                  title="Contacts & Lists"
+                  title="All Leads & Contacts"
                 >
                   <div className="flex items-center gap-3">
                     <Users className="w-4 h-4 shrink-0" />
-                    {!sidebarCollapsed && <span>Contacts & Lists</span>}
+                    {!sidebarCollapsed && <span>All Leads</span>}
                   </div>
                   {!sidebarCollapsed && contacts.length > 0 && (
                     <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-300">
@@ -1474,7 +1458,25 @@ export default function AppDashboard() {
                   )}
                 </button>
 
-                {/* Tasks & Follow-ups */}
+                {/* Pipeline (Kanban Workflow) */}
+                {(currentUser?.role !== 'CLIENT' || currentUser?.hasCrmPipeline !== false) && (
+                  <button
+                    onClick={() => setCurrentTab('pipeline')}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
+                      currentTab === 'pipeline'
+                        ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                    }`}
+                    title="Sales Pipeline (Customizable Workflow Stages)"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Kanban className="w-4 h-4 shrink-0 text-blue-400" />
+                      {!sidebarCollapsed && <span>Pipeline</span>}
+                    </div>
+                  </button>
+                )}
+
+                {/* Tasks & Reminders */}
                 <button
                   onClick={() => setCurrentTab('tasks')}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
@@ -1487,6 +1489,38 @@ export default function AppDashboard() {
                   <div className="flex items-center gap-3">
                     <CheckSquare className="w-4 h-4 shrink-0 text-indigo-400" />
                     {!sidebarCollapsed && <span>Tasks & Reminders</span>}
+                  </div>
+                </button>
+
+                {/* CRM Tags */}
+                <button
+                  onClick={() => setCurrentTab('crm-tags')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
+                    currentTab === 'crm-tags'
+                      ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                  }`}
+                  title="CRM Tags"
+                >
+                  <div className="flex items-center gap-3">
+                    <TagIcon className="w-4 h-4 shrink-0 text-amber-400" />
+                    {!sidebarCollapsed && <span>Tags</span>}
+                  </div>
+                </button>
+
+                {/* Smart Columns */}
+                <button
+                  onClick={() => setCurrentTab('crm-columns')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
+                    currentTab === 'crm-columns'
+                      ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                  }`}
+                  title="Smart Columns (Custom Schema Fields)"
+                >
+                  <div className="flex items-center gap-3">
+                    <ColumnsIcon className="w-4 h-4 shrink-0 text-purple-400" />
+                    {!sidebarCollapsed && <span>Columns</span>}
                   </div>
                 </button>
               </div>
@@ -1758,8 +1792,10 @@ export default function AppDashboard() {
               {currentTab === 'live' && 'Live Campaign Monitor'}
               {currentTab === 'wizard' && 'New Campaign Wizard'}
               {currentTab === 'pipeline' && 'Lead Sales Pipeline (CRM)'}
-              {currentTab === 'contacts' && 'Contacts & Lists'}
+              {currentTab === 'contacts' && 'Contacts & CRM Database'}
               {currentTab === 'tasks' && 'Task & Follow-up Management'}
+              {currentTab === 'crm-tags' && 'CRM Tags & Segmentation'}
+              {currentTab === 'crm-columns' && 'Smart Columns & Dynamic Fields'}
               {currentTab === 'templates' && 'Message Templates'}
               {currentTab === 'replies' && 'WhatsApp Replies Inbox'}
               {currentTab === 'media' && 'Media Library DAM'}
@@ -3346,9 +3382,24 @@ export default function AppDashboard() {
           )}
 
           {/* ========================================================= */}
-          {/* 7. VIEW: CONTACTS & LISTS                                 */}
+          {/* 7. VIEW: ALL LEADS & CONTACTS (ZOLO SUIT CRM DATABASE)    */}
           {/* ========================================================= */}
           {currentTab === 'contacts' && (
+            <EnhancedContactsView
+              onOpenWhatsAppChat={(phone) => {
+                setReplySearchQuery(phone);
+                setCurrentTab('replies');
+              }}
+              onOpenQuickReminder={() => {
+                setCurrentTab('tasks');
+              }}
+              availableLists={contactLists}
+              instances={instances}
+            />
+          )}
+
+          {/* Legacy Contacts View (Fallback) */}
+          {false && currentTab === 'contacts' && (
             <div className="space-y-6">
               {/* Header with Sample Templates Download */}
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -4113,6 +4164,22 @@ export default function AppDashboard() {
           {/* VIEW: TASK & FOLLOW-UP MANAGEMENT (CRM)                   */}
           {/* ========================================================= */}
           {currentTab === 'tasks' && <TaskManagementView />}
+
+          {/* ========================================================= */}
+          {/* VIEW: CRM TAGS & SEGMENTATION (ZOLO SUIT)                 */}
+          {/* ========================================================= */}
+          {currentTab === 'crm-tags' && (
+            <CrmTagsView
+              onSelectTagForFilter={() => {
+                setCurrentTab('contacts');
+              }}
+            />
+          )}
+
+          {/* ========================================================= */}
+          {/* VIEW: SMART COLUMNS & DYNAMIC FIELDS (ZOLO SUIT)           */}
+          {/* ========================================================= */}
+          {currentTab === 'crm-columns' && <SmartColumnsView />}
 
           {/* ========================================================= */}
           {/* 8. VIEW: TEMPLATES LIBRARY (INDUSTRY-WISE & CUSTOM)       */}
@@ -5117,7 +5184,27 @@ export default function AppDashboard() {
                 className="w-full text-left px-3 py-2 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white flex items-center gap-2"
               >
                 <Users className="w-4 h-4 text-emerald-400" />
-                <span>Manage Contacts & Download Sample Templates</span>
+                <span>All Leads & Contacts Database</span>
+              </button>
+              <button
+                onClick={() => {
+                  setCurrentTab('crm-tags');
+                  setCommandPaletteOpen(false);
+                }}
+                className="w-full text-left px-3 py-2 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white flex items-center gap-2"
+              >
+                <TagIcon className="w-4 h-4 text-amber-400" />
+                <span>Manage CRM Tags & Segmentation</span>
+              </button>
+              <button
+                onClick={() => {
+                  setCurrentTab('crm-columns');
+                  setCommandPaletteOpen(false);
+                }}
+                className="w-full text-left px-3 py-2 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white flex items-center gap-2"
+              >
+                <ColumnsIcon className="w-4 h-4 text-purple-400" />
+                <span>Manage Smart Columns (Custom Fields Schema)</span>
               </button>
               <button
                 onClick={() => {

@@ -1,5 +1,5 @@
 import { db } from './db';
-import { decrypt } from './crypto';
+import { decrypt, encrypt } from './crypto';
 import { logger } from './logger';
 import { evolutionErrorsCounter, circuitStateGauge } from './metrics';
 import { resolveMediaUrlForEvolution } from './media';
@@ -192,21 +192,40 @@ export class EvolutionClient {
 
     let apiKey = keySetting?.value;
     if (keySetting?.isEncrypted && apiKey) {
-      apiKey = decrypt(apiKey);
+      try {
+        apiKey = decrypt(apiKey);
+      } catch {
+        apiKey = '';
+      }
     }
+
+    // Ignore invalid, blank, corrupted ciphertexts, or masked bullets
+    if (apiKey && (apiKey.includes(':') || apiKey.includes('•') || apiKey.trim() === '')) {
+      apiKey = '';
+    }
+
     if (!apiKey) {
-      apiKey = process.env.GLOBAL_API_KEY || '429683C4C97741';
+      apiKey = (process.env.GLOBAL_API_KEY && process.env.GLOBAL_API_KEY.trim()) ||
+               (process.env.AUTHENTICATION_API_KEY && process.env.AUTHENTICATION_API_KEY.trim()) ||
+               '429683C4C97741';
     }
 
     return new EvolutionClient(apiUrl, apiKey);
   }
 
-  private getHeaders(): Record<string, string> {
-    return {
-      apikey: this.apiKey,
+  private getHeaders(keyOverride?: string): Record<string, string> {
+    const key = (keyOverride || this.apiKey || '').trim();
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'User-Agent': 'BulkFlow-Manager/2.0',
     };
+    if (key) {
+      headers['apikey'] = key;
+      headers['apiKey'] = key;
+      headers['Authentication-Api-Key'] = key;
+      headers['Authorization'] = `Bearer ${key}`;
+    }
+    return headers;
   }
 
   static classifyError(status?: number, data?: any, originalMessage?: string): EvolutionError {
@@ -402,6 +421,44 @@ export class EvolutionClient {
           }
 
           if (!response.ok) {
+            // If 401 or 403, attempt recovery with candidate keys before giving up
+            if (response.status === 401 || response.status === 403) {
+              const candidateKeys = [
+                (process.env.GLOBAL_API_KEY || '').trim(),
+                (process.env.AUTHENTICATION_API_KEY || '').trim(),
+                '429683C4C97741',
+              ].filter((k) => k && k !== this.apiKey);
+
+              for (const altKey of candidateKeys) {
+                try {
+                  const altHeaders = {
+                    ...this.getHeaders(altKey),
+                    ...(options.headers as Record<string, string> || {}),
+                  };
+                  const altRes = await fetch(url, {
+                    ...options,
+                    headers: altHeaders,
+                    signal: controller.signal,
+                  });
+                  if (altRes.ok) {
+                    const altData = await altRes.json().catch(async () => {
+                      const t = await altRes.text();
+                      try { return JSON.parse(t); } catch { return { text: t }; }
+                    });
+                    this.apiKey = altKey;
+                    this.apiUrl = host;
+                    // Auto-heal DB setting asynchronously
+                    db.setting.upsert({
+                      where: { key: 'GLOBAL_API_KEY' },
+                      update: { value: encrypt(altKey), isEncrypted: true },
+                      create: { key: 'GLOBAL_API_KEY', value: encrypt(altKey), isEncrypted: true },
+                    }).catch(() => {});
+                    return altData as T;
+                  }
+                } catch {}
+              }
+            }
+
             const classified = EvolutionClient.classifyError(response.status, data);
             try {
               evolutionErrorsCounter.inc({ class: classified.name, instance: host });

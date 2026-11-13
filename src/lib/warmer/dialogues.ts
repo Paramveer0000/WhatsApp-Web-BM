@@ -192,3 +192,4 @@ export function getRandomDialogue(topic: string = 'casual'): DialogueScript {
   if (matching.length === 0) return SCRIPTED_DIALOGUES[0];
   return matching[Math.floor(Math.random() * matching.length)];
 }
+

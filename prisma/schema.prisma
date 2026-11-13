@@ -98,6 +98,36 @@ model LeadDeal {
   @@index([contactPhone])
 }
 
+model CrmTag {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  color     String   @default("#0c57e4")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CrmCustomField {
+  id          String   @id @default(cuid())
+  name        String
+  key         String   @unique
+  type        String   @default("TEXT") // "TEXT" | "NUMBER" | "DATE" | "DROPDOWN"
+  options     String?  // JSON array string for DROPDOWN
+  description String?
+  isVisible   Boolean  @default(true)
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model PipelineStageConfig {
+  id           String   @id @default(cuid())
+  pipelineName String   @default("Falcon")
+  description  String?
+  stages       String   // JSON string of workflow stages
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
 model ListContact {
   listId    String
   contactId String

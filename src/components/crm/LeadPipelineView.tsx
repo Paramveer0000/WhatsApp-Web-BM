@@ -22,15 +22,30 @@ import {
   Sparkles,
   ChevronRight,
   ExternalLink,
+  Settings2,
+  X,
+  GripVertical,
+  Check,
+  AlertCircle,
 } from 'lucide-react';
 import { toast } from '@/lib/toast';
+
+export interface WorkflowStage {
+  id: string;
+  key: string;
+  label: string;
+  color: string;
+  winRate: number;
+  isWon?: boolean;
+  isLost?: boolean;
+}
 
 export interface LeadDeal {
   id: string;
   title: string;
   value: number;
   currency: string;
-  stage: 'NEW_LEAD' | 'CONTACTED' | 'QUALIFIED' | 'PROPOSAL' | 'WON' | 'LOST';
+  stage: string;
   contactName: string | null;
   contactPhone: string;
   tags: string | null;
@@ -42,7 +57,7 @@ export interface LeadDeal {
 }
 
 export const PIPELINE_STAGES: Array<{
-  id: LeadDeal['stage'];
+  id: string;
   label: string;
   description: string;
   color: string;
@@ -97,6 +112,17 @@ export const PIPELINE_STAGES: Array<{
   },
 ];
 
+const PRESET_STAGE_COLORS = [
+  '#3b82f6', // blue
+  '#6366f1', // indigo
+  '#a855f7', // purple
+  '#f97316', // orange
+  '#10b981', // emerald
+  '#ec4899', // pink
+  '#ef4444', // red
+  '#06b6d4', // cyan
+];
+
 interface LeadPipelineViewProps {
   onOpenWhatsAppChat?: (phone: string) => void;
 }
@@ -109,16 +135,44 @@ export function LeadPipelineView({ onOpenWhatsAppChat }: LeadPipelineViewProps) 
   const [showAddModal, setShowAddModal] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  // Dynamic Pipeline & Stages State (Matching Zolo Suit)
+  const [pipelineName, setPipelineName] = useState('Falcon');
+  const [pipelineDesc, setPipelineDesc] = useState('Configure sales stages, colors, and win probabilities');
+  const [stages, setStages] = useState<WorkflowStage[]>([
+    { id: 'NEW_LEAD', key: 'NEW_LEAD', label: 'New Lead', color: '#3b82f6', winRate: 10, isWon: false, isLost: false },
+    { id: 'CONTACTED', key: 'CONTACTED', label: 'Contacted', color: '#6366f1', winRate: 25, isWon: false, isLost: false },
+    { id: 'QUALIFIED', key: 'QUALIFIED', label: 'Qualified', color: '#a855f7', winRate: 50, isWon: false, isLost: false },
+    { id: 'PROPOSAL', key: 'PROPOSAL', label: 'Proposal', color: '#f97316', winRate: 70, isWon: false, isLost: false },
+    { id: 'WON', key: 'WON', label: 'Won', color: '#10b981', winRate: 100, isWon: true, isLost: false },
+  ]);
+  const [showEditStagesModal, setShowEditStagesModal] = useState(false);
+  const [editStagesDraft, setEditStagesDraft] = useState<WorkflowStage[]>([]);
+  const [editPipelineNameDraft, setEditPipelineNameDraft] = useState('Falcon');
+  const [editPipelineDescDraft, setEditPipelineDescDraft] = useState('');
+  const [savingStages, setSavingStages] = useState(false);
+
   // Form State
   const [formTitle, setFormTitle] = useState('');
   const [formName, setFormName] = useState('');
   const [formPhone, setFormPhone] = useState('');
   const [formValue, setFormValue] = useState('15000');
-  const [formStage, setFormStage] = useState<LeadDeal['stage']>('NEW_LEAD');
+  const [formStage, setFormStage] = useState<string>('NEW_LEAD');
   const [formPriority, setFormPriority] = useState<'LOW' | 'MEDIUM' | 'HIGH'>('MEDIUM');
   const [formTags, setFormTags] = useState('Lead, Inbound');
   const [formNotes, setFormNotes] = useState('');
   const [formAssignee, setFormAssignee] = useState('Paramveer (Admin)');
+
+  const fetchStages = async () => {
+    try {
+      const res = await fetch('/api/leads/stages');
+      const data = await res.json();
+      if (data.success && Array.isArray(data.stages)) {
+        setStages(data.stages);
+        if (data.pipelineName) setPipelineName(data.pipelineName);
+        if (data.description) setPipelineDesc(data.description);
+      }
+    } catch {}
+  };
 
   const fetchDeals = async () => {
     try {
@@ -137,7 +191,73 @@ export function LeadPipelineView({ onOpenWhatsAppChat }: LeadPipelineViewProps) 
 
   useEffect(() => {
     fetchDeals();
+    fetchStages();
   }, []);
+
+  const openEditStagesModal = () => {
+    setEditStagesDraft(JSON.parse(JSON.stringify(stages)));
+    setEditPipelineNameDraft(pipelineName);
+    setEditPipelineDescDraft(pipelineDesc);
+    setShowEditStagesModal(true);
+  };
+
+  const handleSaveStages = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingStages(true);
+    try {
+      const res = await fetch('/api/leads/stages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pipelineName: editPipelineNameDraft.trim() || 'Falcon',
+          description: editPipelineDescDraft.trim(),
+          stages: editStagesDraft,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to save stages');
+
+      setStages(editStagesDraft);
+      setPipelineName(editPipelineNameDraft.trim() || 'Falcon');
+      setPipelineDesc(editPipelineDescDraft.trim());
+      setShowEditStagesModal(false);
+      toast.success('Pipeline stages updated successfully!', 'Stages Saved');
+    } catch (err: any) {
+      toast.error(err.message, 'Save Failed');
+    } finally {
+      setSavingStages(false);
+    }
+  };
+
+  const handleAddDraftStage = () => {
+    const newIdx = editStagesDraft.length + 1;
+    const colors = PRESET_STAGE_COLORS;
+    const assignedColor = colors[(newIdx - 1) % colors.length];
+    const newStage: WorkflowStage = {
+      id: `STAGE_${Date.now()}`,
+      key: `STAGE_${Date.now()}`,
+      label: `Stage ${newIdx}`,
+      color: assignedColor,
+      winRate: Math.min(100, newIdx * 20),
+      isWon: false,
+      isLost: false,
+    };
+    setEditStagesDraft([...editStagesDraft, newStage]);
+  };
+
+  const handleDeleteDraftStage = (idx: number) => {
+    if (editStagesDraft.length <= 1) {
+      toast.warning('Pipeline must have at least 1 stage');
+      return;
+    }
+    setEditStagesDraft(editStagesDraft.filter((_, i) => i !== idx));
+  };
+
+  const handleUpdateDraftStage = (idx: number, patch: Partial<WorkflowStage>) => {
+    setEditStagesDraft((prev) =>
+      prev.map((s, i) => (i === idx ? { ...s, ...patch } : s))
+    );
+  };
 
   // Filtered Deals
   const filteredDeals = useMemo(() => {
@@ -289,6 +409,14 @@ export function LeadPipelineView({ onOpenWhatsAppChat }: LeadPipelineViewProps) 
         {/* Quick Actions & Add Deal */}
         <div className="flex flex-wrap items-center gap-3">
           <button
+            onClick={openEditStagesModal}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-bold transition cursor-pointer border border-slate-700 shadow"
+          >
+            <Settings2 className="w-3.5 h-3.5 text-blue-400" />
+            <span>Edit Stages</span>
+          </button>
+
+          <button
             onClick={() => setShowAddModal(true)}
             className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-lg shadow-emerald-950/40"
           >
@@ -388,29 +516,37 @@ export function LeadPipelineView({ onOpenWhatsAppChat }: LeadPipelineViewProps) 
         </div>
       </div>
 
-      {/* 5-Column Kanban Board */}
+      {/* Dynamic Workflow Kanban Board */}
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 overflow-x-auto pb-4 items-start">
-        {PIPELINE_STAGES.map((stageInfo, stageIdx) => {
-          const stageDeals = filteredDeals.filter((d) => d.stage === stageInfo.id);
+        {stages.map((stageInfo, stageIdx) => {
+          const stageDeals = filteredDeals.filter((d) => d.stage === stageInfo.id || d.stage === stageInfo.key);
           const stageValue = stageDeals.reduce((acc, d) => acc + (d.value || 0), 0);
 
           return (
             <div
-              key={stageInfo.id}
+              key={stageInfo.id || stageIdx}
               className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3 min-w-[260px] flex flex-col gap-3 shadow-md"
             >
               {/* Column Header */}
               <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
                 <div className="flex items-center gap-2">
-                  <span className={`w-2.5 h-2.5 rounded-full ${stageInfo.borderColor.replace('border-', 'bg-')}`}></span>
+                  <span
+                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: stageInfo.color || '#3b82f6' }}
+                  />
                   <h3 className="text-xs font-bold text-white uppercase tracking-wider">{stageInfo.label}</h3>
                   <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300 font-bold">
                     {stageDeals.length}
                   </span>
                 </div>
-                <span className="text-[11px] font-mono font-bold text-emerald-400">
-                  ₹{stageValue.toLocaleString('en-IN')}
-                </span>
+                <div className="text-right">
+                  <span className="text-[11px] font-mono font-bold text-emerald-400 block">
+                    ₹{stageValue.toLocaleString('en-IN')}
+                  </span>
+                  <span className="text-[9px] font-mono text-slate-400">
+                    {stageInfo.winRate}% win
+                  </span>
+                </div>
               </div>
 
               {/* Cards List */}
@@ -517,19 +653,19 @@ export function LeadPipelineView({ onOpenWhatsAppChat }: LeadPipelineViewProps) 
                           <div className="flex items-center gap-1">
                             {stageIdx > 0 && (
                               <button
-                                onClick={() => handleMoveStage(deal.id, PIPELINE_STAGES[stageIdx - 1].id)}
+                                onClick={() => handleMoveStage(deal.id, stages[stageIdx - 1].id)}
                                 className="p-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white transition"
-                                title={`Move backward to ${PIPELINE_STAGES[stageIdx - 1].label}`}
+                                title={`Move backward to ${stages[stageIdx - 1].label}`}
                               >
                                 <ArrowLeft className="w-3 h-3" />
                               </button>
                             )}
 
-                            {stageIdx < PIPELINE_STAGES.length - 1 && (
+                            {stageIdx < stages.length - 1 && (
                               <button
-                                onClick={() => handleMoveStage(deal.id, PIPELINE_STAGES[stageIdx + 1].id)}
+                                onClick={() => handleMoveStage(deal.id, stages[stageIdx + 1].id)}
                                 className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-emerald-400 hover:text-emerald-300 transition font-bold text-[10px]"
-                                title={`Advance to ${PIPELINE_STAGES[stageIdx + 1].label}`}
+                                title={`Advance to ${stages[stageIdx + 1].label}`}
                               >
                                 <span>Move</span>
                                 <ArrowRight className="w-3 h-3" />
@@ -623,12 +759,12 @@ export function LeadPipelineView({ onOpenWhatsAppChat }: LeadPipelineViewProps) 
                   <label className="block text-slate-300 font-semibold mb-1">Pipeline Stage</label>
                   <select
                     value={formStage}
-                    onChange={(e) => setFormStage(e.target.value as any)}
+                    onChange={(e) => setFormStage(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
                   >
-                    {PIPELINE_STAGES.map((s) => (
+                    {stages.map((s) => (
                       <option key={s.id} value={s.id}>
-                        {s.label}
+                        {s.label} ({s.winRate}%)
                       </option>
                     ))}
                   </select>
@@ -683,6 +819,176 @@ export function LeadPipelineView({ onOpenWhatsAppChat }: LeadPipelineViewProps) 
                   className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-2 cursor-pointer shadow-lg shadow-emerald-950/40"
                 >
                   {saving ? 'Creating...' : 'Create Deal'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Pipeline: Falcon Modal (Matching Zolo Suit Image 2) */}
+      {showEditStagesModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-[#0c57e4] text-white flex items-center justify-center shadow-md shadow-blue-900/30">
+                  <Settings2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">
+                    Edit Pipeline: {editPipelineNameDraft || 'Falcon'}
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Configure sales stages, colors, and win probabilities
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowEditStagesModal(false)}
+                className="text-slate-400 hover:text-white p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveStages} className="space-y-5 text-xs">
+              {/* Pipeline Details Section */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Pipeline Details</span>
+                </h4>
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Pipeline Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editPipelineNameDraft}
+                    onChange={(e) => setEditPipelineNameDraft(e.target.value)}
+                    placeholder="e.g. Falcon"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-[#0c57e4]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Description (optional)</label>
+                  <input
+                    type="text"
+                    value={editPipelineDescDraft}
+                    onChange={(e) => setEditPipelineDescDraft(e.target.value)}
+                    placeholder="Brief description of this workflow..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-[#0c57e4]"
+                  />
+                </div>
+              </div>
+
+              {/* Workflow Stages List */}
+              <div className="space-y-3 pt-2 border-t border-slate-800">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Kanban className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Workflow Stages</span>
+                  </h4>
+                  <span className="text-[11px] font-mono text-slate-400">
+                    {editStagesDraft.length} stages
+                  </span>
+                </div>
+
+                <div className="space-y-2.5">
+                  {editStagesDraft.map((stg, sidx) => (
+                    <div
+                      key={stg.id || sidx}
+                      className="flex items-center gap-2 p-2.5 bg-slate-950 border border-slate-800 rounded-xl"
+                    >
+                      <GripVertical className="w-4 h-4 text-slate-500 shrink-0 cursor-grab" />
+
+                      {/* Color Picker Swatch */}
+                      <div className="shrink-0">
+                        <input
+                          type="color"
+                          value={stg.color || '#3b82f6'}
+                          onChange={(e) => handleUpdateDraftStage(sidx, { color: e.target.value })}
+                          className="w-6 h-6 rounded-lg cursor-pointer border-0 p-0 bg-transparent"
+                        />
+                      </div>
+
+                      {/* Stage Name Input */}
+                      <input
+                        type="text"
+                        value={stg.label}
+                        onChange={(e) => handleUpdateDraftStage(sidx, { label: e.target.value })}
+                        placeholder="Stage Name"
+                        className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white font-medium text-xs focus:outline-none focus:border-[#0c57e4]"
+                        required
+                      />
+
+                      {/* Win Rate % Input */}
+                      <div className="flex items-center gap-1 w-20 shrink-0">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={stg.winRate}
+                          onChange={(e) =>
+                            handleUpdateDraftStage(sidx, { winRate: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })
+                          }
+                          className="w-12 bg-slate-900 border border-slate-800 rounded-lg px-1.5 py-1.5 text-center text-white font-mono text-xs focus:outline-none"
+                        />
+                        <span className="text-[11px] text-slate-400">%</span>
+                      </div>
+
+                      {/* Won Flag Toggle */}
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateDraftStage(sidx, { isWon: !stg.isWon })}
+                        className={`p-1.5 rounded-lg text-xs transition cursor-pointer ${
+                          stg.isWon
+                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                            : 'text-slate-500 hover:text-slate-300'
+                        }`}
+                        title="Mark as Won Stage"
+                      >
+                        <Trophy className="w-3.5 h-3.5" />
+                      </button>
+
+                      {/* Delete Stage */}
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteDraftStage(sidx)}
+                        className="p-1.5 text-slate-500 hover:text-rose-400 rounded-lg transition cursor-pointer"
+                        title="Delete Stage"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleAddDraftStage}
+                  className="w-full py-2 bg-slate-800/80 hover:bg-slate-800 text-slate-300 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer border border-dashed border-slate-700"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>+ Add Stage</span>
+                </button>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowEditStagesModal(false)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-semibold transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingStages}
+                  className="px-5 py-2 bg-[#0c57e4] hover:bg-blue-600 disabled:opacity-50 text-white rounded-xl font-bold transition shadow-md shadow-blue-900/30 cursor-pointer"
+                >
+                  {savingStages ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
             </form>

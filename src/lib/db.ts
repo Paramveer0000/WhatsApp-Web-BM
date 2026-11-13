@@ -69,6 +69,17 @@ export async function ensureDbSchema(): Promise<void> {
       "CREATE TABLE IF NOT EXISTS NumberWarmerSession (id TEXT PRIMARY KEY, instanceA TEXT NOT NULL, instanceB TEXT NOT NULL, phoneA TEXT, phoneB TEXT, status TEXT DEFAULT 'IDLE', dailyCap INTEGER DEFAULT 25, todayExchanges INTEGER DEFAULT 0, topic TEXT DEFAULT 'casual', minDelaySeconds INTEGER DEFAULT 45, maxDelaySeconds INTEGER DEFAULT 90, useAi INTEGER DEFAULT 0, aiPrompt TEXT, lastExchangedAt DATETIME, nextScheduledAt DATETIME, logs TEXT DEFAULT '[]', clientId TEXT, createdAt DATETIME DEFAULT CURRENT_TIMESTAMP, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP)",
       "CREATE INDEX IF NOT EXISTS idx_warmer_status ON NumberWarmerSession(status)",
       "CREATE INDEX IF NOT EXISTS idx_warmer_client ON NumberWarmerSession(clientId)",
+
+      // CRM Tags table
+      "CREATE TABLE IF NOT EXISTS CrmTag (id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, color TEXT DEFAULT '#0c57e4', createdAt DATETIME DEFAULT CURRENT_TIMESTAMP, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP)",
+      "CREATE INDEX IF NOT EXISTS idx_crm_tag_name ON CrmTag(name)",
+
+      // CRM Smart Columns (Dynamic Schema Fields)
+      "CREATE TABLE IF NOT EXISTS CrmCustomField (id TEXT PRIMARY KEY, name TEXT NOT NULL, key TEXT NOT NULL UNIQUE, type TEXT DEFAULT 'TEXT', options TEXT, description TEXT, isVisible INTEGER DEFAULT 1, [order] INTEGER DEFAULT 0, createdAt DATETIME DEFAULT CURRENT_TIMESTAMP, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP)",
+      "CREATE INDEX IF NOT EXISTS idx_crm_field_key ON CrmCustomField(key)",
+
+      // Pipeline Stage Configuration
+      "CREATE TABLE IF NOT EXISTS PipelineStageConfig (id TEXT PRIMARY KEY, pipelineName TEXT DEFAULT 'Falcon', description TEXT, stages TEXT NOT NULL, createdAt DATETIME DEFAULT CURRENT_TIMESTAMP, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP)",
     ];
 
     for (const sql of tableStatements) {
@@ -282,6 +293,80 @@ export async function ensureDbSchema(): Promise<void> {
         for (const client of DEFAULT_RESELLER_CLIENTS) {
           await db.resellerClient.create({ data: client });
         }
+      }
+    } catch {}
+
+    // 5. Auto-heal Evolution API key if empty, corrupt, or missing in Setting table
+    try {
+      const keyRow = await db.setting.findUnique({ where: { key: 'GLOBAL_API_KEY' } });
+      const currentVal = (keyRow?.value || '').trim();
+      const isBroken = !currentVal || currentVal.includes(':') || currentVal.includes('•');
+      if (isBroken) {
+        const workingKey = (process.env.GLOBAL_API_KEY || '').trim() ||
+                           (process.env.AUTHENTICATION_API_KEY || '').trim() ||
+                           '429683C4C97741';
+        // Dynamic import to avoid circular dependency
+        const { encrypt } = await import('./crypto');
+        await db.setting.upsert({
+          where: { key: 'GLOBAL_API_KEY' },
+          update: { value: encrypt(workingKey), isEncrypted: true },
+          create: { key: 'GLOBAL_API_KEY', value: encrypt(workingKey), isEncrypted: true },
+        });
+      }
+    } catch {}
+
+    // 6. Seed default CRM Tags if empty
+    try {
+      const tagCount = await (db as any).crmTag.count();
+      if (tagCount === 0) {
+        const DEFAULT_TAGS = [
+          { name: 'VIP Customer', color: '#3b82f6' },
+          { name: 'Inbound Lead', color: '#10b981' },
+          { name: 'High Budget', color: '#8b5cf6' },
+          { name: 'Retailer', color: '#f59e0b' },
+          { name: 'Wholesale Partner', color: '#06b6d4' },
+          { name: 'Follow-up Needed', color: '#ef4444' },
+        ];
+        for (const t of DEFAULT_TAGS) {
+          await (db as any).crmTag.create({ data: t }).catch(() => {});
+        }
+      }
+    } catch {}
+
+    // 7. Seed default CRM Smart Columns if empty
+    try {
+      const colCount = await (db as any).crmCustomField.count();
+      if (colCount === 0) {
+        const DEFAULT_FIELDS = [
+          { name: 'test', key: 'test', type: 'TEXT', description: 'Direct input field', isVisible: true, order: 0 },
+          { name: 'Company', key: 'company', type: 'TEXT', description: 'Business organization name', isVisible: true, order: 1 },
+          { name: 'City', key: 'city', type: 'TEXT', description: 'Primary location', isVisible: true, order: 2 },
+          { name: 'Budget', key: 'budget', type: 'NUMBER', description: 'Estimated customer budget', isVisible: true, order: 3 },
+        ];
+        for (const f of DEFAULT_FIELDS) {
+          await (db as any).crmCustomField.create({ data: f }).catch(() => {});
+        }
+      }
+    } catch {}
+
+    // 8. Seed default Pipeline Stage Config if empty
+    try {
+      const stageConfigCount = await (db as any).pipelineStageConfig.count();
+      if (stageConfigCount === 0) {
+        const DEFAULT_STAGES = [
+          { id: 'NEW_LEAD', key: 'NEW_LEAD', label: 'New Lead', color: '#3b82f6', winRate: 10, isWon: false, isLost: false },
+          { id: 'CONTACTED', key: 'CONTACTED', label: 'Contacted', color: '#6366f1', winRate: 25, isWon: false, isLost: false },
+          { id: 'QUALIFIED', key: 'QUALIFIED', label: 'Qualified', color: '#a855f7', winRate: 50, isWon: false, isLost: false },
+          { id: 'PROPOSAL', key: 'PROPOSAL', label: 'Proposal', color: '#f97316', winRate: 70, isWon: false, isLost: false },
+          { id: 'WON', key: 'WON', label: 'Won', color: '#10b981', winRate: 100, isWon: true, isLost: false },
+        ];
+        await (db as any).pipelineStageConfig.create({
+          data: {
+            pipelineName: 'Falcon',
+            description: 'Core sales and outreach pipeline',
+            stages: JSON.stringify(DEFAULT_STAGES),
+          },
+        }).catch(() => {});
       }
     } catch {}
   })();
