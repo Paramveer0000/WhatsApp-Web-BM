@@ -11,8 +11,9 @@ export async function POST(
 ) {
   try {
     const user = await getSessionUser();
-    if (!user || user.role !== 'ADMIN') {
-      return NextResponse.json({ error: 'Unauthorized: Admin privileges required' }, { status: 401 });
+    // Allow Platform Super Admin (ADMIN) or Reseller (RESELLER) to impersonate
+    if (!user || (user.role !== 'ADMIN' && user.role !== 'RESELLER')) {
+      return NextResponse.json({ error: 'Unauthorized: Reseller or Admin privileges required' }, { status: 401 });
     }
 
     await ensureDbSchema();
@@ -32,12 +33,24 @@ export async function POST(
       );
     }
 
-    // Generate impersonation token
+    // Generate impersonation token as CLIENT with admin reference
     const impersonatedToken = signToken({
       id: client.id,
       email: client.ownerEmail,
       name: `${client.ownerName} (${client.companyName})`,
-      role: 'ADMIN',
+      role: 'CLIENT',
+      clientId: client.id,
+      companyName: client.companyName,
+      planName: client.planName,
+      maxInstances: client.maxInstances,
+      monthlyMsgCap: client.monthlyMsgCap,
+      hasCrmPipeline: client.hasCrmPipeline,
+      hasChatbot: client.hasChatbot,
+      hasMultiWarmup: client.hasMultiWarmup,
+      hasDamMedia: client.hasDamMedia,
+      hasAiResponder: client.hasAiResponder,
+      isImpersonating: true,
+      originalAdminId: user.id,
     });
 
     const res = NextResponse.json({
@@ -48,6 +61,7 @@ export async function POST(
         companyName: client.companyName,
         ownerEmail: client.ownerEmail,
         planName: client.planName,
+        maxInstances: client.maxInstances,
       },
     });
 

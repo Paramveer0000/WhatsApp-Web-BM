@@ -47,7 +47,19 @@ export interface UserSession {
   id: string;
   email: string;
   name?: string | null;
-  role: 'ADMIN' | 'OPERATOR';
+  role: 'ADMIN' | 'OPERATOR' | 'RESELLER' | 'CLIENT';
+  clientId?: string | null;
+  companyName?: string | null;
+  planName?: string | null;
+  maxInstances?: number;
+  monthlyMsgCap?: number;
+  hasCrmPipeline?: boolean;
+  hasChatbot?: boolean;
+  hasMultiWarmup?: boolean;
+  hasDamMedia?: boolean;
+  hasAiResponder?: boolean;
+  isImpersonating?: boolean;
+  originalAdminId?: string | null;
 }
 
 export async function hashPassword(password: string): Promise<string> {
@@ -65,6 +77,18 @@ export function signToken(user: UserSession): string {
       email: user.email,
       name: user.name,
       role: user.role,
+      clientId: user.clientId || null,
+      companyName: user.companyName || null,
+      planName: user.planName || null,
+      maxInstances: user.maxInstances || null,
+      monthlyMsgCap: user.monthlyMsgCap || null,
+      hasCrmPipeline: user.hasCrmPipeline ?? true,
+      hasChatbot: user.hasChatbot ?? true,
+      hasMultiWarmup: user.hasMultiWarmup ?? true,
+      hasDamMedia: user.hasDamMedia ?? true,
+      hasAiResponder: user.hasAiResponder ?? false,
+      isImpersonating: Boolean(user.isImpersonating),
+      originalAdminId: user.originalAdminId || null,
     },
     JWT_SECRET,
     { expiresIn: '7d' }

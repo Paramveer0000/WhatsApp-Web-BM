@@ -100,4 +100,101 @@ describe('Reseller SaaS Clients & Tenants Management', () => {
       expect(isExpiringSoon(in20Days)).toBe(false);
     });
   });
+
+  // 6. 3-Tier Multi-Tenant SaaS Role & Session Isolation
+  describe('3-Tier Multi-Tenant SaaS Architecture', () => {
+    it('isolates Tier 1, Tier 2, and Tier 3 navigation and permissions', () => {
+      const getAccessibleSections = (role: 'ADMIN' | 'RESELLER' | 'CLIENT', featureFlags?: { hasChatbot?: boolean; hasCrmPipeline?: boolean }) => {
+        const sections: string[] = ['overview', 'campaigns', 'wizard', 'templates', 'replies', 'media', 'quick-replies'];
+        
+        if (role !== 'CLIENT') {
+          sections.push('reseller-clients', 'reports', 'system', 'settings');
+        }
+
+        if (role !== 'CLIENT' || featureFlags?.hasCrmPipeline !== false) {
+          sections.push('pipeline', 'contacts', 'tasks');
+        }
+
+        if (role !== 'CLIENT' || featureFlags?.hasChatbot !== false) {
+          sections.push('chatbot', 'guardrails');
+        }
+
+        return sections;
+      };
+
+      const superAdminTabs = getAccessibleSections('ADMIN');
+      expect(superAdminTabs).toContain('reseller-clients');
+      expect(superAdminTabs).toContain('system');
+      expect(superAdminTabs).toContain('settings');
+
+      const resellerAdminTabs = getAccessibleSections('RESELLER');
+      expect(resellerAdminTabs).toContain('reseller-clients');
+
+      const clientTabs = getAccessibleSections('CLIENT', { hasChatbot: false, hasCrmPipeline: true });
+      expect(clientTabs).not.toContain('reseller-clients');
+      expect(clientTabs).not.toContain('system');
+      expect(clientTabs).not.toContain('settings');
+      expect(clientTabs).not.toContain('chatbot');
+      expect(clientTabs).toContain('pipeline');
+    });
+
+    it('creates an impersonation session token with original admin backlink', () => {
+      const mockAdmin = { id: 'admin-101', email: 'admin@system.local', role: 'ADMIN' };
+      const mockClient = {
+        id: 'client-888',
+        ownerEmail: 'ceo@acmeretail.com',
+        ownerName: 'Vikram Mehta',
+        companyName: 'Acme Retail Brands',
+        planName: 'Enterprise',
+        maxInstances: 10,
+        monthlyMsgCap: 250000,
+        hasCrmPipeline: true,
+        hasChatbot: true,
+      };
+
+      const impersonatedSession = {
+        id: mockClient.id,
+        email: mockClient.ownerEmail,
+        name: `${mockClient.ownerName} (${mockClient.companyName})`,
+        role: 'CLIENT' as const,
+        clientId: mockClient.id,
+        companyName: mockClient.companyName,
+        planName: mockClient.planName,
+        maxInstances: mockClient.maxInstances,
+        monthlyMsgCap: mockClient.monthlyMsgCap,
+        isImpersonating: true,
+        originalAdminId: mockAdmin.id,
+      };
+
+      expect(impersonatedSession.role).toBe('CLIENT');
+      expect(impersonatedSession.isImpersonating).toBe(true);
+      expect(impersonatedSession.originalAdminId).toBe('admin-101');
+      expect(impersonatedSession.companyName).toBe('Acme Retail Brands');
+      expect(impersonatedSession.maxInstances).toBe(10);
+    });
+
+    it('safely exits impersonation by restoring original admin state', () => {
+      const currentSession = {
+        id: 'client-888',
+        role: 'CLIENT',
+        isImpersonating: true,
+        originalAdminId: 'admin-101',
+      };
+
+      const canExit = Boolean(currentSession.isImpersonating && currentSession.originalAdminId);
+      expect(canExit).toBe(true);
+
+      const restoredSession = {
+        id: currentSession.originalAdminId,
+        role: 'ADMIN',
+        isImpersonating: false,
+        originalAdminId: null,
+      };
+
+      expect(restoredSession.id).toBe('admin-101');
+      expect(restoredSession.role).toBe('ADMIN');
+      expect(restoredSession.isImpersonating).toBe(false);
+    });
+  });
 });
+

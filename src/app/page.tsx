@@ -514,6 +514,15 @@ export default function AppDashboard() {
     loadTemplates();
   }, [router]);
 
+  // Role Guard: Prevent client users from accessing system or reseller admin screens
+  useEffect(() => {
+    if (currentUser?.role === 'CLIENT') {
+      if (['reseller-clients', 'system', 'settings'].includes(currentTab)) {
+        setCurrentTab('overview');
+      }
+    }
+  }, [currentUser, currentTab]);
+
   const loadPipelineStats = async () => {
     try {
       const res = await fetch('/api/leads');
@@ -1149,6 +1158,20 @@ export default function AppDashboard() {
     router.push('/login');
   };
 
+  const handleExitImpersonation = async () => {
+    try {
+      const res = await fetch('/api/reseller/exit-impersonation', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to exit impersonation');
+      toast.success('Restored Administrator session.');
+      setTimeout(() => {
+        window.location.href = '/?tab=reseller-clients';
+      }, 400);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to exit impersonation');
+    }
+  };
+
   const activeCampaign = campaigns.find((c) => c.id === activeCampaignId);
   const connectedCount = instances.filter((i) => (i.status?.toUpperCase() === 'OPEN' || i.connectionStatus === 'open')).length;
 
@@ -1383,25 +1406,27 @@ export default function AppDashboard() {
             {(openSections.crm || sidebarCollapsed) && (
               <div className="space-y-1 pl-1">
                 {/* Lead Pipeline */}
-                <button
-                  onClick={() => setCurrentTab('pipeline')}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
-                    currentTab === 'pipeline'
-                      ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-850'
-                  }`}
-                  title="Lead Sales Pipeline (CRM Kanban)"
-                >
-                  <div className="flex items-center gap-3">
-                    <Kanban className="w-4 h-4 shrink-0 text-blue-400" />
-                    {!sidebarCollapsed && <span>Lead Pipeline</span>}
-                  </div>
-                  {!sidebarCollapsed && (
-                    <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-full bg-blue-500/20 text-blue-400 font-bold">
-                      CRM
-                    </span>
-                  )}
-                </button>
+                {(currentUser?.role !== 'CLIENT' || currentUser?.hasCrmPipeline !== false) && (
+                  <button
+                    onClick={() => setCurrentTab('pipeline')}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
+                      currentTab === 'pipeline'
+                        ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                    }`}
+                    title="Lead Sales Pipeline (CRM Kanban)"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Kanban className="w-4 h-4 shrink-0 text-blue-400" />
+                      {!sidebarCollapsed && <span>Lead Pipeline</span>}
+                    </div>
+                    {!sidebarCollapsed && (
+                      <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-full bg-blue-500/20 text-blue-400 font-bold">
+                        CRM
+                      </span>
+                    )}
+                  </button>
+                )}
 
                 {/* Contacts & Lists */}
                 <button
@@ -1443,46 +1468,48 @@ export default function AppDashboard() {
             )}
           </div>
 
-          {/* Section: SaaS Reseller */}
-          <div className="space-y-1">
-            {!sidebarCollapsed ? (
-              <button
-                type="button"
-                onClick={() => toggleSection('reseller')}
-                className="w-full flex items-center justify-between px-3 py-1.5 text-[11px] font-semibold tracking-wider text-slate-400 uppercase hover:text-slate-200 transition"
-              >
-                <span>SaaS Reseller</span>
-                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${openSections.reseller ? '' : '-rotate-90'}`} />
-              </button>
-            ) : (
-              <div className="h-px bg-slate-800 my-2 mx-1" />
-            )}
-
-            {(openSections.reseller || sidebarCollapsed) && (
-              <div className="space-y-1 pl-1">
-                {/* Reseller Clients */}
+          {/* Section: SaaS Reseller (Tier 1 & Tier 2 Platform/Reseller Admins Only) */}
+          {currentUser?.role !== 'CLIENT' && (
+            <div className="space-y-1">
+              {!sidebarCollapsed ? (
                 <button
-                  onClick={() => setCurrentTab('reseller-clients')}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
-                    currentTab === 'reseller-clients'
-                      ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-850'
-                  }`}
-                  title="White-Label Clients & SaaS Tenants"
+                  type="button"
+                  onClick={() => toggleSection('reseller')}
+                  className="w-full flex items-center justify-between px-3 py-1.5 text-[11px] font-semibold tracking-wider text-slate-400 uppercase hover:text-slate-200 transition"
                 >
-                  <div className="flex items-center gap-3">
-                    <Building2 className="w-4 h-4 shrink-0 text-blue-400" />
-                    {!sidebarCollapsed && <span>Tenants & Clients</span>}
-                  </div>
-                  {!sidebarCollapsed && (
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#0c57e4]/20 border border-[#0c57e4]/40 text-blue-400 font-bold">
-                      SaaS
-                    </span>
-                  )}
+                  <span>SaaS Reseller</span>
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${openSections.reseller ? '' : '-rotate-90'}`} />
                 </button>
-              </div>
-            )}
-          </div>
+              ) : (
+                <div className="h-px bg-slate-800 my-2 mx-1" />
+              )}
+
+              {(openSections.reseller || sidebarCollapsed) && (
+                <div className="space-y-1 pl-1">
+                  {/* Reseller Clients */}
+                  <button
+                    onClick={() => setCurrentTab('reseller-clients')}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
+                      currentTab === 'reseller-clients'
+                        ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                    }`}
+                    title="White-Label Clients & SaaS Tenants"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Building2 className="w-4 h-4 shrink-0 text-blue-400" />
+                      {!sidebarCollapsed && <span>Tenants & Clients</span>}
+                    </div>
+                    {!sidebarCollapsed && (
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#0c57e4]/20 border border-[#0c57e4]/40 text-blue-400 font-bold">
+                        SaaS
+                      </span>
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Section 4: Automation & AI */}
           <div className="space-y-1">
@@ -1502,20 +1529,22 @@ export default function AppDashboard() {
             {(openSections.automation || sidebarCollapsed) && (
               <div className="space-y-1 pl-1">
                 {/* Chatbot Studio */}
-                <button
-                  onClick={() => setCurrentTab('chatbot')}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
-                    currentTab === 'chatbot'
-                      ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-850'
-                  }`}
-                  title="Chatbot Studio - Visual Flow Builder"
-                >
-                  <div className="flex items-center gap-3">
-                    <Bot className="w-4 h-4 shrink-0 text-emerald-400" />
-                    {!sidebarCollapsed && <span>Chatbot Studio</span>}
-                  </div>
-                </button>
+                {(currentUser?.role !== 'CLIENT' || currentUser?.hasChatbot !== false) && (
+                  <button
+                    onClick={() => setCurrentTab('chatbot')}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
+                      currentTab === 'chatbot'
+                        ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                    }`}
+                    title="Chatbot Studio - Visual Flow Builder"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Bot className="w-4 h-4 shrink-0 text-emerald-400" />
+                      {!sidebarCollapsed && <span>Chatbot Studio</span>}
+                    </div>
+                  </button>
+                )}
 
                 {/* Guardrails */}
                 <button
@@ -1541,79 +1570,93 @@ export default function AppDashboard() {
             )}
           </div>
 
-          {/* Section 5: System & Settings */}
-          <div className="space-y-1">
-            {!sidebarCollapsed ? (
-              <button
-                type="button"
-                onClick={() => toggleSection('system')}
-                className="w-full flex items-center justify-between px-3 py-1.5 text-[11px] font-semibold tracking-wider text-slate-400 uppercase hover:text-slate-200 transition"
-              >
-                <span>System</span>
-                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${openSections.system ? '' : '-rotate-90'}`} />
-              </button>
-            ) : (
-              <div className="h-px bg-slate-800 my-2 mx-1" />
-            )}
-
-            {(openSections.system || sidebarCollapsed) && (
-              <div className="space-y-1 pl-1">
-                {/* Reports */}
+          {/* Section 5: System & Settings (Platform/Reseller Admins Only) */}
+          {currentUser?.role !== 'CLIENT' && (
+            <div className="space-y-1">
+              {!sidebarCollapsed ? (
                 <button
-                  onClick={() => setCurrentTab('reports')}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
-                    currentTab === 'reports'
-                      ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-850'
-                  }`}
-                  title="Reports & Analytics"
+                  type="button"
+                  onClick={() => toggleSection('system')}
+                  className="w-full flex items-center justify-between px-3 py-1.5 text-[11px] font-semibold tracking-wider text-slate-400 uppercase hover:text-slate-200 transition"
                 >
-                  <BarChart3 className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Reports & Stats</span>}
+                  <span>System</span>
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${openSections.system ? '' : '-rotate-90'}`} />
                 </button>
+              ) : (
+                <div className="h-px bg-slate-800 my-2 mx-1" />
+              )}
 
-                {/* System */}
-                <button
-                  onClick={() => setCurrentTab('system')}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
-                    currentTab === 'system'
-                      ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-850'
-                  }`}
-                  title="System Health & Metrics"
-                >
-                  <Activity className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Health & Logs</span>}
-                </button>
+              {(openSections.system || sidebarCollapsed) && (
+                <div className="space-y-1 pl-1">
+                  {/* Reports */}
+                  <button
+                    onClick={() => setCurrentTab('reports')}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
+                      currentTab === 'reports'
+                        ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                    }`}
+                    title="Reports & Analytics"
+                  >
+                    <BarChart3 className="w-4 h-4 shrink-0" />
+                    {!sidebarCollapsed && <span>Reports & Stats</span>}
+                  </button>
 
-                {/* Settings */}
-                <button
-                  onClick={() => setCurrentTab('settings')}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
-                    currentTab === 'settings'
-                      ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-850'
-                  }`}
-                  title="Gateway Settings"
-                >
-                  <SettingsIcon className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Settings</span>}
-                </button>
-              </div>
-            )}
-          </div>
+                  {/* System */}
+                  <button
+                    onClick={() => setCurrentTab('system')}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
+                      currentTab === 'system'
+                        ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                    }`}
+                    title="System Health & Metrics"
+                  >
+                    <Activity className="w-4 h-4 shrink-0" />
+                    {!sidebarCollapsed && <span>Health & Logs</span>}
+                  </button>
+
+                  {/* Settings */}
+                  <button
+                    onClick={() => setCurrentTab('settings')}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
+                      currentTab === 'settings'
+                        ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                    }`}
+                    title="Gateway Settings"
+                  >
+                    <SettingsIcon className="w-4 h-4 shrink-0" />
+                    {!sidebarCollapsed && <span>Settings</span>}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </nav>
 
         {/* Sidebar Footer */}
         <div className="p-3 border-t border-slate-800 space-y-2">
           {!sidebarCollapsed && currentUser && (
-            <div className="px-3 py-2 rounded-xl bg-slate-950/60 border border-slate-800/80 flex items-center justify-between">
-              <div className="truncate">
-                <p className="text-[11px] font-bold text-slate-200 truncate">{currentUser.email}</p>
-                <p className="text-[10px] text-emerald-400 font-mono uppercase tracking-wider">{currentUser.role || 'Admin'}</p>
+            currentUser.role === 'CLIENT' ? (
+              <div className="px-3 py-2 rounded-xl bg-slate-950/60 border border-slate-800/80 flex items-center justify-between">
+                <div className="truncate">
+                  <p className="text-[11px] font-bold text-slate-200 truncate">{currentUser.companyName || currentUser.name || currentUser.email}</p>
+                  <p className="text-[10px] text-blue-400 font-mono uppercase tracking-wider">{currentUser.planName || 'Client'} Plan</p>
+                </div>
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-500/10 border border-blue-500/30 text-blue-400 font-mono">
+                  {currentUser.maxInstances || 1} No.
+                </span>
               </div>
-              <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-            </div>
+            ) : (
+              <div className="px-3 py-2 rounded-xl bg-slate-950/60 border border-slate-800/80 flex items-center justify-between">
+                <div className="truncate">
+                  <p className="text-[11px] font-bold text-slate-200 truncate">{currentUser.email}</p>
+                  <p className="text-[10px] text-emerald-400 font-mono uppercase tracking-wider">{currentUser.role || 'Admin'}</p>
+                </div>
+                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+              </div>
+            )
           )}
 
           <button
@@ -1634,6 +1677,30 @@ export default function AppDashboard() {
       {/* ========================================================= */}
       <div className="flex-1 flex flex-col min-w-0 min-h-screen">
         
+        {/* Top Active Impersonation Alert Banner */}
+        {currentUser?.isImpersonating && (
+          <div className="bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-slate-950 px-4 sm:px-6 py-2.5 text-xs font-bold flex items-center justify-between shadow-lg sticky top-0 z-30 border-b border-amber-600/40">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <span className="w-2.5 h-2.5 rounded-full bg-slate-950 animate-ping" />
+              <span>
+                Viewing workspace as <span className="underline decoration-slate-950 font-black">{currentUser.companyName || currentUser.name}</span> ({currentUser.planName || 'Client'} Plan) — <span className="font-semibold text-slate-900">Active Impersonation Session</span>
+              </span>
+              {currentUser.maxInstances && (
+                <span className="hidden sm:inline-block px-2 py-0.5 rounded bg-black/15 text-[11px] font-mono font-bold">
+                  Quota: {currentUser.maxInstances} {currentUser.maxInstances === 1 ? 'Number' : 'Numbers'}
+                </span>
+              )}
+            </div>
+            <button
+              onClick={handleExitImpersonation}
+              className="px-3.5 py-1 bg-slate-950 text-amber-300 hover:bg-slate-900 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow shadow-slate-950/40 hover:scale-105 shrink-0"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Exit Impersonation</span>
+            </button>
+          </div>
+        )}
+
         {/* Top Header Bar */}
         <header className="h-16 bg-slate-900/90 backdrop-blur border-b border-slate-800 px-4 sm:px-6 flex items-center justify-between sticky top-0 z-20">
           {/* Breadcrumb / Current Screen Title */}
@@ -1743,17 +1810,40 @@ export default function AppDashboard() {
               <HelpCircle className="w-4 h-4 text-blue-400" />
             </button>
 
-            {/* Dynamic User Profile Avatar (Real Initials, Click for Settings) */}
+            {/* Dynamic User Profile Avatar & Client Identity */}
             {(() => {
-              const nameStr = currentUser?.name || currentUser?.email || 'Admin';
+              const isClient = currentUser?.role === 'CLIENT';
+              const nameStr = currentUser?.companyName || currentUser?.name || currentUser?.email || 'Admin';
               const initials = nameStr.split(/[\s@._]+/).filter(Boolean).slice(0, 2).map((s: string) => s[0].toUpperCase()).join('') || 'AD';
               return (
-                <div
-                  onClick={() => setCurrentTab('settings')}
-                  className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#0c57e4] to-blue-700 text-white font-bold text-xs flex items-center justify-center shadow shadow-blue-950/40 cursor-pointer select-none transition hover:scale-105"
-                  title={`${currentUser?.email || 'Logged in'} (${currentUser?.role || 'Administrator'}) • Click for settings`}
-                >
-                  {initials}
+                <div className="flex items-center gap-2">
+                  {isClient && currentUser?.companyName && (
+                    <div className="hidden xl:flex flex-col text-right leading-tight">
+                      <span className="text-[11px] font-bold text-white truncate max-w-[130px]">{currentUser.companyName}</span>
+                      <span className="text-[9px] font-mono text-blue-400 font-semibold">{currentUser.planName || 'Client'} Plan</span>
+                    </div>
+                  )}
+                  <div
+                    onClick={() => {
+                      if (!isClient) setCurrentTab('settings');
+                    }}
+                    className={`w-8 h-8 rounded-xl bg-gradient-to-tr ${
+                      isClient
+                        ? 'from-indigo-600 to-blue-600'
+                        : currentUser?.role === 'RESELLER'
+                        ? 'from-purple-600 to-blue-600'
+                        : 'from-[#0c57e4] to-blue-700'
+                    } text-white font-bold text-xs flex items-center justify-center shadow shadow-blue-950/40 select-none transition ${
+                      !isClient ? 'cursor-pointer hover:scale-105' : ''
+                    }`}
+                    title={
+                      isClient
+                        ? `${currentUser?.companyName || currentUser?.email} (${currentUser?.planName || 'Client'} Plan)`
+                        : `${currentUser?.email || 'Logged in'} (${currentUser?.role || 'Administrator'}) • Click for settings`
+                    }
+                  >
+                    {initials}
+                  </div>
                 </div>
               );
             })()}
@@ -4980,16 +5070,18 @@ export default function AppDashboard() {
                 <MessageSquare className="w-4 h-4 text-teal-400" />
                 <span>View Replies Inbox & Chat</span>
               </button>
-              <button
-                onClick={() => {
-                  setCurrentTab('reseller-clients');
-                  setCommandPaletteOpen(false);
-                }}
-                className="w-full text-left px-3 py-2 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white flex items-center gap-2"
-              >
-                <Building2 className="w-4 h-4 text-blue-400" />
-                <span>SaaS Reseller Clients & Tenants</span>
-              </button>
+              {currentUser?.role !== 'CLIENT' && (
+                <button
+                  onClick={() => {
+                    setCurrentTab('reseller-clients');
+                    setCommandPaletteOpen(false);
+                  }}
+                  className="w-full text-left px-3 py-2 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white flex items-center gap-2"
+                >
+                  <Building2 className="w-4 h-4 text-blue-400" />
+                  <span>SaaS Reseller Clients & Tenants</span>
+                </button>
+              )}
               <button
                 onClick={() => {
                   setCurrentTab('chatbot');
