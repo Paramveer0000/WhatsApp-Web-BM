@@ -188,7 +188,7 @@ export function QuickRepliesView({ onSelectReply, isPickerMode = false }: QuickR
 
         <button
           onClick={openCreateModal}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold shadow-lg shadow-amber-950/30 transition cursor-pointer"
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#0c57e4] hover:bg-[#0944b5] text-white text-xs font-semibold shadow-lg shadow-blue-950/30 transition cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>New Quick Reply</span>
@@ -426,7 +426,7 @@ export function QuickRepliesView({ onSelectReply, isPickerMode = false }: QuickR
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold shadow transition cursor-pointer"
+                  className="px-5 py-2 rounded-xl bg-[#0c57e4] hover:bg-[#0944b5] text-white text-xs font-semibold shadow transition cursor-pointer"
                 >
                   {saving ? 'Saving...' : editingReply ? 'Update Reply' : 'Create Reply'}
                 </button>

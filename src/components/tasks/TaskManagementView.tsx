@@ -236,7 +236,7 @@ export function TaskManagementView() {
       {/* Top Header & Stats Cards */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900/90 dark:bg-slate-900/90 day:bg-white border border-slate-800 day:border-slate-200 p-5 rounded-2xl shadow-xl">
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-950/40">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#0c57e4] to-blue-700 flex items-center justify-center text-white shadow-md shadow-blue-950/40">
             <CheckSquare className="w-5 h-5" />
           </div>
           <div>
@@ -251,7 +251,7 @@ export function TaskManagementView() {
 
         <button
           onClick={openCreateModal}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-lg shadow-blue-950/30 transition cursor-pointer"
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#0c57e4] hover:bg-[#0944b5] text-white text-xs font-semibold shadow-lg shadow-blue-950/30 transition cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>New Task</span>
@@ -304,7 +304,7 @@ export function TaskManagementView() {
               onClick={() => setStatusFilter(tab.id as any)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer shrink-0 ${
                 statusFilter === tab.id
-                  ? 'bg-blue-600 text-white font-semibold'
+                  ? 'bg-[#0c57e4] text-white font-semibold'
                   : 'text-slate-400 day:text-slate-600 hover:text-white day:hover:text-slate-900 hover:bg-slate-800 day:hover:bg-slate-100'
               }`}
             >
@@ -359,7 +359,7 @@ export function TaskManagementView() {
           </p>
           <button
             onClick={openCreateModal}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0c57e4] hover:bg-[#0944b5] text-white text-xs font-semibold cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Create a Task</span>
@@ -576,7 +576,7 @@ export function TaskManagementView() {
                 <button
                   type="submit"
                   disabled={savingTask}
-                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow transition cursor-pointer"
+                  className="px-5 py-2 rounded-xl bg-[#0c57e4] hover:bg-[#0944b5] text-white text-xs font-semibold shadow transition cursor-pointer"
                 >
                   {savingTask ? 'Saving...' : editingTask ? 'Update Task' : 'Create Task'}
                 </button>

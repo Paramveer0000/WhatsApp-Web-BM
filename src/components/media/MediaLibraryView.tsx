@@ -160,7 +160,7 @@ export function MediaLibraryView({ onSelectAsset, isPickerMode = false }: MediaL
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900/90 dark:bg-slate-900/90 day:bg-white border border-slate-800 day:border-slate-200 p-5 rounded-2xl shadow-xl">
         <div className="space-y-1">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-700 flex items-center justify-center text-white shadow-md shadow-emerald-950/40">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#0c57e4] to-blue-700 flex items-center justify-center text-white shadow-md shadow-blue-950/40">
               <FolderOpen className="w-5 h-5" />
             </div>
             <div>
@@ -185,7 +185,7 @@ export function MediaLibraryView({ onSelectAsset, isPickerMode = false }: MediaL
 
           <button
             onClick={() => setShowUploadModal(true)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg shadow-emerald-950/30 transition cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#0c57e4] hover:bg-[#0944b5] text-white text-xs font-semibold shadow-lg shadow-emerald-950/30 transition cursor-pointer"
           >
             <Upload className="w-4 h-4" />
             <span>Upload Media</span>
@@ -212,7 +212,7 @@ export function MediaLibraryView({ onSelectAsset, isPickerMode = false }: MediaL
                 onClick={() => setCategoryFilter(tab.id)}
                 className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer shrink-0 ${
                   active
-                    ? 'bg-emerald-600 text-white font-semibold shadow-sm'
+                    ? 'bg-[#0c57e4] text-white font-semibold shadow-sm'
                     : 'text-slate-400 day:text-slate-600 hover:text-white day:hover:text-slate-900 hover:bg-slate-800 day:hover:bg-slate-100'
                 }`}
               >
@@ -263,7 +263,7 @@ export function MediaLibraryView({ onSelectAsset, isPickerMode = false }: MediaL
           </p>
           <button
             onClick={() => setShowUploadModal(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0c57e4] hover:bg-[#0944b5] text-white text-xs font-semibold cursor-pointer"
           >
             <Upload className="w-4 h-4" />
             <span>Upload Your First File</span>
@@ -524,7 +524,7 @@ export function MediaLibraryView({ onSelectAsset, isPickerMode = false }: MediaL
                   <a
                     href={previewAsset.url}
                     download={previewAsset.fileName}
-                    className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-semibold"
+                    className="px-4 py-2 bg-[#0c57e4] text-white rounded-xl text-xs font-semibold"
                   >
                     Download File
                   </a>

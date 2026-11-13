@@ -3,7 +3,9 @@
 @tailwind utilities;
 
 :root {
-  --background: #0f172a;
+  --primary: #0c57e4;
+  --primary-hover: #0944b5;
+  --background: #0b0f19;
   --foreground: #f8fafc;
 }
 
@@ -152,22 +154,26 @@ body {
   color: #0f172a !important;
 }
 
-/* Active Navigation Item in Day Mode (Clean Pill Matching Reference Image 2) */
+/* Active Navigation Item in Day Mode (Clean Royal Blue Pill Matching Zolo Suit) */
+[data-theme="day"] aside nav button.bg-\[\#0c57e4\],
+[data-theme="day"] aside nav button.bg-\[\#0c57e4\]:hover,
 [data-theme="day"] aside nav button.bg-emerald-600,
 [data-theme="day"] aside nav button.bg-emerald-600:hover {
-  background-color: #ecfdf5 !important;
-  color: #047857 !important;
-  border: 1px solid #a7f3d0 !important;
+  background-color: #eff6ff !important;
+  color: #0c57e4 !important;
+  border: 1px solid #bfdbfe !important;
   font-weight: 600 !important;
   box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05) !important;
 }
 
+[data-theme="day"] aside nav button.bg-\[\#0c57e4\] svg,
 [data-theme="day"] aside nav button.bg-emerald-600 svg {
-  color: #059669 !important;
+  color: #0c57e4 !important;
 }
 
+[data-theme="day"] aside nav button.bg-\[\#0c57e4\] span,
 [data-theme="day"] aside nav button.bg-emerald-600 span {
-  color: #047857 !important;
+  color: #0c57e4 !important;
 }
 
 /* Sidebar User Profile Card */

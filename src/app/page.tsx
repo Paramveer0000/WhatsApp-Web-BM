@@ -1166,18 +1166,18 @@ export default function AppDashboard() {
         {/* Brand Header */}
         <div className="h-16 px-4 border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-3 overflow-hidden">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-700 flex items-center justify-center text-white shadow-lg shadow-emerald-950/50 shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#0c57e4] to-blue-700 flex items-center justify-center text-white shadow-lg shadow-blue-950/50 shrink-0">
               <Send className="w-5 h-5 -rotate-12 translate-x-0.5" />
             </div>
             {!sidebarCollapsed && (
               <div className="truncate">
                 <div className="flex items-center gap-1.5">
                   <span className="font-bold text-sm tracking-tight text-white">BulkFlow</span>
-                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
-                    v2.0
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-500/10 border border-blue-500/30 text-blue-400">
+                    Pro
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-400 truncate">WhatsApp Gateway</p>
+                <p className="text-[11px] text-slate-400 truncate">WhatsApp Business Suite</p>
               </div>
             )}
           </div>
@@ -1197,7 +1197,7 @@ export default function AppDashboard() {
             onClick={() => setCurrentTab('overview')}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition cursor-pointer ${
               currentTab === 'overview'
-                ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
                 : 'text-slate-400 hover:text-white hover:bg-slate-850'
             }`}
             title="Dashboard Overview"
@@ -1228,7 +1228,7 @@ export default function AppDashboard() {
                   onClick={() => setCurrentTab('replies')}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
                     currentTab === 'replies'
-                      ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                      ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
                       : 'text-slate-400 hover:text-white hover:bg-slate-850'
                   }`}
                   title="WhatsApp Live Inbox"
@@ -1249,7 +1249,7 @@ export default function AppDashboard() {
                   onClick={() => setCurrentTab('instances')}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
                     currentTab === 'instances'
-                      ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                      ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
                       : 'text-slate-400 hover:text-white hover:bg-slate-850'
                   }`}
                   title="WhatsApp Accounts & Instances"
@@ -1270,7 +1270,7 @@ export default function AppDashboard() {
                   onClick={() => setCurrentTab('media')}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
                     currentTab === 'media'
-                      ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                      ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
                       : 'text-slate-400 hover:text-white hover:bg-slate-850'
                   }`}
                   title="Centralized Media Library (DAM)"
@@ -1291,7 +1291,7 @@ export default function AppDashboard() {
                   onClick={() => setCurrentTab('quick-replies')}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
                     currentTab === 'quick-replies'
-                      ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                      ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
                       : 'text-slate-400 hover:text-white hover:bg-slate-850'
                   }`}
                   title="Quick Replies & Canned Messages"
@@ -1327,7 +1327,7 @@ export default function AppDashboard() {
                   onClick={() => setCurrentTab('campaigns')}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
                     currentTab === 'campaigns' || currentTab === 'live' || currentTab === 'wizard'
-                      ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                      ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
                       : 'text-slate-400 hover:text-white hover:bg-slate-850'
                   }`}
                   title="Broadcast Campaigns"
@@ -1346,7 +1346,7 @@ export default function AppDashboard() {
                   onClick={() => setCurrentTab('templates')}
                   className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
                     currentTab === 'templates'
-                      ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                      ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
                       : 'text-slate-400 hover:text-white hover:bg-slate-850'
                   }`}
                   title="Message Templates"
@@ -1380,7 +1380,7 @@ export default function AppDashboard() {
                   onClick={() => setCurrentTab('pipeline')}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
                     currentTab === 'pipeline'
-                      ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                      ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
                       : 'text-slate-400 hover:text-white hover:bg-slate-850'
                   }`}
                   title="Lead Sales Pipeline (CRM Kanban)"
@@ -1401,7 +1401,7 @@ export default function AppDashboard() {
                   onClick={() => setCurrentTab('contacts')}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
                     currentTab === 'contacts'
-                      ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                      ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
                       : 'text-slate-400 hover:text-white hover:bg-slate-850'
                   }`}
                   title="Contacts & Lists"
@@ -1422,7 +1422,7 @@ export default function AppDashboard() {
                   onClick={() => setCurrentTab('tasks')}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
                     currentTab === 'tasks'
-                      ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                      ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
                       : 'text-slate-400 hover:text-white hover:bg-slate-850'
                   }`}
                   title="Task Management & Follow-ups"
@@ -1458,7 +1458,7 @@ export default function AppDashboard() {
                   onClick={() => setCurrentTab('chatbot')}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
                     currentTab === 'chatbot'
-                      ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                      ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
                       : 'text-slate-400 hover:text-white hover:bg-slate-850'
                   }`}
                   title="Chatbot Studio - Visual Flow Builder"
@@ -1474,7 +1474,7 @@ export default function AppDashboard() {
                   onClick={() => setCurrentTab('guardrails')}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
                     currentTab === 'guardrails'
-                      ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                      ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
                       : 'text-slate-400 hover:text-white hover:bg-slate-850'
                   }`}
                   title="Anti-Ban Guardrails Settings"
@@ -1515,7 +1515,7 @@ export default function AppDashboard() {
                   onClick={() => setCurrentTab('reports')}
                   className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
                     currentTab === 'reports'
-                      ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                      ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
                       : 'text-slate-400 hover:text-white hover:bg-slate-850'
                   }`}
                   title="Reports & Analytics"
@@ -1529,7 +1529,7 @@ export default function AppDashboard() {
                   onClick={() => setCurrentTab('system')}
                   className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
                     currentTab === 'system'
-                      ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                      ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
                       : 'text-slate-400 hover:text-white hover:bg-slate-850'
                   }`}
                   title="System Health & Metrics"
@@ -1543,7 +1543,7 @@ export default function AppDashboard() {
                   onClick={() => setCurrentTab('settings')}
                   className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
                     currentTab === 'settings'
-                      ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                      ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
                       : 'text-slate-400 hover:text-white hover:bg-slate-850'
                   }`}
                   title="Gateway Settings"
@@ -1614,14 +1614,14 @@ export default function AppDashboard() {
           </div>
 
           {/* Top Bar Controls (Matching Zolo Suit Portal) */}
-          <div className="flex-1 max-w-sm mx-3 hidden md:block">
+          <div className="flex-1 max-w-sm mx-4 hidden md:block">
             <button
               onClick={() => setCommandPaletteOpen(true)}
-              className="w-full bg-slate-950/80 hover:bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 flex items-center justify-between text-xs text-slate-400 transition"
+              className="w-full bg-slate-950/60 hover:bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 flex items-center justify-between text-xs text-slate-400 transition"
             >
               <div className="flex items-center gap-2">
                 <Search className="w-3.5 h-3.5 text-slate-500" />
-                <span>Search</span>
+                <span className="text-xs">Search contacts, leads, campaigns...</span>
               </div>
               <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-[10px] font-mono text-slate-300">
                 Ctrl J
@@ -1629,43 +1629,40 @@ export default function AppDashboard() {
             </button>
           </div>
 
-          {/* Global Controls: Balance, Privacy Mode, Notifications, Avatar */}
+          {/* Clean Global Controls (Zolo Suit Style, No Unused Buttons) */}
           <div className="flex items-center gap-2.5">
-            {/* Wallet / Credit Balance */}
-            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-mono font-bold">
-              <span>₹65.06</span>
-              <RefreshCw className="w-3 h-3 hover:rotate-180 transition cursor-pointer" />
+            {/* Live WhatsApp Gateway Status Indicator */}
+            <div 
+              onClick={() => setCurrentTab('instances')}
+              className={`hidden sm:flex items-center gap-2 px-2.5 py-1.5 rounded-xl border text-xs font-medium cursor-pointer transition ${
+                connectedCount > 0
+                  ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400 hover:bg-emerald-500/15'
+                  : 'bg-rose-500/10 border-rose-500/25 text-rose-400 hover:bg-rose-500/15'
+              }`}
+              title={`${connectedCount} of ${instances.length} WhatsApp accounts connected`}
+            >
+              <span className={`w-2 h-2 rounded-full ${connectedCount > 0 ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
+              <span className="text-[11px] font-semibold">{connectedCount > 0 ? `${connectedCount} Online` : 'Offline'}</span>
             </div>
 
             {/* Day / Night Mode Toggle */}
             <button
               type="button"
               onClick={toggleTheme}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-950/80 hover:bg-slate-850 border border-slate-800 text-slate-300 hover:text-white text-xs font-medium transition cursor-pointer"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-950/60 hover:bg-slate-850 border border-slate-800 text-slate-300 hover:text-white text-xs font-medium transition cursor-pointer"
               title={theme === 'night' ? 'Switch to Day Mode (Light)' : 'Switch to Night Mode (Dark)'}
             >
               {theme === 'night' ? (
                 <>
                   <Sun className="w-3.5 h-3.5 text-amber-400" />
-                  <span className="hidden md:inline">Day</span>
+                  <span className="text-[11px] hidden sm:inline">Day</span>
                 </>
               ) : (
                 <>
-                  <Moon className="w-3.5 h-3.5 text-indigo-400" />
-                  <span className="hidden md:inline">Night</span>
+                  <Moon className="w-3.5 h-3.5 text-blue-400" />
+                  <span className="text-[11px] hidden sm:inline">Night</span>
                 </>
               )}
-            </button>
-
-            {/* Guide & Help Button */}
-            <button
-              type="button"
-              onClick={() => setShowHelpModal(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-300 hover:text-white text-xs font-semibold transition cursor-pointer shadow-sm"
-              title="Open Beginner Guide & Feature Dictionary"
-            >
-              <HelpCircle className="w-3.5 h-3.5 text-blue-400" />
-              <span className="hidden sm:inline">Guide & Help</span>
             </button>
 
             {/* Privacy Mode Toggle (Shift+P) */}
@@ -1676,38 +1673,46 @@ export default function AppDashboard() {
                 setPrivacyMode(nextState);
                 toast.info(nextState ? 'Privacy Mode ON: phone numbers masked' : 'Privacy Mode OFF');
               }}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-xl border text-xs font-medium transition cursor-pointer ${
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-medium transition cursor-pointer ${
                 privacyMode
                   ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                  : 'bg-slate-950/80 border-slate-800 text-slate-400 hover:text-white'
+                  : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-white'
               }`}
               title="Privacy Mode: Masks phone numbers & sensitive CRM data (Shift+P)"
             >
               {privacyMode ? <EyeOff className="w-3.5 h-3.5 text-amber-400" /> : <Eye className="w-3.5 h-3.5" />}
-              <span className="hidden sm:inline">Privacy Mode</span>
-              <kbd className="text-[9px] font-mono px-1 rounded bg-slate-800/80 text-slate-400 hidden lg:inline">Shift+P</kbd>
+              <span className="hidden lg:inline text-[11px]">Privacy</span>
             </button>
 
-            {/* Notification Bell */}
+            {/* Documentation & Help Guide */}
             <button
               type="button"
-              onClick={() => toast.info('System is healthy and guardrails are active.')}
-              className="p-1.5 rounded-xl bg-slate-950/80 hover:bg-slate-850 border border-slate-800 text-slate-400 hover:text-white relative transition"
-              title="Notifications"
+              onClick={() => setShowHelpModal(true)}
+              className="p-1.5 rounded-xl bg-slate-950/60 hover:bg-slate-850 border border-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
+              title="Open Beginner Guide & Documentation"
             >
-              <Bell className="w-4 h-4" />
-              <span className="w-2 h-2 rounded-full bg-blue-500 absolute top-1 right-1" />
+              <HelpCircle className="w-4 h-4 text-blue-400" />
             </button>
 
-            {/* User Initials Avatar Chip */}
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-xs flex items-center justify-center shadow">
-              FGT
-            </div>
+            {/* Dynamic User Profile Avatar (Real Initials, Click for Settings) */}
+            {(() => {
+              const nameStr = currentUser?.name || currentUser?.email || 'Admin';
+              const initials = nameStr.split(/[\s@._]+/).filter(Boolean).slice(0, 2).map((s: string) => s[0].toUpperCase()).join('') || 'AD';
+              return (
+                <div
+                  onClick={() => setCurrentTab('settings')}
+                  className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#0c57e4] to-blue-700 text-white font-bold text-xs flex items-center justify-center shadow shadow-blue-950/40 cursor-pointer select-none transition hover:scale-105"
+                  title={`${currentUser?.email || 'Logged in'} (${currentUser?.role || 'Administrator'}) • Click for settings`}
+                >
+                  {initials}
+                </div>
+              );
+            })()}
 
-            {/* Quick Action Button */}
+            {/* Quick Action: New Campaign */}
             <button
               onClick={() => setCurrentTab('wizard')}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow transition cursor-pointer"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#0c57e4] hover:bg-[#0944b5] text-white rounded-xl text-xs font-bold shadow-md shadow-blue-900/30 transition cursor-pointer"
             >
               <PlusCircle className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">New Campaign</span>
@@ -1731,25 +1736,29 @@ export default function AppDashboard() {
                   </div>
                   <div>
                     <h2 className="text-base sm:text-lg font-black tracking-tight text-white flex items-center gap-2">
-                      <span>Welcome back, {currentUser?.name || 'FALCON GARDEN TOOLS'}!</span>
+                      <span>Welcome back, {currentUser?.name || currentUser?.email?.split('@')[0] || 'Administrator'}!</span>
                     </h2>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      Here's what's happening with your business today.
+                      Here is what is happening with your WhatsApp business campaigns and leads today.
                     </p>
                   </div>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 text-xs">
                   {/* Instance Switcher */}
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-300 font-medium">
+                  <div 
+                    onClick={() => setCurrentTab('instances')}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-300 font-medium cursor-pointer hover:border-blue-500/50 transition"
+                    title="Active WhatsApp Instances"
+                  >
                     <ArrowLeftRight className="w-3.5 h-3.5 text-blue-400" />
-                    <span>{instances[0]?.name || 'Falcon'}</span>
+                    <span>{instances.find((i) => i.status === 'OPEN')?.name || instances[0]?.name || 'All Accounts'}</span>
                   </div>
 
                   {/* Date Filter */}
                   <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-300 font-medium">
                     <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                    <span>This Month (Nov 1 - Nov 4)</span>
+                    <span>This Month ({new Date().toLocaleString(undefined, { month: 'short' })} 1 – {new Date().getDate()})</span>
                   </div>
 
                   {/* Real-time Analytics Pill */}
@@ -5054,7 +5063,7 @@ export default function AppDashboard() {
         <button
           onClick={() => setCurrentTab('overview')}
           className={`flex flex-col items-center gap-1 text-[10px] ${
-            currentTab === 'overview' ? 'text-emerald-400' : 'text-slate-400'
+            currentTab === 'overview' ? 'text-[#0c57e4] font-bold' : 'text-slate-400'
           }`}
         >
           <LayoutDashboard className="w-4 h-4" />
@@ -5064,7 +5073,7 @@ export default function AppDashboard() {
           onClick={() => setCurrentTab('campaigns')}
           className={`flex flex-col items-center gap-1 text-[10px] ${
             currentTab === 'campaigns' || currentTab === 'live' || currentTab === 'wizard'
-              ? 'text-emerald-400'
+              ? 'text-[#0c57e4] font-bold'
               : 'text-slate-400'
           }`}
         >
@@ -5074,34 +5083,34 @@ export default function AppDashboard() {
         <button
           onClick={() => setCurrentTab('replies')}
           className={`flex flex-col items-center gap-1 text-[10px] ${
-            currentTab === 'replies' ? 'text-emerald-400' : 'text-slate-400'
+            currentTab === 'replies' ? 'text-[#0c57e4] font-bold' : 'text-slate-400'
           }`}
         >
           <MessageSquare className="w-4 h-4" />
-          <span>Replies</span>
+          <span>Inbox</span>
+        </button>
+        <button
+          onClick={() => setCurrentTab('pipeline')}
+          className={`flex flex-col items-center gap-1 text-[10px] ${
+            currentTab === 'pipeline' ? 'text-[#0c57e4] font-bold' : 'text-slate-400'
+          }`}
+        >
+          <Kanban className="w-4 h-4" />
+          <span>Pipeline</span>
         </button>
         <button
           onClick={() => setCurrentTab('instances')}
           className={`flex flex-col items-center gap-1 text-[10px] ${
-            currentTab === 'instances' ? 'text-emerald-400' : 'text-slate-400'
+            currentTab === 'instances' ? 'text-[#0c57e4] font-bold' : 'text-slate-400'
           }`}
         >
           <Smartphone className="w-4 h-4" />
-          <span>Instances</span>
-        </button>
-        <button
-          onClick={() => setCurrentTab('guardrails')}
-          className={`flex flex-col items-center gap-1 text-[10px] ${
-            currentTab === 'guardrails' ? 'text-emerald-400 font-bold' : 'text-slate-400'
-          }`}
-        >
-          <Shield className="w-4 h-4" />
-          <span>Guardrails</span>
+          <span>Accounts</span>
         </button>
         <button
           onClick={() => setCurrentTab('settings')}
           className={`flex flex-col items-center gap-1 text-[10px] ${
-            currentTab === 'settings' ? 'text-emerald-400' : 'text-slate-400'
+            currentTab === 'settings' ? 'text-[#0c57e4] font-bold' : 'text-slate-400'
           }`}
         >
           <SettingsIcon className="w-4 h-4" />
