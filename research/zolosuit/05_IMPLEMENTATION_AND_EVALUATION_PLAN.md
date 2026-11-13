@@ -38,3 +38,4 @@
 
 ### Phase 4: S3 / Cloud Object Storage Adapter (Optional)
 - **Objective:** Allow operators to plug in AWS S3, Cloudflare R2, or Hetzner Object Storage credentials in Settings so media files are served through global CDNs.
+

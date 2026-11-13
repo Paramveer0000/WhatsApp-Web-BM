@@ -77,3 +77,4 @@ To prevent leads from falling through the cracks, Zolo Suit incorporates an oper
 - **Follow-up Reminders:** Schedule reminders linked directly to a CRM lead (e.g., "Call back Dalveer on Monday at 11:00 AM regarding invoice").
 - **Team Assignment:** Tasks can be assigned across team members with deadline tracking.
 - **WhatsApp Notification Integration:** Sends automated WhatsApp alerts to the assigned agent when a high-priority task is due.
+

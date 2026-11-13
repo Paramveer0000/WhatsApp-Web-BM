@@ -84,3 +84,4 @@ The inspected server response reveals that Zolo Suit operates as a multi-tenant 
 1. **Dynamic Re-branding:** The entire portal re-skins dynamically (logo, brand colors, favicons, support phone numbers) based on the logged-in tenant without needing separate codebase deployments.
 2. **Dual-Tier Billing:** Clear separation between Reseller payment gateways (for tenant subscription billing) and Business payment gateways (for end-client wallet top-ups).
 3. **Stateless CDN Assets:** All user-uploaded media (broadcast graphics, PDFs, audio notes) stream directly from dedicated object storage rather than local web server disks.
+

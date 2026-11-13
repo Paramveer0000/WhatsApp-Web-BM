@@ -81,6 +81,9 @@ import {
   HelpCircle,
   Share2,
   Kanban,
+  FolderOpen,
+  CheckSquare,
+  ChevronDown,
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -103,6 +106,9 @@ import { AllocationStrategy } from '@/lib/distribution';
 import { GuardrailsConsoleTab } from '@/components/GuardrailsConsoleTab';
 import { ChatbotStudioTab } from '@/components/chatbot/ChatbotStudioTab';
 import { LeadPipelineView } from '@/components/crm/LeadPipelineView';
+import { MediaLibraryView } from '@/components/media/MediaLibraryView';
+import { TaskManagementView } from '@/components/tasks/TaskManagementView';
+import { QuickRepliesView } from '@/components/quick-replies/QuickRepliesView';
 import { SystemLogsConsole } from '@/components/SystemLogsConsole';
 import { ManualAddContactModal } from '@/components/ManualAddContactModal';
 import { EditContactModal } from '@/components/EditContactModal';
@@ -112,7 +118,24 @@ import HelpGuideModal from '@/components/HelpGuideModal';
 import { toast } from '@/lib/toast';
 import { api } from '@/lib/api';
 
-type TabType = 'overview' | 'campaigns' | 'live' | 'wizard' | 'contacts' | 'pipeline' | 'templates' | 'replies' | 'chatbot' | 'instances' | 'guardrails' | 'reports' | 'system' | 'settings';
+type TabType =
+  | 'overview'
+  | 'campaigns'
+  | 'live'
+  | 'wizard'
+  | 'contacts'
+  | 'pipeline'
+  | 'tasks'
+  | 'templates'
+  | 'replies'
+  | 'media'
+  | 'quick-replies'
+  | 'chatbot'
+  | 'instances'
+  | 'guardrails'
+  | 'reports'
+  | 'system'
+  | 'settings';
 
 export default function AppDashboard() {
   const router = useRouter();
@@ -123,6 +146,34 @@ export default function AppDashboard() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [commandSearch, setCommandSearch] = useState('');
   const [currentUser, setCurrentUser] = useState<any>(null);
+
+  // Zolo Suit Accordion Navigation Sections
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    communication: true,
+    campaigns: true,
+    crm: true,
+    automation: true,
+    system: false,
+  });
+
+  const toggleSection = (section: string) => {
+    setOpenSections((prev) => ({ ...prev, [section]: !prev[section] }));
+  };
+
+  // Auto-expand relevant sidebar section when currentTab changes
+  useEffect(() => {
+    if (['replies', 'instances', 'media', 'quick-replies'].includes(currentTab)) {
+      setOpenSections((prev) => ({ ...prev, communication: true }));
+    } else if (['campaigns', 'live', 'wizard', 'templates'].includes(currentTab)) {
+      setOpenSections((prev) => ({ ...prev, campaigns: true }));
+    } else if (['pipeline', 'contacts', 'tasks'].includes(currentTab)) {
+      setOpenSections((prev) => ({ ...prev, crm: true }));
+    } else if (['chatbot', 'guardrails'].includes(currentTab)) {
+      setOpenSections((prev) => ({ ...prev, automation: true }));
+    } else if (['reports', 'system', 'settings'].includes(currentTab)) {
+      setOpenSections((prev) => ({ ...prev, system: true }));
+    }
+  }, [currentTab]);
 
   // Global State
   const [instances, setInstances] = useState<any[]>([]);
@@ -243,6 +294,8 @@ export default function AppDashboard() {
   const [uploadingChat, setUploadingChat] = useState(false);
   const [replySearchQuery, setReplySearchQuery] = useState('');
   const [inboxFilterTab, setInboxFilterTab] = useState<'all' | 'active' | 'inactive'>('all');
+  const [showQuickReplyPicker, setShowQuickReplyPicker] = useState(false);
+  const [showMediaPickerModal, setShowMediaPickerModal] = useState(false);
 
   // Templates State
   const [savedTemplates, setSavedTemplates] = useState<any[]>([]);
@@ -1137,9 +1190,9 @@ export default function AppDashboard() {
           </button>
         </div>
 
-        {/* Navigation Items */}
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {/* Dashboard */}
+        {/* Navigation Items (Zolo Suit Collapsible Hierarchy) */}
+        <nav className="flex-1 px-3 py-3 space-y-2 overflow-y-auto custom-scrollbar">
+          {/* Main: Dashboard Overview */}
           <button
             onClick={() => setCurrentTab('overview')}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition cursor-pointer ${
@@ -1153,210 +1206,354 @@ export default function AppDashboard() {
             {!sidebarCollapsed && <span>Dashboard</span>}
           </button>
 
-          {/* Campaigns */}
-          <button
-            onClick={() => setCurrentTab('campaigns')}
-            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition cursor-pointer ${
-              currentTab === 'campaigns' || currentTab === 'live' || currentTab === 'wizard'
-                ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
-                : 'text-slate-400 hover:text-white hover:bg-slate-850'
-            }`}
-            title="Campaigns"
-          >
-            <div className="flex items-center gap-3">
-              <Send className="w-4 h-4 shrink-0" />
-              {!sidebarCollapsed && <span>Campaigns</span>}
-            </div>
-            {!sidebarCollapsed && activeCampaign?.status === 'RUNNING' && (
-              <span className="w-2 h-2 rounded-full bg-emerald-300 animate-ping"></span>
+          {/* Section 1: Communication */}
+          <div className="space-y-1">
+            {!sidebarCollapsed ? (
+              <button
+                type="button"
+                onClick={() => toggleSection('communication')}
+                className="w-full flex items-center justify-between px-3 py-1.5 text-[11px] font-semibold tracking-wider text-slate-400 uppercase hover:text-slate-200 transition"
+              >
+                <span>Communication</span>
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${openSections.communication ? '' : '-rotate-90'}`} />
+              </button>
+            ) : (
+              <div className="h-px bg-slate-800 my-2 mx-1" />
             )}
-          </button>
 
-          {/* Lead Pipeline */}
-          <button
-            onClick={() => setCurrentTab('pipeline')}
-            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition cursor-pointer ${
-              currentTab === 'pipeline'
-                ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
-                : 'text-slate-400 hover:text-white hover:bg-slate-850'
-            }`}
-            title="Lead Sales Pipeline (CRM Kanban)"
-          >
-            <div className="flex items-center gap-3">
-              <Kanban className="w-4 h-4 shrink-0" />
-              {!sidebarCollapsed && <span>Lead Pipeline</span>}
-            </div>
-            {!sidebarCollapsed && (
-              <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-full bg-blue-500/20 text-blue-400 font-bold">
-                CRM
-              </span>
+            {(openSections.communication || sidebarCollapsed) && (
+              <div className="space-y-1 pl-1">
+                {/* Replies / Inbox */}
+                <button
+                  onClick={() => setCurrentTab('replies')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
+                    currentTab === 'replies'
+                      ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                  }`}
+                  title="WhatsApp Live Inbox"
+                >
+                  <div className="flex items-center gap-3">
+                    <MessageSquare className="w-4 h-4 shrink-0" />
+                    {!sidebarCollapsed && <span>Inbox & Replies</span>}
+                  </div>
+                  {!sidebarCollapsed && conversations.filter((c) => c.status === 'UNREAD').length > 0 && (
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-teal-500 text-slate-950 font-bold">
+                      {conversations.filter((c) => c.status === 'UNREAD').length}
+                    </span>
+                  )}
+                </button>
+
+                {/* WhatsApp Instances */}
+                <button
+                  onClick={() => setCurrentTab('instances')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
+                    currentTab === 'instances'
+                      ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                  }`}
+                  title="WhatsApp Accounts & Instances"
+                >
+                  <div className="flex items-center gap-3">
+                    <Smartphone className="w-4 h-4 shrink-0" />
+                    {!sidebarCollapsed && <span>WhatsApp Accounts</span>}
+                  </div>
+                  {!sidebarCollapsed && (
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-slate-800 text-emerald-400">
+                      {connectedCount}/{instances.length}
+                    </span>
+                  )}
+                </button>
+
+                {/* Media Library DAM */}
+                <button
+                  onClick={() => setCurrentTab('media')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
+                    currentTab === 'media'
+                      ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                  }`}
+                  title="Centralized Media Library (DAM)"
+                >
+                  <div className="flex items-center gap-3">
+                    <FolderOpen className="w-4 h-4 shrink-0" />
+                    {!sidebarCollapsed && <span>Media Library</span>}
+                  </div>
+                  {!sidebarCollapsed && (
+                    <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-400 font-bold">
+                      DAM
+                    </span>
+                  )}
+                </button>
+
+                {/* Quick Replies */}
+                <button
+                  onClick={() => setCurrentTab('quick-replies')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
+                    currentTab === 'quick-replies'
+                      ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                  }`}
+                  title="Quick Replies & Canned Messages"
+                >
+                  <div className="flex items-center gap-3">
+                    <Zap className="w-4 h-4 shrink-0 text-amber-400" />
+                    {!sidebarCollapsed && <span>Quick Replies</span>}
+                  </div>
+                </button>
+              </div>
             )}
-          </button>
+          </div>
 
-          {/* Contacts */}
-          <button
-            onClick={() => setCurrentTab('contacts')}
-            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition cursor-pointer ${
-              currentTab === 'contacts'
-                ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
-                : 'text-slate-400 hover:text-white hover:bg-slate-850'
-            }`}
-            title="Contacts & Lists"
-          >
-            <div className="flex items-center gap-3">
-              <Users className="w-4 h-4 shrink-0" />
-              {!sidebarCollapsed && <span>Contacts</span>}
-            </div>
-            {!sidebarCollapsed && contacts.length > 0 && (
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-300">
-                {contacts.length}
-              </span>
+          {/* Section 2: Campaigns */}
+          <div className="space-y-1">
+            {!sidebarCollapsed ? (
+              <button
+                type="button"
+                onClick={() => toggleSection('campaigns')}
+                className="w-full flex items-center justify-between px-3 py-1.5 text-[11px] font-semibold tracking-wider text-slate-400 uppercase hover:text-slate-200 transition"
+              >
+                <span>Campaigns</span>
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${openSections.campaigns ? '' : '-rotate-90'}`} />
+              </button>
+            ) : (
+              <div className="h-px bg-slate-800 my-2 mx-1" />
             )}
-          </button>
 
-          {/* Templates */}
-          <button
-            onClick={() => setCurrentTab('templates')}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition cursor-pointer ${
-              currentTab === 'templates'
-                ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
-                : 'text-slate-400 hover:text-white hover:bg-slate-850'
-            }`}
-            title="Message Templates"
-          >
-            <FileText className="w-4 h-4 shrink-0" />
-            {!sidebarCollapsed && <span>Templates</span>}
-          </button>
+            {(openSections.campaigns || sidebarCollapsed) && (
+              <div className="space-y-1 pl-1">
+                {/* Broadcasts */}
+                <button
+                  onClick={() => setCurrentTab('campaigns')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
+                    currentTab === 'campaigns' || currentTab === 'live' || currentTab === 'wizard'
+                      ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                  }`}
+                  title="Broadcast Campaigns"
+                >
+                  <div className="flex items-center gap-3">
+                    <Send className="w-4 h-4 shrink-0" />
+                    {!sidebarCollapsed && <span>Broadcasts</span>}
+                  </div>
+                  {!sidebarCollapsed && activeCampaign?.status === 'RUNNING' && (
+                    <span className="w-2 h-2 rounded-full bg-emerald-300 animate-ping"></span>
+                  )}
+                </button>
 
-          {/* Replies */}
-          <button
-            onClick={() => setCurrentTab('replies')}
-            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition cursor-pointer ${
-              currentTab === 'replies'
-                ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
-                : 'text-slate-400 hover:text-white hover:bg-slate-850'
-            }`}
-            title="Replies & Chat"
-          >
-            <div className="flex items-center gap-3">
-              <MessageSquare className="w-4 h-4 shrink-0" />
-              {!sidebarCollapsed && <span>Replies</span>}
-            </div>
-            {!sidebarCollapsed && conversations.filter((c) => c.status === 'UNREAD').length > 0 && (
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-teal-500 text-slate-950 font-bold">
-                {conversations.filter((c) => c.status === 'UNREAD').length}
-              </span>
+                {/* Templates */}
+                <button
+                  onClick={() => setCurrentTab('templates')}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
+                    currentTab === 'templates'
+                      ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                  }`}
+                  title="Message Templates"
+                >
+                  <FileText className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Templates</span>}
+                </button>
+              </div>
             )}
-          </button>
+          </div>
 
-          {/* Chatbot Studio (Between Replies and Instances) */}
-          <button
-            onClick={() => setCurrentTab('chatbot')}
-            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition cursor-pointer ${
-              currentTab === 'chatbot'
-                ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
-                : 'text-slate-400 hover:text-white hover:bg-slate-850'
-            }`}
-            title="Chatbot Studio - Visual Flow Builder"
-          >
-            <div className="flex items-center gap-3">
-              <Bot className="w-4 h-4 shrink-0" />
-              {!sidebarCollapsed && <span>Chatbot Studio</span>}
-            </div>
-            {!sidebarCollapsed && (
-              <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-400 font-bold">
-                NEW
-              </span>
+          {/* Section 3: CRM & Leads */}
+          <div className="space-y-1">
+            {!sidebarCollapsed ? (
+              <button
+                type="button"
+                onClick={() => toggleSection('crm')}
+                className="w-full flex items-center justify-between px-3 py-1.5 text-[11px] font-semibold tracking-wider text-slate-400 uppercase hover:text-slate-200 transition"
+              >
+                <span>CRM & Leads</span>
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${openSections.crm ? '' : '-rotate-90'}`} />
+              </button>
+            ) : (
+              <div className="h-px bg-slate-800 my-2 mx-1" />
             )}
-          </button>
 
-          {/* Instances */}
-          <button
-            onClick={() => setCurrentTab('instances')}
-            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition cursor-pointer ${
-              currentTab === 'instances'
-                ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
-                : 'text-slate-400 hover:text-white hover:bg-slate-850'
-            }`}
-            title="WhatsApp Instances"
-          >
-            <div className="flex items-center gap-3">
-              <Smartphone className="w-4 h-4 shrink-0" />
-              {!sidebarCollapsed && <span>Instances</span>}
-            </div>
-            {!sidebarCollapsed && (
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-slate-800 text-emerald-400">
-                {connectedCount}/{instances.length}
-              </span>
+            {(openSections.crm || sidebarCollapsed) && (
+              <div className="space-y-1 pl-1">
+                {/* Lead Pipeline */}
+                <button
+                  onClick={() => setCurrentTab('pipeline')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
+                    currentTab === 'pipeline'
+                      ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                  }`}
+                  title="Lead Sales Pipeline (CRM Kanban)"
+                >
+                  <div className="flex items-center gap-3">
+                    <Kanban className="w-4 h-4 shrink-0 text-blue-400" />
+                    {!sidebarCollapsed && <span>Lead Pipeline</span>}
+                  </div>
+                  {!sidebarCollapsed && (
+                    <span className="text-[9px] font-mono px-1.5 py-0.2 rounded-full bg-blue-500/20 text-blue-400 font-bold">
+                      CRM
+                    </span>
+                  )}
+                </button>
+
+                {/* Contacts & Lists */}
+                <button
+                  onClick={() => setCurrentTab('contacts')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
+                    currentTab === 'contacts'
+                      ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                  }`}
+                  title="Contacts & Lists"
+                >
+                  <div className="flex items-center gap-3">
+                    <Users className="w-4 h-4 shrink-0" />
+                    {!sidebarCollapsed && <span>Contacts & Lists</span>}
+                  </div>
+                  {!sidebarCollapsed && contacts.length > 0 && (
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-300">
+                      {contacts.length}
+                    </span>
+                  )}
+                </button>
+
+                {/* Tasks & Follow-ups */}
+                <button
+                  onClick={() => setCurrentTab('tasks')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
+                    currentTab === 'tasks'
+                      ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                  }`}
+                  title="Task Management & Follow-ups"
+                >
+                  <div className="flex items-center gap-3">
+                    <CheckSquare className="w-4 h-4 shrink-0 text-indigo-400" />
+                    {!sidebarCollapsed && <span>Tasks & Reminders</span>}
+                  </div>
+                </button>
+              </div>
             )}
-          </button>
+          </div>
 
-          {/* Guardrails (Between Instances and Reports) */}
-          <button
-            onClick={() => setCurrentTab('guardrails')}
-            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition cursor-pointer ${
-              currentTab === 'guardrails'
-                ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
-                : 'text-slate-400 hover:text-white hover:bg-slate-850'
-            }`}
-            title="Anti-Ban Guardrails Settings"
-          >
-            <div className="flex items-center gap-3">
-              <Shield className="w-4 h-4 shrink-0" />
-              {!sidebarCollapsed && <span>Guardrails</span>}
-            </div>
-            {!sidebarCollapsed && (
-              <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full ${
-                currentTab === 'guardrails'
-                  ? 'bg-emerald-500/20 text-white font-bold'
-                  : 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400'
-              }`}>
-                Safe
-              </span>
+          {/* Section 4: Automation & AI */}
+          <div className="space-y-1">
+            {!sidebarCollapsed ? (
+              <button
+                type="button"
+                onClick={() => toggleSection('automation')}
+                className="w-full flex items-center justify-between px-3 py-1.5 text-[11px] font-semibold tracking-wider text-slate-400 uppercase hover:text-slate-200 transition"
+              >
+                <span>Automation & AI</span>
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${openSections.automation ? '' : '-rotate-90'}`} />
+              </button>
+            ) : (
+              <div className="h-px bg-slate-800 my-2 mx-1" />
             )}
-          </button>
 
-          {/* Reports */}
-          <button
-            onClick={() => setCurrentTab('reports')}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition cursor-pointer ${
-              currentTab === 'reports'
-                ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
-                : 'text-slate-400 hover:text-white hover:bg-slate-850'
-            }`}
-            title="Reports & Analytics"
-          >
-            <BarChart3 className="w-4 h-4 shrink-0" />
-            {!sidebarCollapsed && <span>Reports</span>}
-          </button>
+            {(openSections.automation || sidebarCollapsed) && (
+              <div className="space-y-1 pl-1">
+                {/* Chatbot Studio */}
+                <button
+                  onClick={() => setCurrentTab('chatbot')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
+                    currentTab === 'chatbot'
+                      ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                  }`}
+                  title="Chatbot Studio - Visual Flow Builder"
+                >
+                  <div className="flex items-center gap-3">
+                    <Bot className="w-4 h-4 shrink-0 text-emerald-400" />
+                    {!sidebarCollapsed && <span>Chatbot Studio</span>}
+                  </div>
+                </button>
 
-          {/* System */}
-          <button
-            onClick={() => setCurrentTab('system')}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition cursor-pointer ${
-              currentTab === 'system'
-                ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
-                : 'text-slate-400 hover:text-white hover:bg-slate-850'
-            }`}
-            title="System Health & Metrics"
-          >
-            <Activity className="w-4 h-4 shrink-0" />
-            {!sidebarCollapsed && <span>System</span>}
-          </button>
+                {/* Guardrails */}
+                <button
+                  onClick={() => setCurrentTab('guardrails')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
+                    currentTab === 'guardrails'
+                      ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                  }`}
+                  title="Anti-Ban Guardrails Settings"
+                >
+                  <div className="flex items-center gap-3">
+                    <Shield className="w-4 h-4 shrink-0 text-teal-400" />
+                    {!sidebarCollapsed && <span>Guardrails</span>}
+                  </div>
+                  {!sidebarCollapsed && (
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+                      Safe
+                    </span>
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
 
-          {/* Settings */}
-          <button
-            onClick={() => setCurrentTab('settings')}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition cursor-pointer ${
-              currentTab === 'settings'
-                ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
-                : 'text-slate-400 hover:text-white hover:bg-slate-850'
-            }`}
-            title="Gateway Settings"
-          >
-            <SettingsIcon className="w-4 h-4 shrink-0" />
-            {!sidebarCollapsed && <span>Settings</span>}
-          </button>
+          {/* Section 5: System & Settings */}
+          <div className="space-y-1">
+            {!sidebarCollapsed ? (
+              <button
+                type="button"
+                onClick={() => toggleSection('system')}
+                className="w-full flex items-center justify-between px-3 py-1.5 text-[11px] font-semibold tracking-wider text-slate-400 uppercase hover:text-slate-200 transition"
+              >
+                <span>System</span>
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${openSections.system ? '' : '-rotate-90'}`} />
+              </button>
+            ) : (
+              <div className="h-px bg-slate-800 my-2 mx-1" />
+            )}
+
+            {(openSections.system || sidebarCollapsed) && (
+              <div className="space-y-1 pl-1">
+                {/* Reports */}
+                <button
+                  onClick={() => setCurrentTab('reports')}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
+                    currentTab === 'reports'
+                      ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                  }`}
+                  title="Reports & Analytics"
+                >
+                  <BarChart3 className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Reports & Stats</span>}
+                </button>
+
+                {/* System */}
+                <button
+                  onClick={() => setCurrentTab('system')}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
+                    currentTab === 'system'
+                      ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                  }`}
+                  title="System Health & Metrics"
+                >
+                  <Activity className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Health & Logs</span>}
+                </button>
+
+                {/* Settings */}
+                <button
+                  onClick={() => setCurrentTab('settings')}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
+                    currentTab === 'settings'
+                      ? 'bg-emerald-600 text-white font-semibold shadow-md shadow-emerald-950/40'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                  }`}
+                  title="Gateway Settings"
+                >
+                  <SettingsIcon className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Settings</span>}
+                </button>
+              </div>
+            )}
+          </div>
         </nav>
 
         {/* Sidebar Footer */}
@@ -1402,8 +1599,11 @@ export default function AppDashboard() {
               {currentTab === 'wizard' && 'New Campaign Wizard'}
               {currentTab === 'pipeline' && 'Lead Sales Pipeline (CRM)'}
               {currentTab === 'contacts' && 'Contacts & Lists'}
+              {currentTab === 'tasks' && 'Task & Follow-up Management'}
               {currentTab === 'templates' && 'Message Templates'}
               {currentTab === 'replies' && 'WhatsApp Replies Inbox'}
+              {currentTab === 'media' && 'Media Library DAM'}
+              {currentTab === 'quick-replies' && 'Quick Replies & Canned Messages'}
               {currentTab === 'chatbot' && 'Chatbot Studio'}
               {currentTab === 'instances' && 'WhatsApp Instances'}
               {currentTab === 'guardrails' && 'Anti-Ban Guardrails'}
@@ -3716,6 +3916,11 @@ export default function AppDashboard() {
           )}
 
           {/* ========================================================= */}
+          {/* VIEW: TASK & FOLLOW-UP MANAGEMENT (CRM)                   */}
+          {/* ========================================================= */}
+          {currentTab === 'tasks' && <TaskManagementView />}
+
+          {/* ========================================================= */}
           {/* 8. VIEW: TEMPLATES LIBRARY                                */}
           {/* ========================================================= */}
           {currentTab === 'templates' && (
@@ -4215,16 +4420,44 @@ export default function AppDashboard() {
                   </div>
 
                   {/* Reply Input Bar */}
-                  <div className={`p-3 border-t flex items-center gap-2 ${
+                  <div className={`p-3 border-t flex items-center gap-2 relative ${
                     theme === 'day' ? 'border-slate-200 bg-white' : 'border-slate-800 bg-slate-900'
                   }`}>
+                    {/* Media Library DAM Picker Button */}
+                    <button
+                      type="button"
+                      onClick={() => setShowMediaPickerModal(true)}
+                      className={`p-2 rounded-xl border transition cursor-pointer ${
+                        theme === 'day'
+                          ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                          : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+                      }`}
+                      title="Attach file from Media Library DAM"
+                    >
+                      <FolderOpen className="w-4 h-4 text-emerald-400" />
+                    </button>
+
+                    {/* Quick Replies Picker Button */}
+                    <button
+                      type="button"
+                      onClick={() => setShowQuickReplyPicker(true)}
+                      className={`p-2 rounded-xl border transition cursor-pointer ${
+                        theme === 'day'
+                          ? 'bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200'
+                          : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border-amber-500/30'
+                      }`}
+                      title="Insert Quick Reply / Canned Message"
+                    >
+                      <Zap className="w-4 h-4" />
+                    </button>
+
                     <input
                       type="text"
                       value={replyInputText}
                       onChange={(e) => setReplyInputText(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handleSendReply()}
-                      placeholder="Type a WhatsApp reply..."
-                      className={`flex-1 rounded-xl px-3 py-2 text-xs border ${
+                      placeholder="Type a WhatsApp reply, or click ⚡ for quick replies..."
+                      className={`flex-1 rounded-xl px-3.5 py-2 text-xs border ${
                         theme === 'day'
                           ? 'bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-500'
                           : 'bg-slate-950 border-slate-800 text-white focus:outline-none focus:border-emerald-500'
@@ -4238,12 +4471,83 @@ export default function AppDashboard() {
                       {sendingReply ? 'Sending...' : 'Send'}
                     </button>
                   </div>
+
+                  {/* Quick Replies Picker Modal */}
+                  {showQuickReplyPicker && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+                      <div className="bg-slate-900 day:bg-white border border-slate-800 day:border-slate-200 rounded-2xl w-full max-w-2xl p-6 shadow-2xl relative max-h-[85vh] overflow-y-auto">
+                        <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-800 day:border-slate-200">
+                          <div className="flex items-center gap-2">
+                            <Zap className="w-5 h-5 text-amber-400" />
+                            <h3 className="font-bold text-sm text-white day:text-slate-900">
+                              Insert Quick Reply
+                            </h3>
+                          </div>
+                          <button
+                            onClick={() => setShowQuickReplyPicker(false)}
+                            className="p-1 text-slate-400 hover:text-white day:hover:text-slate-800"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <QuickRepliesView
+                          isPickerMode
+                          onSelectReply={(qr) => {
+                            setReplyInputText(qr.content);
+                            setShowQuickReplyPicker(false);
+                            toast.success(`Inserted "${qr.shortcut}"`);
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Media Library DAM Picker Modal */}
+                  {showMediaPickerModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+                      <div className="bg-slate-900 day:bg-white border border-slate-800 day:border-slate-200 rounded-2xl w-full max-w-4xl p-6 shadow-2xl relative max-h-[85vh] overflow-y-auto">
+                        <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-800 day:border-slate-200">
+                          <div className="flex items-center gap-2">
+                            <FolderOpen className="w-5 h-5 text-emerald-400" />
+                            <h3 className="font-bold text-sm text-white day:text-slate-900">
+                              Select Media Asset from DAM
+                            </h3>
+                          </div>
+                          <button
+                            onClick={() => setShowMediaPickerModal(false)}
+                            className="p-1 text-slate-400 hover:text-white day:hover:text-slate-800"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <MediaLibraryView
+                          isPickerMode
+                          onSelectAsset={(asset) => {
+                            const fullUrl = `${window.location.origin}${asset.url}`;
+                            setReplyInputText((prev) => (prev ? `${prev} ${fullUrl}` : fullUrl));
+                            setShowMediaPickerModal(false);
+                            toast.success(`Attached "${asset.title}"`);
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
             </div>
               </div>
             </div>
           )}
+
+          {/* ========================================================= */}
+          {/* VIEW: MEDIA LIBRARY DAM                                   */}
+          {/* ========================================================= */}
+          {currentTab === 'media' && <MediaLibraryView />}
+
+          {/* ========================================================= */}
+          {/* VIEW: QUICK REPLIES & CANNED MESSAGES                     */}
+          {/* ========================================================= */}
+          {currentTab === 'quick-replies' && <QuickRepliesView />}
 
           {/* ========================================================= */}
           {/* 9.5 VIEW: CHATBOT STUDIO (VISUAL FLOW BUILDER)            */}

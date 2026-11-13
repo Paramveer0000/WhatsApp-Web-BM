@@ -94,6 +94,9 @@ export async function POST(req: NextRequest) {
           path: savedFileName,
           url: publicUrl,
           data: base64Uri,
+          title: file.name,
+          fileName: savedFileName,
+          category: mediaType,
         },
         create: {
           sha256: hash,
@@ -102,6 +105,10 @@ export async function POST(req: NextRequest) {
           path: savedFileName,
           url: publicUrl,
           data: base64Uri,
+          title: file.name,
+          fileName: savedFileName,
+          category: mediaType,
+          tags: JSON.stringify([]),
         },
       });
     } catch (dbErr: any) {

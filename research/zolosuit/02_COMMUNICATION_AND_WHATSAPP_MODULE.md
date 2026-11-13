@@ -83,3 +83,4 @@ Productivity accelerator for support and sales representatives:
 - **Shortcut Triggers:** Triggered by typing slash commands in the chat bar (e.g., `/pricing`, `/address`, `/bank`, `/demo`).
 - **Rich Content:** Quick replies support pre-attached catalog PDFs and image brochures alongside formatted text.
 - **Categorization:** Organized by department (Sales, Technical Support, Onboarding, Billing).
+

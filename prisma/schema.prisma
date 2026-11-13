@@ -137,7 +137,43 @@ model MediaAsset {
   path      String
   url       String?
   data      String?
+  title     String?
+  fileName  String?
+  category  String?  @default("image") // "image", "video", "document", "audio"
+  tags      String?  @default("[]")    // JSON array string
   createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+model CrmTask {
+  id           String    @id @default(cuid())
+  title        String
+  description  String?
+  dueDate      DateTime?
+  priority     String    @default("MEDIUM") // "LOW", "MEDIUM", "HIGH"
+  status       String    @default("PENDING") // "PENDING", "COMPLETED", "CANCELLED"
+  assignedTo   String?   @default("Unassigned")
+  contactPhone String?
+  dealId       String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([status])
+  @@index([dueDate])
+  @@index([contactPhone])
+}
+
+model QuickReply {
+  id        String   @id @default(cuid())
+  shortcut  String   @unique // e.g. "/pricing", "/help", "/demo"
+  title     String
+  content   String
+  category  String   @default("General")
+  mediaUrl  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([category])
 }
 
 model Campaign {

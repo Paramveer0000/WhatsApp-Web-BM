@@ -66,3 +66,4 @@ const report = [
 
 fs.writeFileSync(path.join(__dirname, 'EVIDENCE_INVENTORY.md'), report, 'utf8');
 console.log('EVIDENCE_INVENTORY.md generated successfully!');
+

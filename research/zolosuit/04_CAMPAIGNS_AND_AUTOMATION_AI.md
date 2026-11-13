@@ -52,3 +52,4 @@ Zolo Suit incorporates generative AI for conversational customer support:
 - **Knowledge Base Retrieval (RAG):** Businesses upload FAQs, company policies, and price lists. The AI answers customer inquiries based strictly on ground truth.
 - **Human Handoff Trigger:** If the customer expresses frustration, asks for a human, or requests a commercial quote, the bot transitions session status to `handoff`, pauses AI replies, and notifies the human team.
 - **Safety Rails & Spend Control:** Token budget caps prevent unexpected API credit depletion.
+
