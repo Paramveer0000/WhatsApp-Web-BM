@@ -345,8 +345,34 @@ export default function MultiMessageRotationEditor({
     }
   }, [variants.length, editingCardIndex, onActivePreviewVariantIndexChange]);
 
+  // Synchronize when parent updates singleTemplate externally (e.g. clicking "Use in Campaign")
+  useEffect(() => {
+    if (singleTemplate && (!variants[0] || variants[0].content !== singleTemplate)) {
+      if (variants.length <= 1) {
+        onVariantsChange([
+          {
+            position: 1,
+            label: variants[0]?.label || 'Message 1 (Base)',
+            content: singleTemplate,
+            mediaType: singleMediaType || 'text',
+            mediaUrl: singleMediaUrl || '',
+            fileName: singleFileName || '',
+            weight: 100,
+          },
+        ]);
+      } else {
+        const updated = variants.map((v, i) =>
+          i === 0 ? { ...v, content: singleTemplate } : v
+        );
+        onVariantsChange(updated);
+      }
+    }
+  }, [singleTemplate]);
+
   // Current base message text (synchronized with singleTemplate and variants[0])
-  const baseMessageText = variants[0]?.content || singleTemplate || '';
+  const baseMessageText = (singleTemplate !== undefined && singleTemplate !== '') 
+    ? singleTemplate 
+    : (variants[0]?.content || '');
 
   const handleBaseMessageChange = (newText: string) => {
     onSingleTemplateChange(newText);

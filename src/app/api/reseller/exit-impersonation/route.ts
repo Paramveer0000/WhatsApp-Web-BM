@@ -60,3 +60,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err.message || 'Failed to exit impersonation' }, { status: 500 });
   }
 }
+

@@ -4076,13 +4076,27 @@ export default function AppDashboard() {
               savedTemplates={savedTemplates}
               onReloadSavedTemplates={loadTemplates}
               onUseInCampaign={(content, mediaType, templateTitle) => {
+                const chosenMediaType = (mediaType && (mediaType === 'image' || mediaType === 'video' || mediaType === 'document' || mediaType === 'text'))
+                  ? mediaType
+                  : 'text';
+
                 setWizTemplate(content);
-                if (mediaType && (mediaType === 'image' || mediaType === 'video' || mediaType === 'document' || mediaType === 'text')) {
-                  setWizMediaType(mediaType);
-                }
+                setWizMediaType(chosenMediaType);
                 if (templateTitle) {
-                  setWizName(`Campaign-${templateTitle.slice(0, 15).replace(/[^a-zA-Z0-9]/g, '_')}`);
+                  setWizName(`Campaign-${templateTitle.slice(0, 20).replace(/[^a-zA-Z0-9]/g, '_')}`);
                 }
+
+                // CRITICAL FIX: Synchronize wizVariants so Base Message & Message 1 receive the loaded template
+                setWizVariants([
+                  {
+                    position: 1,
+                    label: templateTitle ? `Message 1 (${templateTitle.slice(0, 16)})` : 'Message 1 (Base)',
+                    content: content,
+                    mediaType: chosenMediaType,
+                    weight: 100,
+                  },
+                ]);
+                setActivePreviewVariantIndex(0);
                 setCurrentTab('wizard');
                 toast.success('Template loaded into Campaign Wizard! 🚀');
               }}

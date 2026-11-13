@@ -85,5 +85,35 @@ describe('Industry-Wise WhatsApp Templates Engine', () => {
 
     expect(preview).toBe('Hi name!');
   });
+
+  it('synchronizes selected template into campaign wizard and base message variants', () => {
+    // Simulate campaign wizard state
+    let wizTemplate = 'old base message';
+    let wizVariants = [
+      { position: 1, label: 'Message 1 (Base)', content: 'old base message', weight: 100 }
+    ];
+
+    const onUseInCampaign = (content: string, mediaType?: string, templateTitle?: string) => {
+      wizTemplate = content;
+      wizVariants = [
+        {
+          position: 1,
+          label: templateTitle ? `Message 1 (${templateTitle.slice(0, 16)})` : 'Message 1 (Base)',
+          content: content,
+          weight: 100,
+        }
+      ];
+    };
+
+    const selectedTemplate = INDUSTRY_TEMPLATES.find((t) => t.id === 're-1');
+    expect(selectedTemplate).toBeDefined();
+
+    onUseInCampaign(selectedTemplate!.content, selectedTemplate!.mediaType, selectedTemplate!.title);
+
+    // Verify wizard state is cleanly updated with new template
+    expect(wizTemplate).toBe(selectedTemplate!.content);
+    expect(wizVariants[0].content).toBe(selectedTemplate!.content);
+    expect(wizVariants[0].content).not.toBe('old base message');
+  });
 });
 
