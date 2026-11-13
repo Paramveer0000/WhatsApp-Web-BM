@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
-import { db } from '@/lib/db';
+import { db, ensureDbSchema } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
 // GET /api/quick-replies - List quick replies with search & category filter
@@ -9,6 +9,8 @@ export async function GET(req: NextRequest) {
   try {
     const user = await getSessionUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    await ensureDbSchema();
 
     const { searchParams } = new URL(req.url);
     const category = searchParams.get('category');
@@ -53,6 +55,8 @@ export async function POST(req: NextRequest) {
   try {
     const user = await getSessionUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    await ensureDbSchema();
 
     const body = await req.json();
     let { shortcut, title, content, category, mediaUrl } = body;
@@ -103,6 +107,8 @@ export async function PUT(req: NextRequest) {
     const user = await getSessionUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+    await ensureDbSchema();
+
     const body = await req.json();
     let { id, shortcut, title, content, category, mediaUrl } = body;
 
@@ -151,6 +157,8 @@ export async function DELETE(req: NextRequest) {
   try {
     const user = await getSessionUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    await ensureDbSchema();
 
     const { searchParams } = new URL(req.url);
     let id = searchParams.get('id');

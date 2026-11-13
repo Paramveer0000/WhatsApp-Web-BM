@@ -11,8 +11,8 @@ if [ -d "/app/prisma-dist" ]; then
   chmod -R 777 /app/prisma/uploads 2>/dev/null || true
 fi
 
-# Run schema sync and seeding when starting the web application (avoids concurrent SQLite push collisions with worker)
-if [ "$1" = "npm" ] && [ "$2" = "start" ]; then
+# Run schema sync and seeding when starting the application (ensures SQLite tables exist on new or updated volumes)
+if [ "$SKIP_DB_PUSH" != "true" ]; then
   echo "==> [Dokploy Startup] Ensuring database tables are synced..."
   npx prisma db push --accept-data-loss --skip-generate || true
   echo "==> [Dokploy Startup] Running database seeds (default admin & settings)..."

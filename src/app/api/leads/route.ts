@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, ensureDbSchema } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { getSessionUser } from '@/lib/auth';
 
@@ -85,6 +85,8 @@ export async function GET(req: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    await ensureDbSchema();
 
     const dealsCount = await db.leadDeal.count();
 

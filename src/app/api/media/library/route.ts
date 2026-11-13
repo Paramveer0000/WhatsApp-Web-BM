@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
-import { db } from '@/lib/db';
+import { db, ensureDbSchema } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import path from 'path';
 import fs from 'fs';
@@ -11,6 +11,8 @@ export async function GET(req: NextRequest) {
   try {
     const user = await getSessionUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    await ensureDbSchema();
 
     const { searchParams } = new URL(req.url);
     const category = searchParams.get('category'); // 'image' | 'video' | 'document' | 'audio'
@@ -91,6 +93,8 @@ export async function DELETE(req: NextRequest) {
     const user = await getSessionUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+    await ensureDbSchema();
+
     const { searchParams } = new URL(req.url);
     let id = searchParams.get('id');
 
@@ -143,6 +147,8 @@ export async function PUT(req: NextRequest) {
   try {
     const user = await getSessionUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    await ensureDbSchema();
 
     const body = await req.json();
     const { id, title, category, tags } = body;

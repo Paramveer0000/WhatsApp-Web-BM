@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
-import { db } from '@/lib/db';
+import { db, ensureDbSchema } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
 // GET /api/tasks - Retrieve CRM tasks with filtering and status counts
@@ -9,6 +9,8 @@ export async function GET(req: NextRequest) {
   try {
     const user = await getSessionUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    await ensureDbSchema();
 
     const { searchParams } = new URL(req.url);
     const status = searchParams.get('status'); // 'PENDING' | 'COMPLETED' | 'CANCELLED' | 'ALL'
@@ -74,6 +76,8 @@ export async function POST(req: NextRequest) {
     const user = await getSessionUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+    await ensureDbSchema();
+
     const body = await req.json();
     const { title, description, dueDate, priority, assignedTo, contactPhone, dealId } = body;
 
@@ -117,6 +121,8 @@ export async function PUT(req: NextRequest) {
   try {
     const user = await getSessionUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    await ensureDbSchema();
 
     const body = await req.json();
     const { id, title, description, dueDate, priority, status, assignedTo, contactPhone, dealId } = body;
