@@ -48,4 +48,8 @@ next-env.d.ts
 id_rsa*
 id_ed25519*
 .ssh_key*
+
+# REA Raw Chunk Artifacts
+research/zolosuit/raw_chunks/
+research/zolosuit/*.json
 scratch/
