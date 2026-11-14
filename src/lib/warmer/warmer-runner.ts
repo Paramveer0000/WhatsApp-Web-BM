@@ -121,6 +121,14 @@ class WarmerRunner {
   }
 
   /**
+   * Unregisters and clears in-flight state when user pauses a session.
+   */
+  pauseSession(sessionId: string): void {
+    this.inFlightSessions.delete(sessionId);
+    logger.info({ sessionId }, 'WarmerRunner: Session marked PAUSED');
+  }
+
+  /**
    * Explicitly triggers an immediate turn when a session is activated by user.
    */
   async startSession(sessionId: string): Promise<void> {

@@ -154,23 +154,17 @@ export function NumberWarmerView() {
       return;
     }
 
-    const timer = setInterval(() => {
+    const updateCountdown = () => {
       const now = Date.now();
       const target = new Date(session.nextScheduledAt!).getTime();
       const diffSec = Math.round((target - now) / 1000);
-
-      // Client safety heartbeat: trigger backup tick if server runner experienced delay
-      if (diffSec <= -25 && !actionLoading) {
-        fetch(`/api/warmer/${session.id}/tick`, { method: 'POST' })
-          .then(() => fetchWarmerData())
-          .catch(() => {});
-      }
-
       setSecondsUntilNext(diffSec > 0 ? diffSec : 0);
-    }, 1000);
+    };
 
+    updateCountdown();
+    const timer = setInterval(updateCountdown, 1000);
     return () => clearInterval(timer);
-  }, [session?.status, session?.nextScheduledAt, session?.id, actionLoading]);
+  }, [session?.status, session?.nextScheduledAt]);
 
   const handleSaveConfig = async () => {
     if (!instanceA || !instanceB) {

@@ -142,29 +142,53 @@ export async function isWarmerOrInternalMessage(params: {
   }
 }
 
+const inFlightTurnIds = new Set<string>();
+
 // Execute 1 complete two-way dialogue exchange between Instance A and Instance B
 export async function executeWarmerTurn(sessionId: string): Promise<{
   success: boolean;
   log?: WarmerExchangeLog;
   error?: string;
 }> {
-  await ensureDbSchema();
-
-  const session = await db.numberWarmerSession.findUnique({
-    where: { id: sessionId },
-  });
-
-  if (!session) {
-    return { success: false, error: 'Warmer session not found' };
+  if (inFlightTurnIds.has(sessionId)) {
+    logger.warn({ sessionId }, 'executeWarmerTurn: Turn already in progress for this session, skipping duplicate invocation');
+    return { success: false, error: 'Turn already in flight' };
   }
 
-  if (session.todayExchanges >= session.dailyCap) {
+  inFlightTurnIds.add(sessionId);
+
+  let session: any = null;
+  let logEntry: WarmerExchangeLog | null = null;
+
+  try {
+    await ensureDbSchema();
+
+    session = await db.numberWarmerSession.findUnique({
+      where: { id: sessionId },
+    });
+
+    if (!session) {
+      return { success: false, error: 'Warmer session not found' };
+    }
+
+    if (session.status !== 'RUNNING') {
+      logger.info({ sessionId, status: session.status }, 'executeWarmerTurn: Session is not RUNNING, aborting');
+      return { success: false, error: 'Session is paused' };
+    }
+
+    if (session.todayExchanges >= session.dailyCap) {
+      await db.numberWarmerSession.update({
+        where: { id: sessionId },
+        data: { status: 'COMPLETED' },
+      });
+      return { success: false, error: 'Daily exchange target reached for today' };
+    }
+
+    // Immediately acquire a 15-minute scheduling lock in DB to prevent concurrent runner pickups
     await db.numberWarmerSession.update({
       where: { id: sessionId },
-      data: { status: 'COMPLETED' },
+      data: { nextScheduledAt: new Date(Date.now() + 15 * 60 * 1000) },
     });
-    return { success: false, error: 'Daily exchange target reached for today' };
-  }
 
   // 1. Resolve phone numbers if missing
   let phoneA = session.phoneA || (await resolveInstancePhone(session.instanceA));
@@ -217,7 +241,7 @@ export async function executeWarmerTurn(sessionId: string): Promise<{
 
   const loggedMessages: WarmerMessageLogItem[] = [];
 
-  const logEntry: WarmerExchangeLog = {
+  logEntry = {
     id: `wlog-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     timestamp: new Date().toISOString(),
     topic: turn.topicTitle || session.topic,
@@ -233,11 +257,20 @@ export async function executeWarmerTurn(sessionId: string): Promise<{
     source: turn.source,
   };
 
-  try {
-    const evo = await EvolutionClient.fromDatabase();
+  const evo = await EvolutionClient.fromDatabase();
 
     // Sequentially send each message in the conversation thread with human typing & reading cadence
     for (let i = 0; i < messagesToSend.length; i++) {
+      // Check if user paused or stopped the session while in progress
+      const freshStatus = await db.numberWarmerSession.findUnique({
+        where: { id: sessionId },
+        select: { status: true },
+      });
+      if (!freshStatus || freshStatus.status !== 'RUNNING') {
+        logger.info({ sessionId }, 'Warmer session was PAUSED by user. Halting dialogue dispatch immediately.');
+        return { success: false, error: 'Session was paused by user' };
+      }
+
       const item = messagesToSend[i];
       const isSenderA = item.sender === 'A';
       const fromInstance = isSenderA ? session.instanceA : session.instanceB;
@@ -307,17 +340,21 @@ export async function executeWarmerTurn(sessionId: string): Promise<{
       'Warmer continuous conversation exchange turn executed successfully'
     );
 
-    return { success: true, log: logEntry };
+    return { success: true, log: logEntry || undefined };
   } catch (err: any) {
     logger.error({ err: err.message, sessionId }, 'Warmer turn failed');
-    logEntry.status = 'FAILED';
-    logEntry.error = err.message || 'WhatsApp message dispatch failed';
+    if (logEntry) {
+      logEntry.status = 'FAILED';
+      logEntry.error = err.message || 'WhatsApp message dispatch failed';
+    }
 
     let currentLogs: WarmerExchangeLog[] = [];
     try {
-      currentLogs = JSON.parse(session.logs || '[]');
+      if (session?.logs) {
+        currentLogs = JSON.parse(session.logs);
+      }
     } catch {}
-    const updatedLogs = [logEntry, ...currentLogs].slice(0, 50);
+    const updatedLogs = logEntry ? [logEntry, ...currentLogs].slice(0, 50) : currentLogs;
 
     // Reschedule retry after 60s so session does not permanently stall
     const retryScheduled = new Date(Date.now() + 60 * 1000);
@@ -328,8 +365,10 @@ export async function executeWarmerTurn(sessionId: string): Promise<{
         nextScheduledAt: retryScheduled,
         logs: JSON.stringify(updatedLogs),
       },
-    });
+    }).catch(() => {});
 
-    return { success: false, log: logEntry, error: err.message };
+    return { success: false, log: logEntry || undefined, error: err.message };
+  } finally {
+    inFlightTurnIds.delete(sessionId);
   }
 }
