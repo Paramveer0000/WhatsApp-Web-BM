@@ -53,6 +53,60 @@ async function resolveInstancePhone(instanceName: string): Promise<string | null
   }
 }
 
+// Helper to detect if an incoming message is between internal instances or an active Number Warmer session
+export async function isWarmerOrInternalMessage(params: {
+  instanceName: string;
+  phone: string;
+  remoteJid?: string;
+}): Promise<boolean> {
+  try {
+    const rawDigits = (params.phone || '').replace(/[^0-9]/g, '');
+    const last10 = rawDigits.slice(-10);
+    if (!last10 || last10.length < 7) return false;
+
+    // 1. Is the sender phone number another internal instance owned in db.instance?
+    const internalInstance = await db.instance.findFirst({
+      where: {
+        profileNumber: { contains: last10 },
+      },
+      select: { id: true, name: true },
+    });
+    if (internalInstance) return true;
+
+    // 2. Is the sender phone or instance part of any active/paused Number Warmer session?
+    const warmerSession = await db.numberWarmerSession.findFirst({
+      where: {
+        status: { in: ['RUNNING', 'ACTIVE', 'PAUSED'] },
+        OR: [
+          { phoneA: { contains: last10 } },
+          { phoneB: { contains: last10 } },
+          { instanceA: params.instanceName },
+          { instanceB: params.instanceName },
+        ],
+      },
+      select: { id: true, instanceA: true, instanceB: true, phoneA: true, phoneB: true },
+    });
+
+    if (warmerSession) {
+      const matchA = warmerSession.phoneA && warmerSession.phoneA.includes(last10);
+      const matchB = warmerSession.phoneB && warmerSession.phoneB.includes(last10);
+      if (
+        matchA ||
+        matchB ||
+        warmerSession.instanceA === params.instanceName ||
+        warmerSession.instanceB === params.instanceName
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  } catch (err: any) {
+    logger.warn({ err: err.message }, 'Error checking isWarmerOrInternalMessage');
+    return false;
+  }
+}
+
 // Execute 1 complete two-way dialogue exchange between Instance A and Instance B
 export async function executeWarmerTurn(sessionId: string): Promise<{
   success: boolean;

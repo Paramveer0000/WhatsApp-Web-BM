@@ -4,6 +4,7 @@ import { EvolutionClient } from '@/lib/evolution';
 import { step } from '@/lib/flow/engine';
 import { FlowDefinition, EngineSession, InboundEvent, EngineAction } from '@/lib/flow/schema';
 import { isSafeUrl } from '@/lib/security';
+import { isWarmerOrInternalMessage } from '@/lib/warmer/warmer-engine';
 
 // In-memory rate limiting to prevent bot ping-pong loops
 const contactReplyTracker = new Map<string, number[]>();
@@ -23,6 +24,17 @@ export async function processInboundBotMessage(params: {
   const { instanceName, phone, text, messageId, pushName, remoteJid } = params;
   const cleanPhone = phone.replace(/[^\d]/g, '');
   if (!cleanPhone) return false;
+
+  // 0. Suppress bot execution on internal instance or Number Warmer peer exchanges
+  const isInternalOrWarmer = await isWarmerOrInternalMessage({
+    instanceName,
+    phone: cleanPhone,
+    remoteJid,
+  });
+  if (isInternalOrWarmer) {
+    logger.info({ phone: cleanPhone, instanceName }, 'processInboundBotMessage: Bypassing chatbot execution for internal/warmer peer');
+    return false;
+  }
 
   const now = Date.now();
 

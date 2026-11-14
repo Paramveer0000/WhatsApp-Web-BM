@@ -7,6 +7,7 @@ import { logger } from '@/lib/logger';
 import { transitionMessage } from '@/lib/state-machine';
 import { EvolutionClient, CircuitBreaker } from '@/lib/evolution';
 import { processInboundBotMessage } from '@/lib/bot-runner';
+import { isWarmerOrInternalMessage } from '@/lib/warmer/warmer-engine';
 
 function verifySecretConstantTime(given: string, expected: string): boolean {
   try {
@@ -261,7 +262,21 @@ export async function POST(req: NextRequest, { params }: { params?: { instanceId
           const cleanBody = (body || '').trim();
           const upperBody = cleanBody.toUpperCase();
 
-          // Check Opt-Out Keywords
+          // Check if message is between internal instances or an active Number Warmer session
+          const isInternalOrWarmer = await isWarmerOrInternalMessage({
+            instanceName,
+            phone,
+            remoteJid,
+          });
+
+          if (isInternalOrWarmer) {
+            logger.info(
+              { instanceName, phone },
+              'Detected internal or peer-to-peer Number Warmer message: suppressing chatbot, auto-responder, and opt-out'
+            );
+          }
+
+          // Check Opt-Out Keywords (skipped for internal / warmer peer numbers)
           const optOutKeywordsSetting = await db.setting.findUnique({
             where: { key: 'AUTO_OPT_OUT_KEYWORDS' },
           });
@@ -272,7 +287,7 @@ export async function POST(req: NextRequest, { params }: { params?: { instanceId
             .map((k) => k.trim().toUpperCase())
             .filter(Boolean);
 
-          const isOptOut = keywords.some(
+          const isOptOut = !isInternalOrWarmer && keywords.some(
             (kw) => upperBody === kw || upperBody.startsWith(kw + ' ') || upperBody.endsWith(' ' + kw)
           );
 
@@ -314,44 +329,46 @@ export async function POST(req: NextRequest, { params }: { params?: { instanceId
               phone,
               pushName,
               body: cleanBody,
-              status: isOptOut ? 'HANDLED' : 'UNREAD',
+              status: isInternalOrWarmer ? 'HANDLED' : (isOptOut ? 'HANDLED' : 'UNREAD'),
               isOptOut,
               remoteJid,
               receivedAt: new Date(),
             },
           });
 
-          // Link incoming reply to Campaign Recipient and record REPLIED status
-          try {
-            const rawPhone = phone.replace(/[^\d]/g, '');
-            const matchingRecipient = await db.campaignRecipient.findFirst({
-              where: {
-                OR: [
-                  { phone: rawPhone },
-                  { phone: `+${rawPhone}` },
-                  { phone: rawPhone.startsWith('91') ? rawPhone.slice(2) : `91${rawPhone}` },
-                  { remoteJid: remoteJid },
-                ],
-                status: { in: ['SENT', 'DELIVERED', 'READ'] },
-              },
-              orderBy: { sentAt: 'desc' },
-            });
-
-            if (matchingRecipient) {
-              await transitionMessage(matchingRecipient.id, ['SENT', 'DELIVERED', 'READ'], 'REPLIED', {
-                repliedAt: new Date(),
+          // Link incoming reply to Campaign Recipient and record REPLIED status (only for external campaign recipients)
+          if (!isInternalOrWarmer) {
+            try {
+              const rawPhone = phone.replace(/[^\d]/g, '');
+              const matchingRecipient = await db.campaignRecipient.findFirst({
+                where: {
+                  OR: [
+                    { phone: rawPhone },
+                    { phone: `+${rawPhone}` },
+                    { phone: rawPhone.startsWith('91') ? rawPhone.slice(2) : `91${rawPhone}` },
+                    { remoteJid: remoteJid },
+                  ],
+                  status: { in: ['SENT', 'DELIVERED', 'READ'] },
+                },
+                orderBy: { sentAt: 'desc' },
               });
-              logger.info(
-                { recipientId: matchingRecipient.id, phone: rawPhone },
-                'Campaign recipient transitioned to REPLIED from inbound WhatsApp message'
-              );
+
+              if (matchingRecipient) {
+                await transitionMessage(matchingRecipient.id, ['SENT', 'DELIVERED', 'READ'], 'REPLIED', {
+                  repliedAt: new Date(),
+                });
+                logger.info(
+                  { recipientId: matchingRecipient.id, phone: rawPhone },
+                  'Campaign recipient transitioned to REPLIED from inbound WhatsApp message'
+                );
+              }
+            } catch (replyErr: any) {
+              logger.warn({ err: replyErr.message }, 'Failed to link reply to campaign recipient');
             }
-          } catch (replyErr: any) {
-            logger.warn({ err: replyErr.message }, 'Failed to link reply to campaign recipient');
           }
 
-          // 6. Execute Chatbot Studio automated flow if assigned & active
-          if (!isOptOut) {
+          // 6. Execute Chatbot Studio automated flow if assigned & active (NEVER run on internal/warmer exchanges)
+          if (!isOptOut && !isInternalOrWarmer) {
             try {
               await processInboundBotMessage({
                 instanceName,

@@ -6,6 +6,8 @@ import {
   resolveSpintax,
 } from '../src/lib/warmer/dialogues';
 import { hashPassword, verifyPassword } from '../src/lib/auth';
+import { isWarmerOrInternalMessage } from '../src/lib/warmer/warmer-engine';
+import { db } from '../src/lib/db';
 
 describe('Peer-to-Peer WhatsApp Number Warmer & Client Settings', () => {
   describe('Warmer Topics & Dialogue Library', () => {
@@ -100,6 +102,65 @@ describe('Peer-to-Peer WhatsApp Number Warmer & Client Settings', () => {
       expect(maskKey('sk-or-v1-abcdef1234567890xyz')).toBe('sk-o••••••••0xyz');
       expect(maskKey('')).toBe('');
       expect(maskKey(null)).toBe('');
+    });
+  });
+
+  describe('Warmer vs Chatbot & Opt-Out Mutual Exclusion', () => {
+    it('detects internal WhatsApp instances and returns true to suppress chatbot', async () => {
+      // Mock db.instance.findFirst
+      const origFindFirst = db.instance.findFirst;
+      (db.instance as any).findFirst = async () => ({ id: 'inst-1', name: 'SalesInstance', profileNumber: '919876501234' });
+
+      const isInternal = await isWarmerOrInternalMessage({
+        instanceName: 'SupportInstance',
+        phone: '919876501234',
+      });
+
+      expect(isInternal).toBe(true);
+      db.instance.findFirst = origFindFirst;
+    });
+
+    it('detects active Number Warmer peer session and returns true to suppress chatbot', async () => {
+      const origInstFind = db.instance.findFirst;
+      const origWarmerFind = db.numberWarmerSession.findFirst;
+
+      (db.instance as any).findFirst = async () => null;
+      (db.numberWarmerSession as any).findFirst = async () => ({
+        id: 'warm-123',
+        instanceA: 'instanceA',
+        instanceB: 'instanceB',
+        phoneA: '919876501111',
+        phoneB: '919876502222',
+        status: 'RUNNING',
+      });
+
+      const isWarmer = await isWarmerOrInternalMessage({
+        instanceName: 'instanceB',
+        phone: '919876501111',
+      });
+
+      expect(isWarmer).toBe(true);
+
+      db.instance.findFirst = origInstFind;
+      db.numberWarmerSession.findFirst = origWarmerFind;
+    });
+
+    it('returns false for normal customer leads, allowing chatbot to trigger normally', async () => {
+      const origInstFind = db.instance.findFirst;
+      const origWarmerFind = db.numberWarmerSession.findFirst;
+
+      (db.instance as any).findFirst = async () => null;
+      (db.numberWarmerSession as any).findFirst = async () => null;
+
+      const isWarmer = await isWarmerOrInternalMessage({
+        instanceName: 'SalesInstance',
+        phone: '919999888777',
+      });
+
+      expect(isWarmer).toBe(false);
+
+      db.instance.findFirst = origInstFind;
+      db.numberWarmerSession.findFirst = origWarmerFind;
     });
   });
 });
