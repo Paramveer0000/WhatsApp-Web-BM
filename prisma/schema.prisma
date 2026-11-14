@@ -47,9 +47,13 @@ model Instance {
   circuitState      String             @default("closed") // "closed", "open", "half-open"
   consecutiveErrors Int                @default(0)
   lastErrorAt       DateTime?
+  clientId          String?
+  createdById       String?
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
   campaigns         CampaignInstance[]
+
+  @@index([clientId])
 }
 
 model Contact {
@@ -64,18 +68,26 @@ model Contact {
   source          String?       @default("MANUAL")
   waExists        Boolean?
   waCheckedAt     DateTime?
+  clientId        String?
+  createdById     String?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   lists           ListContact[]
+
+  @@index([clientId])
 }
 
 model ContactList {
   id          String        @id @default(cuid())
   name        String        @unique
   description String?
+  clientId    String?
+  createdById String?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
   contacts    ListContact[]
+
+  @@index([clientId])
 }
 
 model LeadDeal {
@@ -91,11 +103,14 @@ model LeadDeal {
   assignedTo      String?   @default("Unassigned")
   priority        String    @default("MEDIUM") // "LOW" | "MEDIUM" | "HIGH"
   expectedCloseAt DateTime?
+  clientId        String?
+  createdById     String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
   @@index([stage])
   @@index([contactPhone])
+  @@index([clientId])
 }
 
 model CrmTag {
@@ -147,32 +162,40 @@ model Blacklist {
 }
 
 model MessageTemplate {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  content   String
-  mediaType String?  @default("text") // "text", "image", "video", "document", "audio"
-  mediaUrl  String?
-  fileName  String?
-  caption   String?
-  tags      String?  // JSON array
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  name        String   @unique
+  content     String
+  mediaType   String?  @default("text") // "text", "image", "video", "document", "audio"
+  mediaUrl    String?
+  fileName    String?
+  caption     String?
+  tags        String?  // JSON array
+  clientId    String?
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([clientId])
 }
 
 model MediaAsset {
-  id        String   @id @default(cuid())
-  sha256    String   @unique
-  mime      String
-  size      Int
-  path      String
-  url       String?
-  data      String?
-  title     String?
-  fileName  String?
-  category  String?  @default("image") // "image", "video", "document", "audio"
-  tags      String?  @default("[]")    // JSON array string
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now()) @updatedAt
+  id          String   @id @default(cuid())
+  sha256      String   @unique
+  mime        String
+  size        Int
+  path        String
+  url         String?
+  data        String?
+  title       String?
+  fileName    String?
+  category    String?  @default("image") // "image", "video", "document", "audio"
+  tags        String?  @default("[]")    // JSON array string
+  clientId    String?
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  @@index([clientId])
 }
 
 model CrmTask {
@@ -185,24 +208,30 @@ model CrmTask {
   assignedTo   String?   @default("Unassigned")
   contactPhone String?
   dealId       String?
+  clientId     String?
+  createdById  String?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
   @@index([status])
   @@index([dueDate])
   @@index([contactPhone])
+  @@index([clientId])
 }
 
 model QuickReply {
-  id        String   @id @default(cuid())
-  shortcut  String   @unique // e.g. "/pricing", "/help", "/demo"
-  title     String
-  content   String
-  category  String   @default("General")
-  mediaUrl  String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  shortcut    String   @unique // e.g. "/pricing", "/help", "/demo"
+  title       String
+  content     String
+  category    String   @default("General")
+  mediaUrl    String?
+  clientId    String?
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
+  @@index([clientId])
   @@index([category])
 }
 
@@ -348,10 +377,12 @@ model IncomingMessage {
   botSessionId String?
   botNodeId    String?
   source       String?   @default("manual") // "campaign", "bot", "manual", "api"
+  clientId     String?
   receivedAt   DateTime  @default(now())
 
   @@index([phone])
   @@index([instanceName])
+  @@index([clientId])
 }
 
 model OutboundWebhook {
@@ -552,6 +583,7 @@ model Flow {
   liveVersionId String?
   draftRevision Int              @default(1)
   createdBy     String?
+  clientId      String?
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
   versions      FlowVersion[]
@@ -560,6 +592,7 @@ model Flow {
   sessions      BotSession[]
 
   @@index([status])
+  @@index([clientId])
 }
 
 model FlowVersion {

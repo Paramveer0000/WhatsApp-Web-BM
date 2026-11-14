@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { db, ensureDbSchema } from '@/lib/db';
 import { logger } from '@/lib/logger';
+import { isTenantScoped } from '@/lib/tenant';
 
 // GET /api/tasks - Retrieve CRM tasks with filtering and status counts
 export async function GET(req: NextRequest) {
@@ -20,6 +21,10 @@ export async function GET(req: NextRequest) {
     const dealId = searchParams.get('dealId');
 
     const where: any = {};
+    if (isTenantScoped(user)) {
+      where.clientId = user.clientId;
+    }
+
     if (status && status !== 'ALL') {
       where.status = status;
     }
@@ -106,6 +111,8 @@ export async function POST(req: NextRequest) {
         assignedTo: assignedTo ? String(assignedTo).trim() : user.name || 'Unassigned',
         contactPhone: contactPhone ? String(contactPhone).replace(/[^0-9+]/g, '') : null,
         dealId: dealId ? String(dealId).trim() : null,
+        clientId: user.clientId || null,
+        createdById: user.id,
       },
     });
 

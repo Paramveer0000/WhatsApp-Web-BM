@@ -5,6 +5,7 @@ import { EvolutionClient } from '@/lib/evolution';
 import { getSessionUser } from '@/lib/auth';
 import { logger } from '@/lib/logger';
 import { withApi } from '@/lib/api-wrapper';
+import { isTenantScoped } from '@/lib/tenant';
 
 export const GET = withApi(async function () {
   const user = await getSessionUser();
@@ -12,6 +13,7 @@ export const GET = withApi(async function () {
     return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
   }
 
+  const isClient = isTenantScoped(user);
   const client = await EvolutionClient.fromDatabase();
   let externalInstances: any[] = [];
   try {
@@ -20,7 +22,7 @@ export const GET = withApi(async function () {
     logger.warn({ err: e.message, apiUrl: client.getApiUrl() }, 'Could not fetch instances list from Evolution API');
   }
 
-  // Sync external instances to DB
+  // Sync external instances to DB (preserving any existing tenant clientId)
   for (const item of externalInstances) {
     const inst = item.instance || item;
     const name = inst.instanceName || inst.name;
@@ -64,11 +66,16 @@ export const GET = withApi(async function () {
         profileName,
         profileNumber: ownerNumber,
         profilePicUrl,
+        clientId: null,
       },
     });
   }
 
+  // Tenant Isolation: strictly filter instances by tenant/client when scoped
+  const instanceWhere: any = isClient ? { clientId: user.clientId } : {};
+
   const allInstances = await db.instance.findMany({
+    where: instanceWhere,
     orderBy: { createdAt: 'desc' },
   });
 
@@ -111,15 +118,36 @@ export const POST = withApi(async function (req: NextRequest) {
   if (!user) {
     return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
   }
-  if (user.role !== 'ADMIN') {
-    return NextResponse.json({ success: false, error: 'Forbidden: Admin only' }, { status: 403 });
+
+  // Enforce Tenant Quota if Client
+  if (isTenantScoped(user)) {
+    const currentCount = await db.instance.count({
+      where: { clientId: user.clientId },
+    });
+    const maxAllowed = user.maxInstances || 1;
+    if (currentCount >= maxAllowed) {
+      return NextResponse.json({
+        success: false,
+        error: `Instance limit reached (${currentCount}/${maxAllowed}). Your current plan allows up to ${maxAllowed} number(s). Please upgrade to add more.`,
+      }, { status: 403 });
+    }
   }
 
   const body = await req.json();
-  const instanceName = (body.instanceName || '').trim().replace(/[^a-zA-Z0-9_-]/g, '-');
+  const rawName = (body.instanceName || '').trim().replace(/[^a-zA-Z0-9_-]/g, '-');
 
-  if (!instanceName) {
+  if (!rawName) {
     return NextResponse.json({ success: false, error: 'Valid instanceName is required' }, { status: 400 });
+  }
+
+  // To prevent instance name collisions across different tenants on the shared Evolution API server:
+  // Prefix client instances with their clientId if not already prefixed
+  let instanceName = rawName;
+  if (isTenantScoped(user)) {
+    const prefix = `c_${user.clientId?.slice(0, 8)}_`;
+    if (!instanceName.startsWith(prefix)) {
+      instanceName = `${prefix}${instanceName}`;
+    }
   }
 
   const client = await EvolutionClient.fromDatabase();
@@ -136,10 +164,15 @@ export const POST = withApi(async function (req: NextRequest) {
 
   const inst = await db.instance.upsert({
     where: { name: instanceName },
-    update: { status: 'CONNECTING' },
+    update: {
+      status: 'CONNECTING',
+      clientId: user.clientId || undefined,
+    },
     create: {
       name: instanceName,
       status: 'CONNECTING',
+      clientId: user.clientId || null,
+      createdById: user.id,
     },
   });
 

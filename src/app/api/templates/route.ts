@@ -3,12 +3,22 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSessionUser } from '@/lib/auth';
 import { withApi } from '@/lib/api-wrapper';
+import { isTenantScoped } from '@/lib/tenant';
 
 export const GET = withApi(async function () {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
 
+  const where: any = {};
+  if (isTenantScoped(user)) {
+    where.OR = [
+      { clientId: user.clientId },
+      { clientId: null }, // Global system templates
+    ];
+  }
+
   const templates = await db.messageTemplate.findMany({
+    where,
     orderBy: { updatedAt: 'desc' },
   });
 
@@ -45,6 +55,8 @@ export const POST = withApi(async function (req: NextRequest) {
       fileName: body.fileName || null,
       caption: body.caption || null,
       tags: body.tags ? (typeof body.tags === 'string' ? body.tags : JSON.stringify(body.tags)) : JSON.stringify(['Custom']),
+      clientId: user.clientId || null,
+      createdById: user.id,
     },
   });
 

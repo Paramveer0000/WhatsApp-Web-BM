@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { getSessionUser } from '@/lib/auth';
 import { normalizePhone } from '@/lib/phone';
 import { withApi } from '@/lib/api-wrapper';
+import { isTenantScoped } from '@/lib/tenant';
 
 export const GET = withApi(async function (req: NextRequest) {
   const user = await getSessionUser();
@@ -17,6 +18,10 @@ export const GET = withApi(async function (req: NextRequest) {
   const skip = (page - 1) * limit;
 
   const where: any = {};
+
+  if (isTenantScoped(user)) {
+    where.clientId = user.clientId;
+  }
 
   if (search) {
     where.OR = [
@@ -104,6 +109,8 @@ export const POST = withApi(async function (req: NextRequest) {
       customFields: customFieldsStr,
       tags: tagsStr || JSON.stringify(['manual']),
       optInStatus: true,
+      clientId: user.clientId || null,
+      createdById: user.id,
     },
   });
 

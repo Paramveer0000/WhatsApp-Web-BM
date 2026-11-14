@@ -16,13 +16,23 @@ import {
   RotationScope,
 } from '@/lib/rotation';
 import { assignTwoLayerDistribution, AllocationStrategy, InstanceAllocationInput } from '@/lib/distribution';
+import { isTenantScoped } from '@/lib/tenant';
 
 export async function GET() {
   try {
     const user = await getSessionUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+    const where: any = {};
+    if (isTenantScoped(user)) {
+      where.OR = [
+        { clientId: user.clientId },
+        { createdById: user.id },
+      ];
+    }
+
     const campaigns = await db.campaign.findMany({
+      where,
       include: {
         instances: { include: { instance: true } },
         variants: true,
@@ -154,12 +164,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'At least one WhatsApp instance must be assigned' }, { status: 400 });
     }
 
-    // Resolve instances by ID or Name
+    // Resolve instances by ID or Name (restricted to tenant's instances if client)
     const instanceRecords = await db.instance.findMany({
       where: {
-        OR: [
-          { id: { in: rawInstances } },
-          { name: { in: rawInstances } },
+        AND: [
+          isTenantScoped(user) ? { clientId: user.clientId } : {},
+          {
+            OR: [
+              { id: { in: rawInstances } },
+              { name: { in: rawInstances } },
+            ],
+          },
         ],
       },
     });

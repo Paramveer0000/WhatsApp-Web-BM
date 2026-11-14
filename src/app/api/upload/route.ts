@@ -109,6 +109,8 @@ export async function POST(req: NextRequest) {
           fileName: savedFileName,
           category: mediaType,
           tags: JSON.stringify([]),
+          clientId: user.clientId || null,
+          createdById: user.id,
         },
       });
     } catch (dbErr: any) {

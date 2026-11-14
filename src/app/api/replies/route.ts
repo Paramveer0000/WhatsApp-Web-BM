@@ -5,6 +5,7 @@ import { getSessionUser } from '@/lib/auth';
 import { EvolutionClient } from '@/lib/evolution';
 import { logger } from '@/lib/logger';
 import { withApi } from '@/lib/api-wrapper';
+import { isTenantScoped, getTenantAllowedInstanceNames } from '@/lib/tenant';
 
 const lastEvolutionSyncMap = new Map<string, number>();
 const AUTO_SYNC_COOLDOWN_MS = 12000; // 12 seconds cooldown between background Evolution API polls
@@ -40,17 +41,30 @@ export const GET = withApi(async function (req: NextRequest) {
   const instanceName = searchParams.get('instanceName');
   const syncParam = searchParams.get('sync') === 'true';
 
+  // Multi-Tenant Isolation: resolve instances owned by active tenant
+  const allowedInstances = await getTenantAllowedInstanceNames(user);
+  if (allowedInstances !== null && allowedInstances.length === 0) {
+    // Client has no WhatsApp accounts connected yet: cannot have any messages or conversations
+    return NextResponse.json({ success: true, conversations: [], messages: [] });
+  }
+
   // 1. Single Conversation Detail (legacy query param support)
   if (phone) {
     const cleanPhone = phone.replace(/[^\d]/g, '');
+    const phoneWhere: any = {
+      OR: [
+        { phone },
+        { phone: cleanPhone },
+        { phone: `+${cleanPhone}` }
+      ]
+    };
+
+    if (allowedInstances !== null) {
+      phoneWhere.instanceName = { in: allowedInstances };
+    }
+
     const incoming = await db.incomingMessage.findMany({
-      where: {
-        OR: [
-          { phone },
-          { phone: cleanPhone },
-          { phone: `+${cleanPhone}` }
-        ]
-      },
+      where: phoneWhere,
       orderBy: { receivedAt: 'asc' },
     });
 
@@ -73,13 +87,18 @@ export const GET = withApi(async function (req: NextRequest) {
   }
 
   // 2. Fetch conversations list
-  // If instanceName is provided, filter by that instance; otherwise fetch all
+  // If instanceName is provided, filter by that instance; otherwise fetch all allowed
   const whereClause: any = {};
   if (instanceName && instanceName !== 'ALL') {
+    if (allowedInstances !== null && !allowedInstances.includes(instanceName)) {
+      return NextResponse.json({ success: true, conversations: [] });
+    }
     whereClause.OR = [
       { instanceName },
       { instanceName: { startsWith: `${instanceName} (` } }
     ];
+  } else if (allowedInstances !== null) {
+    whereClause.instanceName = { in: allowedInstances };
   }
 
   // Check if we need to auto-sync for this instance from Evolution API
@@ -257,23 +276,37 @@ export const POST = withApi(async function (req: NextRequest) {
   const body = await req.json();
   const { phone, text, instanceName, clearOld, sync } = body;
 
+  const allowedInstances = await getTenantAllowedInstanceNames(user);
+  if (allowedInstances !== null) {
+    if (instanceName && !allowedInstances.includes(instanceName)) {
+      return NextResponse.json({ success: false, error: 'Unauthorized: Instance not owned by client' }, { status: 403 });
+    }
+  }
+
   // Option A: Clear old/disconnected chats
   if (clearOld) {
     let deletedCount = 0;
     if (instanceName && instanceName !== 'ALL') {
       const res = await db.incomingMessage.deleteMany({
         where: {
-          NOT: {
-            OR: [
-              { instanceName },
-              { instanceName: { startsWith: `${instanceName} (` } }
-            ]
-          }
+          AND: [
+            allowedInstances !== null ? { instanceName: { in: allowedInstances } } : {},
+            {
+              NOT: {
+                OR: [
+                  { instanceName },
+                  { instanceName: { startsWith: `${instanceName} (` } }
+                ]
+              }
+            }
+          ]
         }
       });
       deletedCount = res.count;
     } else {
-      const res = await db.incomingMessage.deleteMany({});
+      const res = await db.incomingMessage.deleteMany({
+        where: allowedInstances !== null ? { instanceName: { in: allowedInstances } } : {}
+      });
       deletedCount = res.count;
     }
     return NextResponse.json({ success: true, message: `Cleared ${deletedCount} old messages` });

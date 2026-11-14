@@ -115,6 +115,27 @@ export async function ensureDbSchema(): Promise<void> {
     await addColumnSafely('CampaignRecipient', 'evaluationStatus', "TEXT DEFAULT 'UNVERIFIED'");
     await addColumnSafely('CampaignRecipient', 'qualityScore', 'INTEGER DEFAULT 100');
 
+    // Multi-tenant database isolation columns
+    await addColumnSafely('Instance', 'clientId', 'TEXT');
+    await addColumnSafely('Instance', 'createdById', 'TEXT');
+    await addColumnSafely('Contact', 'clientId', 'TEXT');
+    await addColumnSafely('Contact', 'createdById', 'TEXT');
+    await addColumnSafely('ContactList', 'clientId', 'TEXT');
+    await addColumnSafely('ContactList', 'createdById', 'TEXT');
+    await addColumnSafely('IncomingMessage', 'clientId', 'TEXT');
+    await addColumnSafely('LeadDeal', 'clientId', 'TEXT');
+    await addColumnSafely('LeadDeal', 'createdById', 'TEXT');
+    await addColumnSafely('CrmTask', 'clientId', 'TEXT');
+    await addColumnSafely('CrmTask', 'createdById', 'TEXT');
+    await addColumnSafely('MediaAsset', 'clientId', 'TEXT');
+    await addColumnSafely('MediaAsset', 'createdById', 'TEXT');
+    await addColumnSafely('QuickReply', 'clientId', 'TEXT');
+    await addColumnSafely('QuickReply', 'createdById', 'TEXT');
+    await addColumnSafely('NumberWarmerSession', 'clientId', 'TEXT');
+    await addColumnSafely('Flow', 'clientId', 'TEXT');
+    await addColumnSafely('MessageTemplate', 'clientId', 'TEXT');
+    await addColumnSafely('MessageTemplate', 'createdById', 'TEXT');
+
     // 3. Seed default Quick Replies if table is empty
     try {
       const qrCount = await db.quickReply.count();

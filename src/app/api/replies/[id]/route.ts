@@ -5,6 +5,7 @@ import { getSessionUser } from '@/lib/auth';
 import { EvolutionClient } from '@/lib/evolution';
 import { logger } from '@/lib/logger';
 import { withApi } from '@/lib/api-wrapper';
+import { isTenantScoped, getTenantAllowedInstanceNames } from '@/lib/tenant';
 
 function extractMessageText(msgObj: any): string {
   if (!msgObj) return '';
@@ -35,33 +36,52 @@ export const GET = withApi(async function (
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
 
+  const allowedInstances = await getTenantAllowedInstanceNames(user);
+  if (allowedInstances !== null && allowedInstances.length === 0) {
+    return NextResponse.json({ success: true, messages: [] });
+  }
+
   const { searchParams } = new URL(req.url);
   const requestedInstance = searchParams.get('instanceName');
+  if (requestedInstance && allowedInstances !== null && !allowedInstances.includes(requestedInstance)) {
+    return NextResponse.json({ success: false, error: 'Forbidden instance' }, { status: 403 });
+  }
+
   const rawParam = decodeURIComponent(params.id || '');
   const cleanPhone = rawParam.replace(/[^\d]/g, '');
 
   // 1. Fetch Incoming Messages matching this phone
+  const incomingWhere: any = {
+    OR: [
+      { phone: rawParam },
+      { phone: cleanPhone },
+      { phone: `+${cleanPhone}` },
+      ...(cleanPhone ? [{ remoteJid: { contains: cleanPhone } }] : [])
+    ]
+  };
+  if (allowedInstances !== null) {
+    incomingWhere.instanceName = { in: allowedInstances };
+  }
+
   const incoming = await db.incomingMessage.findMany({
-    where: {
-      OR: [
-        { phone: rawParam },
-        { phone: cleanPhone },
-        { phone: `+${cleanPhone}` },
-        ...(cleanPhone ? [{ remoteJid: { contains: cleanPhone } }] : [])
-      ]
-    },
+    where: incomingWhere,
     orderBy: { receivedAt: 'asc' },
   });
 
   // 2. Fetch Campaign Outgoing Messages matching this phone
+  const recipientWhere: any = {
+    OR: [
+      { phone: rawParam },
+      { phone: cleanPhone },
+      { phone: `+${cleanPhone}` }
+    ]
+  };
+  if (allowedInstances !== null) {
+    recipientWhere.instanceUsed = { in: allowedInstances };
+  }
+
   const recipientHistory = await db.campaignRecipient.findMany({
-    where: {
-      OR: [
-        { phone: rawParam },
-        { phone: cleanPhone },
-        { phone: `+${cleanPhone}` }
-      ]
-    },
+    where: recipientWhere,
     select: {
       id: true,
       renderedMessage: true,
@@ -78,7 +98,10 @@ export const GET = withApi(async function (
     let targetInstanceName: string | undefined = requestedInstance || undefined;
     if (!targetInstanceName || targetInstanceName === 'ALL') {
       const openInstance = await db.instance.findFirst({
-        where: { status: 'OPEN' },
+        where: {
+          status: 'OPEN',
+          ...(allowedInstances !== null ? { name: { in: allowedInstances } } : {})
+        },
       });
       targetInstanceName = openInstance?.name;
     }

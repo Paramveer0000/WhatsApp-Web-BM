@@ -3,13 +3,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSessionUser } from '@/lib/auth';
 import { logger } from '@/lib/logger';
+import { isTenantScoped } from '@/lib/tenant';
 
 export async function GET(req: NextRequest) {
   try {
     const user = await getSessionUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+    const where: any = isTenantScoped(user) ? { clientId: user.clientId } : {};
+
     const lists = await db.contactList.findMany({
+      where,
       orderBy: { createdAt: 'desc' },
       include: {
         _count: {
@@ -43,6 +47,8 @@ export async function POST(req: NextRequest) {
       create: {
         name: body.name.trim(),
         description: body.description || null,
+        clientId: user.clientId || null,
+        createdById: user.id,
       },
     });
 

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { db, ensureDbSchema } from '@/lib/db';
 import { logger } from '@/lib/logger';
+import { isTenantScoped } from '@/lib/tenant';
 
 // GET /api/quick-replies - List quick replies with search & category filter
 export async function GET(req: NextRequest) {
@@ -17,6 +18,14 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get('search')?.trim();
 
     const where: any = {};
+
+    if (isTenantScoped(user)) {
+      where.OR = [
+        { clientId: user.clientId },
+        { clientId: null }, // Shared global templates
+      ];
+    }
+
     if (category && category !== 'ALL') {
       where.category = category;
     }
@@ -91,6 +100,8 @@ export async function POST(req: NextRequest) {
         content: String(content).trim(),
         category: category ? String(category).trim() : 'General',
         mediaUrl: mediaUrl ? String(mediaUrl).trim() : null,
+        clientId: user.clientId || null,
+        createdById: user.id,
       },
     });
 

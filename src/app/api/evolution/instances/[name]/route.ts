@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { EvolutionClient } from '@/lib/evolution';
 import { getSessionUser } from '@/lib/auth';
 import { logger } from '@/lib/logger';
+import { isTenantScoped } from '@/lib/tenant';
 
 export async function GET(req: NextRequest, { params }: { params: { name: string } }) {
   try {
@@ -11,6 +12,17 @@ export async function GET(req: NextRequest, { params }: { params: { name: string
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const instanceName = decodeURIComponent(params.name);
+
+    // Verify tenant ownership if client session
+    if (isTenantScoped(user)) {
+      const owned = await db.instance.findFirst({
+        where: { name: instanceName, clientId: user.clientId },
+      });
+      if (!owned) {
+        return NextResponse.json({ error: 'Instance not found or unauthorized' }, { status: 404 });
+      }
+    }
+
     const client = await EvolutionClient.fromDatabase();
 
     const fetchQr = req.nextUrl.searchParams.get('qr') === 'true';
@@ -73,9 +85,18 @@ export async function PUT(req: NextRequest, { params }: { params: { name: string
   try {
     const user = await getSessionUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    if (user.role !== 'ADMIN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     const instanceName = decodeURIComponent(params.name);
+
+    if (isTenantScoped(user)) {
+      const owned = await db.instance.findFirst({
+        where: { name: instanceName, clientId: user.clientId },
+      });
+      if (!owned) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    } else if (user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const body = await req.json();
     const action = body.action; // 'restart' | 'logout'
 
@@ -104,9 +125,18 @@ export async function DELETE(req: NextRequest, { params }: { params: { name: str
   try {
     const user = await getSessionUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    if (user.role !== 'ADMIN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     const instanceName = decodeURIComponent(params.name);
+
+    if (isTenantScoped(user)) {
+      const owned = await db.instance.findFirst({
+        where: { name: instanceName, clientId: user.clientId },
+      });
+      if (!owned) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    } else if (user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const client = await EvolutionClient.fromDatabase();
 
     try {

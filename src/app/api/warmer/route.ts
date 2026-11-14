@@ -4,6 +4,7 @@ import { getSessionUser } from '@/lib/auth';
 import { db, ensureDbSchema } from '@/lib/db';
 import { EvolutionClient } from '@/lib/evolution';
 import { logger } from '@/lib/logger';
+import { isTenantScoped, getTenantAllowedInstanceNames } from '@/lib/tenant';
 
 // GET /api/warmer - List sessions and available instances
 export async function GET() {
@@ -14,9 +15,11 @@ export async function GET() {
     await ensureDbSchema();
 
     const where: any = {};
-    if (user.role === 'CLIENT' && user.clientId) {
+    if (isTenantScoped(user)) {
       where.clientId = user.clientId;
     }
+
+    const allowedInstances = await getTenantAllowedInstanceNames(user);
 
     let instancesRaw: any[] = [];
     try {
@@ -29,12 +32,17 @@ export async function GET() {
       orderBy: [{ updatedAt: 'desc' }],
     });
 
-    const instances = (instancesRaw || []).map((i: any) => ({
-      name: i.name,
-      status: i.status || i.connectionStatus || 'close',
-      phone: i.ownerJid?.replace(/[^0-9]/g, '') || i.number || null,
-      profileName: i.profileName || i.name,
-    }));
+    const instances = (instancesRaw || [])
+      .filter((i: any) => {
+        if (allowedInstances === null) return true;
+        return allowedInstances.includes(i.name);
+      })
+      .map((i: any) => ({
+        name: i.name,
+        status: i.status || i.connectionStatus || 'close',
+        phone: i.ownerJid?.replace(/[^0-9]/g, '') || i.number || null,
+        profileName: i.profileName || i.name,
+      }));
 
     return NextResponse.json({
       success: true,
@@ -75,6 +83,13 @@ export async function POST(req: NextRequest) {
 
     if (instanceA === instanceB) {
       return NextResponse.json({ error: 'Instance A and Instance B must be different WhatsApp numbers' }, { status: 400 });
+    }
+
+    const allowedInstances = await getTenantAllowedInstanceNames(user);
+    if (allowedInstances !== null) {
+      if (!allowedInstances.includes(instanceA) || !allowedInstances.includes(instanceB)) {
+        return NextResponse.json({ error: 'You can only warm WhatsApp instances owned by your account' }, { status: 403 });
+      }
     }
 
     // Check if an existing session between these two instances exists

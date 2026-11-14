@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db, ensureDbSchema } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { getSessionUser } from '@/lib/auth';
+import { isTenantScoped } from '@/lib/tenant';
 
 const DEFAULT_SAMPLE_DEALS = [
   {
@@ -88,16 +89,20 @@ export async function GET(req: NextRequest) {
 
     await ensureDbSchema();
 
-    const dealsCount = await db.leadDeal.count();
+    const isClient = isTenantScoped(user);
+    const where: any = isClient ? { clientId: user.clientId } : {};
 
-    // Auto-seed sample deals if table is empty
-    if (dealsCount === 0) {
+    const dealsCount = await db.leadDeal.count({ where });
+
+    // Auto-seed sample deals only for platform admin when table is completely empty
+    if (!isClient && dealsCount === 0) {
       for (const deal of DEFAULT_SAMPLE_DEALS) {
-        await db.leadDeal.create({ data: deal });
+        await db.leadDeal.create({ data: { ...deal, clientId: null } });
       }
     }
 
     const deals = await db.leadDeal.findMany({
+      where,
       orderBy: { updatedAt: 'desc' },
     });
 
@@ -159,6 +164,8 @@ export async function POST(req: NextRequest) {
         notes,
         assignedTo,
         priority,
+        clientId: user.clientId || null,
+        createdById: user.id,
       },
     });
 
@@ -172,6 +179,8 @@ export async function POST(req: NextRequest) {
           name: contactName || null,
           source: 'CRM_LEAD',
           optInStatus: true,
+          clientId: user.clientId || null,
+          createdById: user.id,
         },
       }).catch(() => {});
     }

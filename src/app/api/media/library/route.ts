@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { db, ensureDbSchema } from '@/lib/db';
 import { logger } from '@/lib/logger';
+import { isTenantScoped } from '@/lib/tenant';
 import path from 'path';
 import fs from 'fs';
 
@@ -21,6 +22,10 @@ export async function GET(req: NextRequest) {
     const offset = parseInt(searchParams.get('offset') || '0', 10);
 
     const where: any = {};
+    if (isTenantScoped(user)) {
+      where.clientId = user.clientId;
+    }
+
     if (category && category !== 'all') {
       where.category = category;
     }
