@@ -23,8 +23,8 @@ async function main() {
 
   // 2. Initial Settings
   const defaultSettings = [
-    { key: 'EVOLUTION_API_URL', value: 'http://localhost:8080', isEncrypted: false },
-    { key: 'GLOBAL_API_KEY', value: '', isEncrypted: true },
+    { key: 'EVOLUTION_API_URL', value: process.env.EVOLUTION_API_URL || 'http://evolution:8080', isEncrypted: false },
+    { key: 'GLOBAL_API_KEY', value: process.env.GLOBAL_API_KEY || '9CD9DAF1-6D64-4E23-B722-FDA179D1E8F6', isEncrypted: false },
     { key: 'DEFAULT_COUNTRY_CODE', value: '91', isEncrypted: false },
     { key: 'MIN_DELAY_DEFAULT', value: '12', isEncrypted: false },
     { key: 'MAX_DELAY_DEFAULT', value: '25', isEncrypted: false },
@@ -34,11 +34,20 @@ async function main() {
   ];
 
   for (const s of defaultSettings) {
-    await prisma.setting.upsert({
-      where: { key: s.key },
-      update: {},
-      create: s,
-    });
+    const existing = await prisma.setting.findUnique({ where: { key: s.key } });
+    if (!existing) {
+      await prisma.setting.create({ data: s });
+    } else if (s.key === 'GLOBAL_API_KEY' && (!existing.value || existing.value.trim() === '')) {
+      await prisma.setting.update({
+        where: { key: s.key },
+        data: { value: s.value, isEncrypted: false },
+      });
+    } else if (s.key === 'EVOLUTION_API_URL' && (!existing.value || existing.value.includes('localhost') || existing.value.includes('127.0.0.1'))) {
+      await prisma.setting.update({
+        where: { key: s.key },
+        data: { value: s.value, isEncrypted: false },
+      });
+    }
   }
   console.log('Settings seeded.');
 

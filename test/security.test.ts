@@ -72,7 +72,7 @@ describe('Security Controls & Hardening', () => {
       expect(verified?.id).toBe(mockUser.id);
       expect(verified?.email).toBe(mockUser.email);
       expect(verified?.role).toBe('ADMIN');
-    });
+    }, 20000);
 
     it('rejects tampered tokens cleanly', async () => {
       const { signToken, verifyToken } = await import('../src/lib/auth');

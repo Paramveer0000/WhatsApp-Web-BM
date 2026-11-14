@@ -321,3 +321,4 @@ export function CrmTagsView({ onSelectTagForFilter }: CrmTagsViewProps) {
     </div>
   );
 }
+

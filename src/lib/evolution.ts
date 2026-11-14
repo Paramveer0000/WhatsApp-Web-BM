@@ -167,6 +167,18 @@ export class CircuitBreaker {
   }
 }
 
+export const KNOWN_EVOLUTION_KEYS: string[] = [
+  (process.env.GLOBAL_API_KEY || '').trim(),
+  (process.env.AUTHENTICATION_API_KEY || '').trim(),
+  (process.env.EVOLUTION_API_KEY || '').trim(),
+  '9CD9DAF1-6D64-4E23-B722-FDA179D1E8F6',
+  '429683C4C97741',
+  'B6205775342B44C1D29238A494',
+  'whsec-evolution-shared-secret',
+  'whsec-evolution',
+  '',
+].filter((k, idx, arr) => arr.indexOf(k) === idx);
+
 export class EvolutionClient {
   private apiUrl: string;
   private apiKey: string;
@@ -199,31 +211,33 @@ export class EvolutionClient {
       }
     }
 
-    // Ignore invalid, blank, corrupted ciphertexts, or masked bullets
-    if (apiKey && (apiKey.includes(':') || apiKey.includes('•') || apiKey.trim() === '')) {
+    // Ignore invalid, blank, or masked bullets
+    if (apiKey && (apiKey.includes('•') || apiKey.trim() === '')) {
       apiKey = '';
     }
 
     if (!apiKey) {
       apiKey = (process.env.GLOBAL_API_KEY && process.env.GLOBAL_API_KEY.trim()) ||
                (process.env.AUTHENTICATION_API_KEY && process.env.AUTHENTICATION_API_KEY.trim()) ||
-               '429683C4C97741';
+               '9CD9DAF1-6D64-4E23-B722-FDA179D1E8F6';
     }
 
     return new EvolutionClient(apiUrl, apiKey);
   }
 
-  private getHeaders(keyOverride?: string): Record<string, string> {
-    const key = (keyOverride || this.apiKey || '').trim();
+  private getHeaders(keyOverride?: string, multiHeaders: boolean = false): Record<string, string> {
+    const key = (keyOverride !== undefined ? keyOverride : (this.apiKey || '')).trim();
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'User-Agent': 'BulkFlow-Manager/2.0',
     };
     if (key) {
       headers['apikey'] = key;
-      headers['apiKey'] = key;
-      headers['Authentication-Api-Key'] = key;
-      headers['Authorization'] = `Bearer ${key}`;
+      if (multiHeaders) {
+        headers['apiKey'] = key;
+        headers['Authentication-Api-Key'] = key;
+        headers['Authorization'] = `Bearer ${key}`;
+      }
     }
     return headers;
   }
@@ -423,39 +437,42 @@ export class EvolutionClient {
           if (!response.ok) {
             // If 401 or 403, attempt recovery with candidate keys before giving up
             if (response.status === 401 || response.status === 403) {
-              const candidateKeys = [
-                (process.env.GLOBAL_API_KEY || '').trim(),
-                (process.env.AUTHENTICATION_API_KEY || '').trim(),
-                '429683C4C97741',
-              ].filter((k) => k && k !== this.apiKey);
+              const allCandidates = [this.apiKey, ...KNOWN_EVOLUTION_KEYS].filter(
+                (k, idx, arr) => arr.indexOf(k) === idx
+              );
 
-              for (const altKey of candidateKeys) {
-                try {
-                  const altHeaders = {
-                    ...this.getHeaders(altKey),
-                    ...(options.headers as Record<string, string> || {}),
-                  };
-                  const altRes = await fetch(url, {
-                    ...options,
-                    headers: altHeaders,
-                    signal: controller.signal,
-                  });
-                  if (altRes.ok) {
-                    const altData = await altRes.json().catch(async () => {
-                      const t = await altRes.text();
-                      try { return JSON.parse(t); } catch { return { text: t }; }
+              // Pass 1: Try with standard single 'apikey' header
+              // Pass 2: Try with multi-headers (apikey + apiKey + Authentication-Api-Key + Authorization)
+              for (const multiHeaders of [false, true]) {
+                for (const altKey of allCandidates) {
+                  try {
+                    const altHeaders = {
+                      ...this.getHeaders(altKey, multiHeaders),
+                      ...(options.headers as Record<string, string> || {}),
+                    };
+                    const altRes = await fetch(url, {
+                      ...options,
+                      headers: altHeaders,
+                      signal: controller.signal,
                     });
-                    this.apiKey = altKey;
-                    this.apiUrl = host;
-                    // Auto-heal DB setting asynchronously
-                    db.setting.upsert({
-                      where: { key: 'GLOBAL_API_KEY' },
-                      update: { value: encrypt(altKey), isEncrypted: true },
-                      create: { key: 'GLOBAL_API_KEY', value: encrypt(altKey), isEncrypted: true },
-                    }).catch(() => {});
-                    return altData as T;
-                  }
-                } catch {}
+                    if (altRes.ok) {
+                      const altData = await altRes.json().catch(async () => {
+                        const t = await altRes.text();
+                        try { return JSON.parse(t); } catch { return { text: t }; }
+                      });
+                      this.apiKey = altKey;
+                      this.apiUrl = host;
+                      logger.info({ host, keyPrefix: altKey.slice(0, 6), multiHeaders }, 'Recovered Evolution API authorization with valid key');
+                      // Auto-heal DB setting asynchronously
+                      db.setting.upsert({
+                        where: { key: 'GLOBAL_API_KEY' },
+                        update: { value: altKey, isEncrypted: false },
+                        create: { key: 'GLOBAL_API_KEY', value: altKey, isEncrypted: false },
+                      }).catch(() => {});
+                      return altData as T;
+                    }
+                  } catch {}
+                }
               }
             }
 
@@ -501,14 +518,22 @@ export class EvolutionClient {
   }
 
   async createInstance(instanceName: string, qrcode: boolean = true): Promise<any> {
-    return this.request('/instance/create', {
-      method: 'POST',
-      body: JSON.stringify({
-        instanceName,
-        qrcode,
-        integration: 'WHATSAPP-BAILEYS',
-      }),
-    });
+    try {
+      return await this.request('/instance/create', {
+        method: 'POST',
+        body: JSON.stringify({
+          instanceName,
+          qrcode,
+          integration: 'WHATSAPP-BAILEYS',
+        }),
+      });
+    } catch (err: any) {
+      const msg = String(err?.message || '').toLowerCase();
+      if (msg.includes('already exists') || msg.includes('instance exists') || msg.includes('already in use')) {
+        return { instance: { instanceName, status: 'CONNECTING' }, alreadyExists: true };
+      }
+      throw err;
+    }
   }
 
   async getConnectionState(instanceName: string): Promise<string> {

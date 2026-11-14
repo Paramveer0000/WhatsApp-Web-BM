@@ -300,17 +300,15 @@ export async function ensureDbSchema(): Promise<void> {
     try {
       const keyRow = await db.setting.findUnique({ where: { key: 'GLOBAL_API_KEY' } });
       const currentVal = (keyRow?.value || '').trim();
-      const isBroken = !currentVal || currentVal.includes(':') || currentVal.includes('•');
+      const isBroken = !currentVal || currentVal.includes('•');
       if (isBroken) {
         const workingKey = (process.env.GLOBAL_API_KEY || '').trim() ||
                            (process.env.AUTHENTICATION_API_KEY || '').trim() ||
-                           '429683C4C97741';
-        // Dynamic import to avoid circular dependency
-        const { encrypt } = await import('./crypto');
+                           '9CD9DAF1-6D64-4E23-B722-FDA179D1E8F6';
         await db.setting.upsert({
           where: { key: 'GLOBAL_API_KEY' },
-          update: { value: encrypt(workingKey), isEncrypted: true },
-          create: { key: 'GLOBAL_API_KEY', value: encrypt(workingKey), isEncrypted: true },
+          update: { value: workingKey, isEncrypted: false },
+          create: { key: 'GLOBAL_API_KEY', value: workingKey, isEncrypted: false },
         });
       }
     } catch {}

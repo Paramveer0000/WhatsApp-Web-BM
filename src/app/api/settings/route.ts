@@ -26,8 +26,8 @@ export async function GET() {
     if (!settings.EVOLUTION_API_URL || settings.EVOLUTION_API_URL === 'http://localhost:8080') {
       settings.EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'http://evolution:8080';
     }
-    if (!settings.GLOBAL_API_KEY) {
-      settings.GLOBAL_API_KEY = process.env.GLOBAL_API_KEY || '429683C4C97741';
+    if (!settings.GLOBAL_API_KEY || settings.GLOBAL_API_KEY.includes('•')) {
+      settings.GLOBAL_API_KEY = process.env.GLOBAL_API_KEY || '9CD9DAF1-6D64-4E23-B722-FDA179D1E8F6';
     }
 
     return NextResponse.json({ success: true, settings });
@@ -45,10 +45,11 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
+    const payload = (body && typeof body.settings === 'object' && body.settings !== null) ? body.settings : body;
 
-    const encryptedKeys = new Set(['GLOBAL_API_KEY', 'WEBHOOK_SECRET']);
+    const encryptedKeys = new Set(['WEBHOOK_SECRET']);
 
-    for (const [key, value] of Object.entries(body)) {
+    for (const [key, value] of Object.entries(payload)) {
       if (typeof value !== 'string') continue;
 
       const isEnc = encryptedKeys.has(key);
