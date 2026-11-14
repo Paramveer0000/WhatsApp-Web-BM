@@ -62,10 +62,12 @@ export interface InstanceWorkloadStats {
 export interface SystemLoadMetrics {
   timestamp: string;
   eventLoopHealth: 'OPTIMAL' | 'DEGRADED' | 'HIGH_LOAD';
+  eventLoopLagMs?: number;
   memory: {
     rssMb: number;
     heapUsedMb: number;
     heapTotalMb: number;
+    heapLimitMb?: number;
     utilizationPercent: number;
   };
   queue: {
@@ -502,29 +504,37 @@ export function SystemLogsConsole({ connectedInstancesCount = 0 }: SystemLogsCon
             <div className="flex items-center justify-between text-[11px] text-slate-400">
               <span className="font-mono flex items-center gap-1.5">
                 <Activity className="w-3.5 h-3.5 text-emerald-400" />
-                Event Loop Health
+                Event Loop & Health
               </span>
               <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold ${
-                loadMetrics?.eventLoopHealth === 'OPTIMAL' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'
+                loadMetrics?.eventLoopHealth === 'OPTIMAL'
+                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                  : loadMetrics?.eventLoopHealth === 'DEGRADED'
+                  ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                  : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
               }`}>
                 {loadMetrics?.eventLoopHealth || 'OPTIMAL'}
               </span>
             </div>
             <div className="mt-2 flex items-baseline justify-between">
               <span className="text-lg font-bold font-mono text-white">
-                {loadMetrics?.memory?.utilizationPercent || 0}%
+                {loadMetrics?.memory?.utilizationPercent || 2}%
               </span>
-              <span className="text-[11px] font-mono text-slate-400">Heap Utilization</span>
+              <span className="text-[11px] font-mono text-slate-400">
+                Lag: <span className="text-emerald-400 font-bold">{loadMetrics?.eventLoopLagMs ?? 0}ms</span>
+              </span>
             </div>
             <div className="w-full bg-slate-800 rounded-full h-1.5 mt-2 overflow-hidden">
               <div
-                className="bg-emerald-400 h-1.5 rounded-full transition-all duration-500"
-                style={{ width: `${Math.min(100, loadMetrics?.memory?.utilizationPercent || 20)}%` }}
+                className={`h-1.5 rounded-full transition-all duration-500 ${
+                  (loadMetrics?.memory?.utilizationPercent || 2) > 85 ? 'bg-rose-500' : (loadMetrics?.memory?.utilizationPercent || 2) > 70 ? 'bg-amber-400' : 'bg-emerald-400'
+                }`}
+                style={{ width: `${Math.min(100, Math.max(3, loadMetrics?.memory?.utilizationPercent || 2))}%` }}
               />
             </div>
             <div className="mt-2 text-[10px] font-mono text-slate-400 flex justify-between">
               <span>RSS: {loadMetrics?.memory?.rssMb || 0} MB</span>
-              <span>Used: {loadMetrics?.memory?.heapUsedMb || 0} MB</span>
+              <span>Heap: {loadMetrics?.memory?.heapUsedMb || 0} / {loadMetrics?.memory?.heapLimitMb || 2048} MB</span>
             </div>
           </div>
 

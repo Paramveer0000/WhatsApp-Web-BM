@@ -1,6 +1,8 @@
 import { db } from '../db';
 import { logger } from '../logger';
 import { CircuitBreaker } from '../evolution';
+import v8 from 'node:v8';
+import { monitorEventLoopDelay } from 'node:perf_hooks';
 
 export interface TenantLoadStats {
   tenantId: string;
@@ -32,10 +34,12 @@ export interface InstanceWorkloadStats {
 export interface SystemLoadMetrics {
   timestamp: string;
   eventLoopHealth: 'OPTIMAL' | 'DEGRADED' | 'HIGH_LOAD';
+  eventLoopLagMs: number;
   memory: {
     rssMb: number;
     heapUsedMb: number;
     heapTotalMb: number;
+    heapLimitMb: number;
     utilizationPercent: number;
   };
   queue: {
@@ -54,6 +58,12 @@ export interface SystemLoadMetrics {
 // -------------------------------------------------------------
 // In-Memory Rolling Metrics & Locks
 // -------------------------------------------------------------
+let loopMonitor: any = null;
+try {
+  loopMonitor = monitorEventLoopDelay({ resolution: 20 });
+  loopMonitor.enable();
+} catch {}
+
 const rollingDispatches: number[] = []; // Timestamps of sent messages
 const instanceLocks = new Map<string, {
   locked: boolean;
@@ -321,18 +331,44 @@ export async function getSystemLoadMetrics(): Promise<SystemLoadMetrics> {
     };
   });
 
-  // 6. Memory & Event Loop
-  const heapUtil = Math.round((memory.heapUsed / memory.heapTotal) * 100);
-  const eventLoopHealth: SystemLoadMetrics['eventLoopHealth'] = heapUtil > 85 ? 'HIGH_LOAD' : (heapUtil > 70 ? 'DEGRADED' : 'OPTIMAL');
+  // 6. Memory & Event Loop Latency
+  let eventLoopLagMs = 0;
+  if (loopMonitor) {
+    const rawMean = loopMonitor.mean || 0;
+    // loopMonitor.mean is recorded in nanoseconds
+    eventLoopLagMs = Math.max(0, Math.round((rawMean / 1_000_000) * 10) / 10);
+    if (loopMonitor.reset) loopMonitor.reset();
+  }
+
+  const heapStats = typeof v8.getHeapStatistics === 'function' ? v8.getHeapStatistics() : null;
+  const heapLimitMb = heapStats ? Math.round(heapStats.heap_size_limit / (1024 * 1024)) : 2048;
+  const heapUsedMb = Math.round((memory.heapUsed / (1024 * 1024)) * 10) / 10;
+  const heapTotalMb = Math.round((memory.heapTotal / (1024 * 1024)) * 10) / 10;
+  const rssMb = Math.round((memory.rss / (1024 * 1024)) * 10) / 10;
+
+  // Real heap capacity utilization against V8 max heap limit (e.g. 2+ GB container limit)
+  const maxCapacityBytes = heapStats?.heap_size_limit || (2048 * 1024 * 1024);
+  const utilizationPercent = Math.min(100, Math.max(1, Math.round((memory.heapUsed / maxCapacityBytes) * 100)));
+
+  // Event loop health evaluation:
+  // Event loop is considered degraded only if lag > 75ms or memory utilization > 85%
+  let eventLoopHealth: SystemLoadMetrics['eventLoopHealth'] = 'OPTIMAL';
+  if (eventLoopLagMs > 200 || utilizationPercent > 90) {
+    eventLoopHealth = 'HIGH_LOAD';
+  } else if (eventLoopLagMs > 75 || utilizationPercent > 80) {
+    eventLoopHealth = 'DEGRADED';
+  }
 
   return {
     timestamp: new Date().toISOString(),
     eventLoopHealth,
+    eventLoopLagMs,
     memory: {
-      rssMb: Math.round((memory.rss / (1024 * 1024)) * 10) / 10,
-      heapUsedMb: Math.round((memory.heapUsed / (1024 * 1024)) * 10) / 10,
-      heapTotalMb: Math.round((memory.heapTotal / (1024 * 1024)) * 10) / 10,
-      utilizationPercent: heapUtil,
+      rssMb,
+      heapUsedMb,
+      heapTotalMb,
+      heapLimitMb,
+      utilizationPercent,
     },
     queue: {
       dispatcherState: activeCampaigns.some((c) => c.status === 'RUNNING') ? 'ROUND_ROBIN_ACTIVE' : 'IDLE',
@@ -347,3 +383,4 @@ export async function getSystemLoadMetrics(): Promise<SystemLoadMetrics> {
     instances: instanceStatsList,
   };
 }
+
