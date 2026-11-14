@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db, ensureDbSchema } from '@/lib/db';
 import { recordSystemLog } from '@/lib/logger';
 import { getSessionUser } from '@/lib/auth';
+import { getSystemLoadMetrics } from '@/lib/queue/tenant-queue';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,7 +35,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Query logs and counts in parallel
-    const [logs, totalLogs, errorCount, warnCount, infoCount, heartbeat] = await Promise.all([
+    const [logs, totalLogs, errorCount, warnCount, infoCount, heartbeat, loadMetrics] = await Promise.all([
       db.systemLog.findMany({
         where: whereClause,
         orderBy: { createdAt: 'desc' },
@@ -47,6 +48,7 @@ export async function GET(req: NextRequest) {
       db.workerHeartbeat.findUnique({
         where: { id: 'default' },
       }),
+      getSystemLoadMetrics().catch(() => null),
     ]);
 
     // Calculate worker online status (online if heartbeat reported within last 20 seconds)
@@ -85,6 +87,7 @@ export async function GET(req: NextRequest) {
         warnCount,
         infoCount,
       },
+      loadMetrics: loadMetrics || null,
       system: {
         database: 'ONLINE',
         serverTime: new Date().toISOString(),

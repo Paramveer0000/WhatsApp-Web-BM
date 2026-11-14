@@ -21,7 +21,65 @@ import {
   Activity,
   ExternalLink,
   Sparkles,
+  Users,
+  Layers,
+  Zap,
+  Gauge,
+  ShieldCheck,
+  ArrowRightLeft,
+  Radio,
+  Clock,
+  ShieldAlert,
 } from 'lucide-react';
+
+export interface TenantLoadStats {
+  tenantId: string;
+  tenantName: string;
+  planName: string;
+  activeCampaignsCount: number;
+  activeCampaignNames: string[];
+  pendingRecipients: number;
+  inFlight: number;
+  sentToday: number;
+  sentLastHour: number;
+  activeInstances: string[];
+  status: 'ACTIVE' | 'IDLE' | 'THROTTLED' | 'WAITING_INSTANCE' | 'WINDOW_SLEEP';
+  fairShareWeight: number;
+}
+
+export interface InstanceWorkloadStats {
+  instanceName: string;
+  phone?: string | null;
+  status: 'TRANSMITTING' | 'PACING' | 'IDLE' | 'CIRCUIT_OPEN' | 'DAILY_CAP';
+  currentTenantId?: string | null;
+  currentCampaignId?: string | null;
+  todaySent: number;
+  dailyCap: number;
+  utilizationPercent: number;
+  lastTransmissionAt?: string | null;
+}
+
+export interface SystemLoadMetrics {
+  timestamp: string;
+  eventLoopHealth: 'OPTIMAL' | 'DEGRADED' | 'HIGH_LOAD';
+  memory: {
+    rssMb: number;
+    heapUsedMb: number;
+    heapTotalMb: number;
+    utilizationPercent: number;
+  };
+  queue: {
+    dispatcherState: 'ROUND_ROBIN_ACTIVE' | 'IDLE';
+    totalQueuedRecipients: number;
+    totalInFlight: number;
+    activeTenantsCount: number;
+    activeCampaignsCount: number;
+    messagesPerMinute: number;
+    messagesLastHour: number;
+  };
+  tenants: TenantLoadStats[];
+  instances: InstanceWorkloadStats[];
+}
 
 interface SystemLogEntry {
   id: string;
@@ -77,6 +135,7 @@ export function SystemLogsConsole({ connectedInstancesCount = 0 }: SystemLogsCon
   const [clearing, setClearing] = useState(false);
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
   const [pingStatus, setPingStatus] = useState<string | null>(null);
+  const [loadMetrics, setLoadMetrics] = useState<SystemLoadMetrics | null>(null);
 
   const fetchLogs = useCallback(async (showLoading = false) => {
     if (showLoading) setIsLoading(true);
@@ -95,6 +154,7 @@ export function SystemLogsConsole({ connectedInstancesCount = 0 }: SystemLogsCon
         setLogs(data.logs || []);
         if (data.worker) setWorker(data.worker);
         if (data.stats) setStats(data.stats);
+        if (data.loadMetrics) setLoadMetrics(data.loadMetrics);
       }
     } catch (err: any) {
       console.error('Failed to load system logs:', err);
@@ -397,7 +457,340 @@ export function SystemLogsConsole({ connectedInstancesCount = 0 }: SystemLogsCon
         </div>
       </div>
 
-      {/* 3. Live Console Card */}
+      {/* 3. Multi-Tenant Broadcast Queue & Engine Load Distribution Monitor */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden p-5 space-y-5">
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-4 border-b border-slate-800">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-blue-600/10 border border-blue-500/20 text-blue-400">
+                <Layers className="w-5 h-5 text-blue-400" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <span>Multi-Tenant Broadcast Queue & System Load Distribution</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold border ${
+                    loadMetrics?.queue?.dispatcherState === 'ROUND_ROBIN_ACTIVE'
+                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 animate-pulse'
+                      : 'bg-slate-800 text-slate-400 border-slate-700'
+                  }`}>
+                    {loadMetrics?.queue?.dispatcherState === 'ROUND_ROBIN_ACTIVE' ? 'ROUND-ROBIN DISPATCHING' : 'IDLE QUEUE'}
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Fair-share round-robin isolation, per-tenant concurrency throttling (max 5 in-flight), and zero-collision instance locking.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 text-xs font-mono">
+            <div className="bg-slate-950/70 border border-slate-800 px-3 py-1.5 rounded-xl flex items-center gap-2 text-slate-300">
+              <Zap className="w-3.5 h-3.5 text-amber-400" />
+              <span>Velocity:</span>
+              <span className="text-emerald-400 font-bold">{loadMetrics?.queue?.messagesPerMinute || 0} MPM</span>
+              <span className="text-slate-500">|</span>
+              <span className="text-slate-300">{loadMetrics?.queue?.messagesLastHour || 0} MPH</span>
+            </div>
+          </div>
+        </div>
+
+        {/* 4 Load Metric Widgets */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* Card 1: Event Loop & Health */}
+          <div className="bg-slate-950/50 border border-slate-800/80 rounded-xl p-3.5">
+            <div className="flex items-center justify-between text-[11px] text-slate-400">
+              <span className="font-mono flex items-center gap-1.5">
+                <Activity className="w-3.5 h-3.5 text-emerald-400" />
+                Event Loop Health
+              </span>
+              <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold ${
+                loadMetrics?.eventLoopHealth === 'OPTIMAL' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'
+              }`}>
+                {loadMetrics?.eventLoopHealth || 'OPTIMAL'}
+              </span>
+            </div>
+            <div className="mt-2 flex items-baseline justify-between">
+              <span className="text-lg font-bold font-mono text-white">
+                {loadMetrics?.memory?.utilizationPercent || 0}%
+              </span>
+              <span className="text-[11px] font-mono text-slate-400">Heap Utilization</span>
+            </div>
+            <div className="w-full bg-slate-800 rounded-full h-1.5 mt-2 overflow-hidden">
+              <div
+                className="bg-emerald-400 h-1.5 rounded-full transition-all duration-500"
+                style={{ width: `${Math.min(100, loadMetrics?.memory?.utilizationPercent || 20)}%` }}
+              />
+            </div>
+            <div className="mt-2 text-[10px] font-mono text-slate-400 flex justify-between">
+              <span>RSS: {loadMetrics?.memory?.rssMb || 0} MB</span>
+              <span>Used: {loadMetrics?.memory?.heapUsedMb || 0} MB</span>
+            </div>
+          </div>
+
+          {/* Card 2: Queued Backlog */}
+          <div className="bg-slate-950/50 border border-slate-800/80 rounded-xl p-3.5">
+            <div className="flex items-center justify-between text-[11px] text-slate-400">
+              <span className="font-mono flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-sky-400" />
+                Global Backlog Depth
+              </span>
+              <span className="text-[10px] font-mono text-slate-300">Recipients</span>
+            </div>
+            <div className="mt-2 flex items-baseline justify-between">
+              <span className="text-lg font-bold font-mono text-sky-400">
+                {loadMetrics?.queue?.totalQueuedRecipients || 0}
+              </span>
+              <span className="text-[11px] font-mono text-slate-400">Pending Broadcast</span>
+            </div>
+            <div className="mt-3 text-[10px] font-mono text-slate-400 flex items-center justify-between">
+              <span>Active Broadcasts:</span>
+              <span className="text-white font-bold">{loadMetrics?.queue?.activeCampaignsCount || 0} campaigns</span>
+            </div>
+          </div>
+
+          {/* Card 3: In-Flight Concurrency */}
+          <div className="bg-slate-950/50 border border-slate-800/80 rounded-xl p-3.5">
+            <div className="flex items-center justify-between text-[11px] text-slate-400">
+              <span className="font-mono flex items-center gap-1.5">
+                <ArrowRightLeft className="w-3.5 h-3.5 text-indigo-400" />
+                In-Flight Concurrency
+              </span>
+              <span className="text-[10px] font-mono text-indigo-400">Fair-Share</span>
+            </div>
+            <div className="mt-2 flex items-baseline justify-between">
+              <span className="text-lg font-bold font-mono text-indigo-400">
+                {loadMetrics?.queue?.totalInFlight || 0}
+              </span>
+              <span className="text-[11px] font-mono text-slate-400">Active Transmissions</span>
+            </div>
+            <div className="mt-3 text-[10px] font-mono text-slate-400 flex items-center justify-between">
+              <span>Per-Tenant Throttle:</span>
+              <span className="text-white font-bold">Max 5 in-flight</span>
+            </div>
+          </div>
+
+          {/* Card 4: Multi-Tenant Pool */}
+          <div className="bg-slate-950/50 border border-slate-800/80 rounded-xl p-3.5">
+            <div className="flex items-center justify-between text-[11px] text-slate-400">
+              <span className="font-mono flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5 text-emerald-400" />
+                Tenant Isolation Pool
+              </span>
+              <span className="text-[10px] font-mono text-emerald-400">Multi-Client</span>
+            </div>
+            <div className="mt-2 flex items-baseline justify-between">
+              <span className="text-lg font-bold font-mono text-emerald-400">
+                {loadMetrics?.queue?.activeTenantsCount || 0}
+              </span>
+              <span className="text-[11px] font-mono text-slate-400">Broadcasting Now</span>
+            </div>
+            <div className="mt-3 text-[10px] font-mono text-slate-400 flex items-center justify-between">
+              <span>Instance Collision Lock:</span>
+              <span className="text-emerald-400 font-bold">Guaranteed</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Tenant Workload Queue Breakdown Table */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-xs font-semibold text-slate-300">
+            <span className="flex items-center gap-2">
+              <Users className="w-4 h-4 text-sky-400" />
+              <span>Tenant Queue Distribution & Workload Allocation</span>
+            </span>
+            <span className="text-[11px] text-slate-400 font-mono font-normal">
+              {(loadMetrics?.tenants || []).length} registered tenant environment(s)
+            </span>
+          </div>
+
+          <div className="bg-slate-950/70 border border-slate-800 rounded-xl overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-slate-800 text-[10px] font-mono text-slate-400 bg-slate-900/50 uppercase tracking-wider">
+                  <th className="py-2.5 px-3">Tenant & Plan</th>
+                  <th className="py-2.5 px-3">Active Campaigns</th>
+                  <th className="py-2.5 px-3">Queue Depth</th>
+                  <th className="py-2.5 px-3">In-Flight / Cap</th>
+                  <th className="py-2.5 px-3">Assigned Instances</th>
+                  <th className="py-2.5 px-3">Fair-Share</th>
+                  <th className="py-2.5 px-3 text-right">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60 font-mono">
+                {(!loadMetrics?.tenants || loadMetrics.tenants.length === 0) ? (
+                  <tr>
+                    <td colSpan={7} className="py-4 text-center text-slate-500 text-xs">
+                      No active tenant queues detected. Platform is standing by.
+                    </td>
+                  </tr>
+                ) : (
+                  loadMetrics.tenants.map((t) => (
+                    <tr key={t.tenantId} className="hover:bg-slate-900/40 transition">
+                      <td className="py-2.5 px-3">
+                        <div className="font-semibold text-white font-sans text-xs">{t.tenantName}</div>
+                        <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5 mt-0.5">
+                          <span className="px-1.5 py-0.2 bg-slate-800 text-slate-300 rounded text-[9px]">{t.planName}</span>
+                          <span className="text-slate-500">ID: {t.tenantId.slice(0, 8)}</span>
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-3">
+                        {t.activeCampaignNames.length === 0 ? (
+                          <span className="text-slate-500">None</span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            {t.activeCampaignNames.slice(0, 2).map((name, i) => (
+                              <span key={i} className="px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-300 text-[10px]">
+                                {name}
+                              </span>
+                            ))}
+                            {t.activeCampaignNames.length > 2 && (
+                              <span className="text-[10px] text-slate-400 font-bold">+{t.activeCampaignNames.length - 2} more</span>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span className={`font-bold ${t.pendingRecipients > 0 ? 'text-sky-400' : 'text-slate-500'}`}>
+                          {t.pendingRecipients}
+                        </span>
+                        <span className="text-slate-500 text-[10px] ml-1">queued</span>
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <div className="flex items-center gap-2">
+                          <span className={`font-bold ${t.inFlight > 0 ? 'text-indigo-400' : 'text-slate-500'}`}>
+                            {t.inFlight} / 5
+                          </span>
+                          <div className="w-12 bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                            <div
+                              className="bg-indigo-400 h-1.5 rounded-full"
+                              style={{ width: `${Math.min(100, (t.inFlight / 5) * 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-3">
+                        {t.activeInstances.length === 0 ? (
+                          <span className="text-slate-500">Auto-pool</span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            {t.activeInstances.map((inst, i) => (
+                              <span key={i} className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px]">
+                                {inst}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-300">
+                        <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px]">
+                          {t.fairShareWeight.toFixed(1)}x Weight
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 text-right">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          t.status === 'ACTIVE'
+                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                            : t.status === 'THROTTLED'
+                            ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                            : t.status === 'WAITING_INSTANCE'
+                            ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                            : 'bg-slate-800 text-slate-400'
+                        }`}>
+                          {t.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* WhatsApp Instances Workload & Collision Lock Monitor */}
+        <div className="space-y-2 pt-2 border-t border-slate-800/80">
+          <div className="flex items-center justify-between text-xs font-semibold text-slate-300">
+            <span className="flex items-center gap-2">
+              <Radio className="w-4 h-4 text-emerald-400" />
+              <span>WhatsApp Instance Workload & Anti-Collision Locks</span>
+            </span>
+            <span className="text-[11px] text-slate-400 font-mono font-normal">
+              {(loadMetrics?.instances || []).length} instance account(s) monitored
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {(!loadMetrics?.instances || loadMetrics.instances.length === 0) ? (
+              <div className="col-span-3 py-4 text-center text-slate-500 text-xs font-mono bg-slate-950/50 rounded-xl border border-slate-800">
+                No instances connected. Create and link WhatsApp accounts in the Instances tab.
+              </div>
+            ) : (
+              loadMetrics.instances.map((inst) => {
+                const isTransmitting = inst.status === 'TRANSMITTING';
+                const isPacing = inst.status === 'PACING';
+                const isDailyCap = inst.status === 'DAILY_CAP';
+                const isCircuit = inst.status === 'CIRCUIT_OPEN';
+
+                return (
+                  <div key={inst.instanceName} className="bg-slate-950/70 border border-slate-800 rounded-xl p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full ${
+                          isTransmitting ? 'bg-emerald-400 animate-ping' : isPacing ? 'bg-sky-400' : isDailyCap ? 'bg-amber-400' : isCircuit ? 'bg-rose-400' : 'bg-slate-500'
+                        }`} />
+                        <span className="font-mono font-bold text-white text-xs">{inst.instanceName}</span>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold ${
+                        isTransmitting
+                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                          : isPacing
+                          ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20'
+                          : isDailyCap
+                          ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                          : isCircuit
+                          ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                          : 'bg-slate-800 text-slate-400'
+                      }`}>
+                        {inst.status}
+                      </span>
+                    </div>
+
+                    <div className="text-[11px] font-mono text-slate-400 flex items-center justify-between">
+                      <span>Phone: <span className="text-slate-200">{inst.phone || 'Connected'}</span></span>
+                      <span>Lock: <span className={inst.currentTenantId ? 'text-amber-400 font-semibold' : 'text-emerald-400'}>
+                        {inst.currentTenantId ? 'EXCLUSIVE' : 'AVAILABLE'}
+                      </span></span>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 mb-1">
+                        <span>Daily Cap: {inst.todaySent} / {inst.dailyCap}</span>
+                        <span>{inst.utilizationPercent}%</span>
+                      </div>
+                      <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                        <div
+                          className={`h-1.5 rounded-full transition-all duration-300 ${
+                            inst.utilizationPercent > 90 ? 'bg-rose-500' : inst.utilizationPercent > 70 ? 'bg-amber-400' : 'bg-emerald-400'
+                          }`}
+                          style={{ width: `${Math.min(100, inst.utilizationPercent)}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="text-[10px] font-mono text-slate-500 pt-1 border-t border-slate-800/60 flex items-center justify-between">
+                      <span>Tenant: <span className="text-slate-300">{inst.currentTenantId || 'None'}</span></span>
+                      <span>Campaign: <span className="text-slate-300">{inst.currentCampaignId ? inst.currentCampaignId.slice(0, 8) : 'Idle'}</span></span>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 4. Live Console Card */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden">
         {/* Terminal Title Bar */}
         <div className="bg-slate-950 border-b border-slate-800 px-4 py-3 flex flex-wrap items-center justify-between gap-3">

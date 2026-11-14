@@ -395,6 +395,7 @@ export async function POST(req: NextRequest) {
         consentConfirmedAt: new Date(),
         scheduledAt,
         createdById: user.id,
+        clientId: user.clientId || null,
       },
     });
 

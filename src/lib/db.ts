@@ -105,6 +105,7 @@ export async function ensureDbSchema(): Promise<void> {
     await addColumnSafely('Campaign', 'shuffleAudience', 'INTEGER DEFAULT 0');
     await addColumnSafely('Campaign', 'shuffleSeed', 'INTEGER');
     await addColumnSafely('Campaign', 'avoidRepeatContent', 'INTEGER DEFAULT 1');
+    await addColumnSafely('Campaign', 'clientId', 'TEXT');
 
     await addColumnSafely('CampaignRecipient', 'sendingAt', 'DATETIME');
     await addColumnSafely('CampaignRecipient', 'rotationIndex', 'INTEGER');

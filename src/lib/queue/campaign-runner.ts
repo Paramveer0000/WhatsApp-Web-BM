@@ -20,6 +20,12 @@ import {
   calculatePacingDecision,
   logGuardrailEvent,
 } from '../guardrails';
+import {
+  acquireInstanceLock,
+  releaseInstanceLock,
+  recordDispatchTelemetry,
+  trackTenantInFlight,
+} from './tenant-queue';
 
 export class CampaignRunner {
   private activeCampaigns = new Set<string>();
@@ -146,6 +152,9 @@ export class CampaignRunner {
     this.activeCampaigns.add(campaignId);
     this.cancelFlags.set(campaignId, false);
     this.pauseFlags.set(campaignId, false);
+
+    const tenantId = (campaign as any).clientId || campaign.createdById || 'default';
+    trackTenantInFlight(tenantId, 1);
 
     await db.campaign.update({
       where: { id: campaignId },
@@ -359,6 +368,22 @@ export class CampaignRunner {
         }
         instanceIndex++;
 
+        // Multi-tenant exclusive instance lock: prevent collisions when multiple tenants/campaigns run concurrently
+        let lockAcquired = acquireInstanceLock(activeInstance.name, campaignId, tenantId, 25000);
+        if (!lockAcquired) {
+          const alternate = healthyInstances.find(
+            (inst) => inst.name !== activeInstance.name && acquireInstanceLock(inst.name, campaignId, tenantId, 25000)
+          );
+          if (alternate) {
+            activeInstance = alternate;
+            lockAcquired = true;
+          } else {
+            // All assigned instances are temporarily transmitting; yield for fair-share round-robin
+            await new Promise((r) => setTimeout(r, 1500));
+            continue;
+          }
+        }
+
         // 4. Daily Cap & Counter Check (local timezone)
         const localDate = DateTime.now().setZone(campaign.timezone).toFormat('yyyy-MM-dd');
         const effectiveCap = campaign.warmUpMode
@@ -511,6 +536,7 @@ export class CampaignRunner {
 
           sendSuccess = true;
           messageId = dispatchRes?.key?.id || dispatchRes?.id || `MSG_${Date.now()}`;
+          recordDispatchTelemetry(activeInstance.name, campaignId, tenantId);
           CircuitBreaker.recordSuccess(activeInstance.name);
           sendDurationHistogram.observe({ instance: activeInstance.name, result: 'success' }, (Date.now() - startTime) / 1000);
         } catch (err: any) {
@@ -759,6 +785,7 @@ export class CampaignRunner {
         const delaySecs = Math.max(1, Math.round(pacingDecision.delayMs / 1000));
         eventBus.emitJitter(campaignId, delaySecs, delaySecs);
         await new Promise((r) => setTimeout(r, pacingDecision.delayMs));
+        releaseInstanceLock(activeInstance.name, campaignId);
 
         // Update queue depth gauge
         const remainingQueued = await db.campaignRecipient.count({
@@ -769,6 +796,12 @@ export class CampaignRunner {
         } catch {}
       }
     } finally {
+      trackTenantInFlight(tenantId, -1);
+      for (const ci of campaign?.instances || []) {
+        if (ci.instance?.name) {
+          releaseInstanceLock(ci.instance.name, campaignId);
+        }
+      }
       this.activeCampaigns.delete(campaignId);
       this.cancelFlags.delete(campaignId);
       this.pauseFlags.delete(campaignId);
