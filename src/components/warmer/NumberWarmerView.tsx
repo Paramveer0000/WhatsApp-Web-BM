@@ -40,6 +40,7 @@ interface WarmerLog {
   messageB: string;
   delaySeconds: number;
   status: 'DELIVERED' | 'FAILED';
+  source?: string;
   error?: string;
 }
 
@@ -76,6 +77,16 @@ export function NumberWarmerView() {
   const [minDelay, setMinDelay] = useState(45);
   const [maxDelay, setMaxDelay] = useState(90);
   const [useAi, setUseAi] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState('');
+
+  // Preview Dynamic Dialogue State
+  const [previewing, setPreviewing] = useState(false);
+  const [previewPair, setPreviewPair] = useState<{
+    messageA: string;
+    messageB: string;
+    topicTitle: string;
+    source: string;
+  } | null>(null);
 
   // Parse Live Logs
   const liveLogs: WarmerLog[] = React.useMemo(() => {
@@ -105,6 +116,7 @@ export function NumberWarmerView() {
         setMinDelay(active.minDelaySeconds);
         setMaxDelay(active.maxDelaySeconds);
         setUseAi(active.useAi);
+        setAiPrompt(active.aiPrompt || '');
       } else if (data.instances && data.instances.length >= 2) {
         setInstanceA(data.instances[0].name);
         setInstanceB(data.instances[1].name);
@@ -148,6 +160,7 @@ export function NumberWarmerView() {
           minDelaySeconds: minDelay,
           maxDelaySeconds: maxDelay,
           useAi,
+          aiPrompt,
         }),
       });
       const data = await res.json();
@@ -158,6 +171,29 @@ export function NumberWarmerView() {
       toast.error(err.message || 'Failed to save configuration');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handlePreviewDialogue = async () => {
+    setPreviewing(true);
+    try {
+      const res = await fetch('/api/warmer/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic,
+          useAi,
+          aiPrompt,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to preview dialogue');
+      setPreviewPair(data.preview);
+      toast.success('Generated dynamic dialogue preview!');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to generate dialogue preview');
+    } finally {
+      setPreviewing(false);
     }
   };
 
@@ -477,20 +513,87 @@ export function NumberWarmerView() {
               </div>
 
               {/* AI Smart Response Toggle */}
-              <div className="pt-2 flex items-center justify-between p-3 rounded-xl bg-slate-950 border border-slate-800">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-purple-400 shrink-0" />
-                  <div>
-                    <p className="text-xs font-bold text-white">AI-Powered Dynamic Chats</p>
-                    <p className="text-[10px] text-slate-400">Use LLM to generate novel creative replies</p>
+              <div className="space-y-3 pt-2 border-t border-slate-800">
+                <div className="flex items-center justify-between p-3 rounded-xl bg-slate-950 border border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-purple-400 shrink-0" />
+                    <div>
+                      <p className="text-xs font-bold text-white">AI-Powered Dynamic Chats</p>
+                      <p className="text-[10px] text-slate-400">Use LLM to generate continuous contextual replies</p>
+                    </div>
                   </div>
+                  <input
+                    type="checkbox"
+                    checked={useAi}
+                    onChange={(e) => setUseAi(e.target.checked)}
+                    className="w-4 h-4 accent-purple-600 rounded cursor-pointer"
+                  />
                 </div>
-                <input
-                  type="checkbox"
-                  checked={useAi}
-                  onChange={(e) => setUseAi(e.target.checked)}
-                  className="w-4 h-4 accent-purple-600 rounded cursor-pointer"
-                />
+
+                {/* Custom Context / Scenario Prompt */}
+                {useAi && (
+                  <div className="space-y-1.5 p-3 rounded-xl bg-purple-950/20 border border-purple-500/30">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-bold text-purple-300 flex items-center gap-1.5">
+                        <Sparkles className="w-3 h-3" />
+                        <span>Custom Conversation Scenario (Optional)</span>
+                      </label>
+                    </div>
+                    <textarea
+                      rows={2}
+                      value={aiPrompt}
+                      onChange={(e) => setAiPrompt(e.target.value)}
+                      placeholder="e.g. Two college friends planning a Goa trip, or two coworkers syncing on a website release..."
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-purple-500 transition resize-none"
+                    />
+                    <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                      <span className="text-[10px] text-slate-500">Presets:</span>
+                      {[
+                        { label: 'Goa Road Trip', text: 'Two friends in Delhi discussing an upcoming road trip to Goa' },
+                        { label: 'Office Sync', text: 'Two colleagues syncing on client deliverables before a Friday review' },
+                        { label: 'Cricket & Chai', text: 'Casual friends chatting in Hinglish about IPL cricket match and evening chai' },
+                        { label: 'Food & Cafes', text: 'Two foodies exchanging cafe recommendations and Italian dinner plans' },
+                      ].map((preset) => (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          onClick={() => setAiPrompt(preset.text)}
+                          className="px-2 py-0.5 rounded text-[10px] bg-slate-900 border border-slate-800 text-slate-300 hover:text-white hover:border-purple-500 transition cursor-pointer"
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Preview Dialogue Button & Box */}
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={handlePreviewDialogue}
+                    disabled={previewing}
+                    className="w-full py-2 px-3 rounded-xl bg-slate-950 hover:bg-slate-850 border border-slate-800 text-slate-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer disabled:opacity-50"
+                  >
+                    <Zap className="w-3.5 h-3.5 text-amber-400" />
+                    <span>{previewing ? 'Generating Preview...' : 'Preview Next Message Pair'}</span>
+                  </button>
+
+                  {previewPair && (
+                    <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2 text-xs">
+                      <div className="flex items-center justify-between text-[10px] border-b border-slate-800/80 pb-1.5">
+                        <span className="font-bold text-slate-400">Sample Dynamic Turn</span>
+                        <span className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 font-mono text-[9px]">
+                          {previewPair.source}
+                        </span>
+                      </div>
+                      <div className="space-y-1.5 text-[11px]">
+                        <p className="text-emerald-300"><strong className="text-emerald-400">Account A:</strong> {previewPair.messageA}</p>
+                        <p className="text-blue-300"><strong className="text-blue-400">Account B:</strong> {previewPair.messageB}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -534,7 +637,27 @@ export function NumberWarmerView() {
                   <div key={log.id} className="space-y-2 p-3 bg-slate-900/90 rounded-2xl border border-slate-800/90 text-xs">
                     <div className="flex items-center justify-between text-[10px] text-slate-500 border-b border-slate-800 pb-1.5">
                       <span className="font-mono">{new Date(log.timestamp).toLocaleTimeString()}</span>
-                      <span className="capitalize px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 font-bold">{log.topic}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="capitalize px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-bold">{log.topic}</span>
+                        {log.source === 'ai_dynamic' && (
+                          <span className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 font-bold text-[9px] flex items-center gap-1">
+                            <Sparkles className="w-2.5 h-2.5" />
+                            <span>AI Dynamic</span>
+                          </span>
+                        )}
+                        {log.source === 'time_contextual' && (
+                          <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold text-[9px] flex items-center gap-1">
+                            <Clock className="w-2.5 h-2.5" />
+                            <span>Time Context</span>
+                          </span>
+                        )}
+                        {log.source === 'smart_spintax' && (
+                          <span className="px-1.5 py-0.5 rounded bg-teal-500/20 text-teal-300 border border-teal-500/30 font-bold text-[9px] flex items-center gap-1">
+                            <Zap className="w-2.5 h-2.5" />
+                            <span>Smart Organic</span>
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     {/* Turn 1: From Instance A */}

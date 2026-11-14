@@ -2,6 +2,7 @@ import { db, ensureDbSchema } from '@/lib/db';
 import { EvolutionClient } from '@/lib/evolution';
 import { logger } from '@/lib/logger';
 import { getRandomDialogue, resolveSpintax } from './dialogues';
+import { generateDynamicWarmerTurn } from './dynamic-generator';
 
 export interface WarmerExchangeLog {
   id: string;
@@ -15,6 +16,7 @@ export interface WarmerExchangeLog {
   messageB: string;
   delaySeconds: number;
   status: 'DELIVERED' | 'FAILED';
+  source?: 'ai_dynamic' | 'time_contextual' | 'smart_spintax';
   error?: string;
 }
 
@@ -147,10 +149,30 @@ export async function executeWarmerTurn(sessionId: string): Promise<{
     return { success: false, error: errorMsg };
   }
 
-  // 2. Select authentic dialogue script
-  const script = getRandomDialogue(session.topic);
-  const textA = resolveSpintax(script.turns[0]?.text || 'Hi! Are you free for a quick chat?');
-  const textB = resolveSpintax(script.turns[1]?.text || 'Hey there! Yes, doing well. What is up?');
+  // 2. Parse past dialogue exchanges for conversational context
+  let previousLogs: WarmerExchangeLog[] = [];
+  try {
+    previousLogs = JSON.parse(session.logs || '[]');
+  } catch {
+    previousLogs = [];
+  }
+
+  // 3. Dynamically generate contextual dialogue (AI LLM or Smart Organic Engine)
+  const turn = await generateDynamicWarmerTurn({
+    topic: session.topic || 'casual',
+    useAi: Boolean(session.useAi),
+    aiPrompt: session.aiPrompt,
+    clientId: session.clientId,
+    historyLogs: previousLogs.map((l) => ({
+      messageA: l.messageA,
+      messageB: l.messageB,
+      topic: l.topic,
+      timestamp: l.timestamp,
+    })),
+  });
+
+  const textA = turn.messageA;
+  const textB = turn.messageB;
 
   const randomDelay = Math.floor(
     Math.random() * (session.maxDelaySeconds - session.minDelaySeconds + 1) + session.minDelaySeconds
@@ -159,7 +181,7 @@ export async function executeWarmerTurn(sessionId: string): Promise<{
   const logEntry: WarmerExchangeLog = {
     id: `wlog-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     timestamp: new Date().toISOString(),
-    topic: session.topic,
+    topic: turn.topicTitle || session.topic,
     instanceA: session.instanceA,
     instanceB: session.instanceB,
     phoneA,
@@ -168,6 +190,7 @@ export async function executeWarmerTurn(sessionId: string): Promise<{
     messageB: textB,
     delaySeconds: randomDelay,
     status: 'DELIVERED',
+    source: turn.source,
   };
 
   try {

@@ -9,7 +9,7 @@ export interface DialogueTurn {
 
 export interface DialogueScript {
   id: string;
-  topic: 'casual' | 'business' | 'tech' | 'travel' | 'lifestyle';
+  topic: 'casual' | 'business' | 'tech' | 'travel' | 'lifestyle' | 'hinglish';
   title: string;
   turns: DialogueTurn[];
 }
@@ -20,6 +20,7 @@ export const WARMER_TOPICS = [
   { id: 'tech', name: 'Tech & Gadgets', icon: 'Smartphone', desc: 'Software updates, battery life & laptop tips' },
   { id: 'travel', name: 'Travel & Trips', icon: 'Plane', desc: 'Road trips, flight queries & hotel tips' },
   { id: 'lifestyle', name: 'Lifestyle & Food', icon: 'Coffee', desc: 'Cafe reviews, gym routines & favorite movies' },
+  { id: 'hinglish', name: 'Hinglish Casual', icon: 'Flame', desc: 'Chai breaks, metro commute, cricket & weekend plans' },
 ] as const;
 
 export const SCRIPTED_DIALOGUES: DialogueScript[] = [
@@ -172,6 +173,85 @@ export const SCRIPTED_DIALOGUES: DialogueScript[] = [
       { sender: 'B', text: 'Watched Arrival again over the weekend. What a masterpiece of storytelling!' },
       { sender: 'A', text: 'One of my all-time favorites too! The sound design and ending give goosebumps every time.' },
       { sender: 'B', text: '100% agreed! Rare to find films of that caliber.' },
+    ],
+  },
+  {
+    id: 'life-3',
+    topic: 'lifestyle',
+    title: 'New Cafe Discovery',
+    turns: [
+      { sender: 'A', text: '{Hey|Hi}! Discovered this quaint little rooftop cafe near the main road.' },
+      { sender: 'B', text: '{Oh really?|Nice!|Sounds lovely!} How was the ambience and cold brew?' },
+      { sender: 'A', text: 'Super peaceful, great Wi-Fi and the cold brew was spot on ☕' },
+      { sender: 'B', text: 'Definitely sharing that location pin with me! Will check it out this week.' },
+    ],
+  },
+
+  // 6. Hinglish Casual (Indian Urban Context)
+  {
+    id: 'hin-1',
+    topic: 'hinglish',
+    title: 'Chai Break & Catch-up',
+    turns: [
+      { sender: 'A', text: '{Arre bhai|Hey dost|Bhai}! Chai peene chalein neeche? {5 min break lete hain|Thoda break banta hai}' },
+      { sender: 'B', text: '{Haan bhai bilkul|Chal chal!|Haan chalte hain}, 2 minute de bas ek email send kar raha hoon.' },
+      { sender: 'A', text: 'Thik hai, ground floor tapri pe milte hain 👍' },
+      { sender: 'B', text: 'Aaya bas! Ek kadak adrak chai bol de tab tak.' },
+    ],
+  },
+  {
+    id: 'hin-2',
+    topic: 'hinglish',
+    title: 'Cricket Match Update',
+    turns: [
+      { sender: 'A', text: '{Match dekh raha hai kya?|Score dekha tune?|Bhai kya crazy match chal raha hai!}' },
+      { sender: 'B', text: '{Haan bhai! Last over kya nail biter tha!|Live stream on hai laptop pe|Super over hone wala hai lagta hai!}' },
+      { sender: 'A', text: 'Bhai vo sixer dekh ke maza hi aa gaya stadium mein!' },
+      { sender: 'B', text: 'Kasam se yaar, unbelievable finish! Pure goosebumps!' },
+    ],
+  },
+  {
+    id: 'hin-3',
+    topic: 'hinglish',
+    title: 'Metro & Commute Traffic',
+    turns: [
+      { sender: 'A', text: '{Bhai reach ho gaya kya?|Kahan pahuncha dost?|Traffic kaisa hai aaj?}' },
+      { sender: 'B', text: '{Bas metro station pahunch raha hoon|Bohot bheed thi aaj metro mein|Station exit pe hoon}' },
+      { sender: 'A', text: 'Araam se aa koi jaldi nahi hai.' },
+      { sender: 'B', text: 'Haan bhai, 5-7 minute mein milte hain.' },
+    ],
+  },
+  {
+    id: 'hin-4',
+    topic: 'hinglish',
+    title: 'Weekend Biryani Plan',
+    turns: [
+      { sender: 'A', text: '{Sunday ko kuch plan hai kya?|Weekend pe biryani khane chalte hain|Bhai sunday lunch scene kya hai?}' },
+      { sender: 'B', text: '{Biryani sunke to bhookh lag gayi bhai!|Haan chalte hain, bohot din ho gaye!|Done scene hai bhai!}' },
+      { sender: 'A', text: 'Old city wali famous outlet chalte hain 1 baje.' },
+      { sender: 'B', text: 'Ekdum perfect, gaadi main nikalta hoon. See you Sunday 👍' },
+    ],
+  },
+  {
+    id: 'cas-5',
+    topic: 'casual',
+    title: 'Weather & Rainy Day',
+    turns: [
+      { sender: 'A', text: '{Heavy rain started outside!|Looks like monsoon clouds are rolling in|Such pleasant weather today!}' },
+      { sender: 'B', text: '{Finally some cool breeze!|Loving the rain today|Hope you did not get stuck in traffic!}' },
+      { sender: 'A', text: 'Reached home just in time before the downpour.' },
+      { sender: 'B', text: 'Perfect timing! Hot tea and pakoras time now ☕' },
+    ],
+  },
+  {
+    id: 'tech-3',
+    topic: 'tech',
+    title: 'Cloud Storage & Backups',
+    turns: [
+      { sender: 'A', text: '{Quick question, which cloud storage do you recommend for photo backups?|Are you using Google Drive or iCloud?}' },
+      { sender: 'B', text: '{Google Photos with the 100GB Google One plan is super seamless|I use both, Google One syncs fast|OneDrive is also pretty decent with Office 365}' },
+      { sender: 'A', text: 'Going to subscribe to the 100GB tier, looks very reasonably priced.' },
+      { sender: 'B', text: 'Yes, family sharing makes it even more worth it.' },
     ],
   },
 ];

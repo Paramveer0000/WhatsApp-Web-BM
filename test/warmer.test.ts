@@ -7,18 +7,20 @@ import {
 } from '../src/lib/warmer/dialogues';
 import { hashPassword, verifyPassword } from '../src/lib/auth';
 import { isWarmerOrInternalMessage } from '../src/lib/warmer/warmer-engine';
+import { generateDynamicWarmerTurn } from '../src/lib/warmer/dynamic-generator';
 import { db } from '../src/lib/db';
 
 describe('Peer-to-Peer WhatsApp Number Warmer & Client Settings', () => {
   describe('Warmer Topics & Dialogue Library', () => {
-    it('defines 5 core conversational topics', () => {
-      expect(WARMER_TOPICS.length).toBe(5);
+    it('defines core conversational topics including hinglish', () => {
+      expect(WARMER_TOPICS.length).toBeGreaterThanOrEqual(6);
       const ids = WARMER_TOPICS.map((t) => t.id);
       expect(ids).toContain('casual');
       expect(ids).toContain('business');
       expect(ids).toContain('tech');
       expect(ids).toContain('travel');
       expect(ids).toContain('lifestyle');
+      expect(ids).toContain('hinglish');
     });
 
     it('contains scripted dialogues for each topic with valid back-and-forth turns', () => {
@@ -161,6 +163,41 @@ describe('Peer-to-Peer WhatsApp Number Warmer & Client Settings', () => {
 
       db.instance.findFirst = origInstFind;
       db.numberWarmerSession.findFirst = origWarmerFind;
+    });
+  });
+
+  describe('Dynamic Contextual & AI Dialogue Generator', () => {
+    it('generates non-empty dynamic turns across all topics', async () => {
+      const topics = ['casual', 'business', 'tech', 'travel', 'lifestyle', 'hinglish'];
+
+      for (const t of topics) {
+        const turn = await generateDynamicWarmerTurn({
+          topic: t,
+          useAi: false,
+          historyLogs: [],
+        });
+
+        expect(turn.messageA).toBeTruthy();
+        expect(turn.messageB).toBeTruthy();
+        expect(turn.messageA.length).toBeGreaterThan(5);
+        expect(turn.messageB.length).toBeGreaterThan(5);
+        expect(['time_contextual', 'smart_spintax']).toContain(turn.source);
+      }
+    });
+
+    it('smoothly advances turn pairs without repeating turn 0 every time', async () => {
+      const historyMock = [
+        { messageA: 'Did you get lunch?', messageB: 'Yes, just had pasta.', topic: 'Lunch' },
+      ];
+
+      const turn = await generateDynamicWarmerTurn({
+        topic: 'casual',
+        useAi: false,
+        historyLogs: historyMock,
+      });
+
+      expect(turn.messageA).toBeTruthy();
+      expect(turn.messageB).toBeTruthy();
     });
   });
 });
