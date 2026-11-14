@@ -4,6 +4,14 @@ import { logger } from '@/lib/logger';
 import { getRandomDialogue, resolveSpintax } from './dialogues';
 import { generateDynamicWarmerTurn } from './dynamic-generator';
 
+export interface WarmerMessageLogItem {
+  sender: 'A' | 'B';
+  instance: string;
+  phone: string;
+  text: string;
+  timestamp: string;
+}
+
 export interface WarmerExchangeLog {
   id: string;
   timestamp: string;
@@ -14,6 +22,7 @@ export interface WarmerExchangeLog {
   phoneB: string;
   messageA: string;
   messageB: string;
+  messages?: WarmerMessageLogItem[];
   delaySeconds: number;
   status: 'DELIVERED' | 'FAILED';
   source?: 'ai_dynamic' | 'time_contextual' | 'smart_spintax';
@@ -27,9 +36,25 @@ function cleanPhone(raw?: string | null): string | null {
   return digits.length >= 10 ? digits : null;
 }
 
-// Helper to look up connected phone number for an instance
+// Helper to look up connected phone number for an instance (checks local DB cache first)
 async function resolveInstancePhone(instanceName: string): Promise<string | null> {
   try {
+    // 1. Check local db.instance record first for instant, reliable resolution
+    const local = await db.instance.findFirst({
+      where: {
+        OR: [
+          { name: instanceName },
+          { id: instanceName },
+        ],
+      },
+      select: { profileNumber: true },
+    });
+    if (local?.profileNumber) {
+      const cleaned = cleanPhone(local.profileNumber);
+      if (cleaned) return cleaned;
+    }
+
+    // 2. Query Evolution API if not cached locally
     const evo = await EvolutionClient.fromDatabase();
     const instances = await evo.fetchInstances();
     const target = instances.find(
@@ -48,7 +73,15 @@ async function resolveInstancePhone(instanceName: string): Promise<string | null
       target.phone ||
       target.connectionStatus?.phoneNumber;
 
-    return cleanPhone(rawNumber);
+    const cleaned = cleanPhone(rawNumber);
+    if (cleaned) {
+      // Cache back to db.instance for faster future turns
+      await db.instance.updateMany({
+        where: { name: instanceName },
+        data: { profileNumber: cleaned },
+      }).catch(() => {});
+    }
+    return cleaned;
   } catch (err: any) {
     logger.warn({ err: err.message, instanceName }, 'Failed to resolve instance phone');
     return null;
@@ -171,12 +204,18 @@ export async function executeWarmerTurn(sessionId: string): Promise<{
     })),
   });
 
-  const textA = turn.messageA;
-  const textB = turn.messageB;
+  const messagesToSend = (turn.messages && turn.messages.length > 0)
+    ? turn.messages
+    : [
+        { sender: 'A' as const, text: turn.messageA },
+        { sender: 'B' as const, text: turn.messageB },
+      ];
 
   const randomDelay = Math.floor(
     Math.random() * (session.maxDelaySeconds - session.minDelaySeconds + 1) + session.minDelaySeconds
   );
+
+  const loggedMessages: WarmerMessageLogItem[] = [];
 
   const logEntry: WarmerExchangeLog = {
     id: `wlog-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -186,8 +225,9 @@ export async function executeWarmerTurn(sessionId: string): Promise<{
     instanceB: session.instanceB,
     phoneA,
     phoneB,
-    messageA: textA,
-    messageB: textB,
+    messageA: turn.messageA,
+    messageB: turn.messageB,
+    messages: loggedMessages,
     delaySeconds: randomDelay,
     status: 'DELIVERED',
     source: turn.source,
@@ -196,22 +236,36 @@ export async function executeWarmerTurn(sessionId: string): Promise<{
   try {
     const evo = await EvolutionClient.fromDatabase();
 
-    // 3. Instance A sends to Phone B
-    try {
-      await evo.sendPresence(session.instanceA, phoneB, 'composing', 2000);
-    } catch {}
+    // Sequentially send each message in the conversation thread with human typing & reading cadence
+    for (let i = 0; i < messagesToSend.length; i++) {
+      const item = messagesToSend[i];
+      const isSenderA = item.sender === 'A';
+      const fromInstance = isSenderA ? session.instanceA : session.instanceB;
+      const toPhone = isSenderA ? phoneB : phoneA;
+      const fromPhone = isSenderA ? phoneA : phoneB;
 
-    await evo.sendText(session.instanceA, phoneB, textA, { delay: 1500 });
+      // Typing presence (composing)
+      try {
+        await evo.sendPresence(fromInstance, toPhone, 'composing', 2000);
+      } catch {}
 
-    // Short simulated inter-reply pause (simulates realistic reading/thinking time)
-    await new Promise((res) => setTimeout(res, 3500));
+      // Send message
+      await evo.sendText(fromInstance, toPhone, item.text, { delay: 1500 });
 
-    // 4. Instance B replies to Phone A
-    try {
-      await evo.sendPresence(session.instanceB, phoneA, 'composing', 2500);
-    } catch {}
+      loggedMessages.push({
+        sender: item.sender,
+        instance: fromInstance,
+        phone: fromPhone,
+        text: item.text,
+        timestamp: new Date().toISOString(),
+      });
 
-    await evo.sendText(session.instanceB, phoneA, textB, { delay: 2000 });
+      // Human reading & thinking pause before the other person types back (unless last message)
+      if (i < messagesToSend.length - 1) {
+        const thinkMs = Math.floor(Math.random() * 2500 + 3500); // 3.5s - 6s
+        await new Promise((res) => setTimeout(res, thinkMs));
+      }
+    }
 
     // 5. Update session history and scheduling
     let currentLogs: WarmerExchangeLog[] = [];
@@ -248,8 +302,9 @@ export async function executeWarmerTurn(sessionId: string): Promise<{
         instanceB: session.instanceB,
         count: nextCount,
         delay: randomDelay,
+        threadMessagesCount: loggedMessages.length,
       },
-      'Warmer exchange turn executed successfully'
+      'Warmer continuous conversation exchange turn executed successfully'
     );
 
     return { success: true, log: logEntry };
@@ -264,9 +319,13 @@ export async function executeWarmerTurn(sessionId: string): Promise<{
     } catch {}
     const updatedLogs = [logEntry, ...currentLogs].slice(0, 50);
 
+    // Reschedule retry after 60s so session does not permanently stall
+    const retryScheduled = new Date(Date.now() + 60 * 1000);
+
     await db.numberWarmerSession.update({
       where: { id: sessionId },
       data: {
+        nextScheduledAt: retryScheduled,
         logs: JSON.stringify(updatedLogs),
       },
     });

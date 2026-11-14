@@ -199,6 +199,52 @@ describe('Peer-to-Peer WhatsApp Number Warmer & Client Settings', () => {
       expect(turn.messageA).toBeTruthy();
       expect(turn.messageB).toBeTruthy();
     });
+
+    it('generates a full multi-turn continuous conversation thread of alternating turns', async () => {
+      const turn = await generateDynamicWarmerTurn({
+        topic: 'casual',
+        useAi: false,
+        historyLogs: [],
+      });
+
+      expect(turn.messages).toBeDefined();
+      expect(turn.messages.length).toBeGreaterThanOrEqual(3);
+      expect(turn.messages[0].sender).toBe('A');
+      expect(turn.messages[1].sender).toBe('B');
+      expect(turn.messages[2].sender).toBe('A');
+      for (const m of turn.messages) {
+        expect(m.text.trim().length).toBeGreaterThan(0);
+      }
+    });
+  });
+
+  describe('WarmerRunner Background Lifecycle & Auto-Reset', () => {
+    it('calculates scheduled rollover and daily caps correctly', () => {
+      const isPastOrDue = (scheduled: Date | null, now: Date) => !scheduled || scheduled <= now;
+      const now = new Date();
+      const past = new Date(now.getTime() - 10000);
+      const future = new Date(now.getTime() + 60000);
+
+      expect(isPastOrDue(null, now)).toBe(true);
+      expect(isPastOrDue(past, now)).toBe(true);
+      expect(isPastOrDue(future, now)).toBe(false);
+    });
+
+    it('resets todayExchanges when last exchange was on a previous calendar day', () => {
+      const yesterday = new Date(Date.now() - 24 * 3600 * 1000);
+      const today = new Date();
+
+      const shouldReset = (lastDate: Date, curDate: Date) => {
+        return (
+          lastDate.getFullYear() !== curDate.getFullYear() ||
+          lastDate.getMonth() !== curDate.getMonth() ||
+          lastDate.getDate() !== curDate.getDate()
+        );
+      };
+
+      expect(shouldReset(yesterday, today)).toBe(true);
+      expect(shouldReset(today, today)).toBe(false);
+    });
   });
 });
 

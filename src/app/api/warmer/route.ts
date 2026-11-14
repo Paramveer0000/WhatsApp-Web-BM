@@ -5,6 +5,7 @@ import { db, ensureDbSchema } from '@/lib/db';
 import { EvolutionClient } from '@/lib/evolution';
 import { logger } from '@/lib/logger';
 import { isTenantScoped, getTenantAllowedInstanceNames } from '@/lib/tenant';
+import { warmerRunner } from '@/lib/warmer/warmer-runner';
 
 // GET /api/warmer - List sessions and available instances
 export async function GET() {
@@ -13,6 +14,7 @@ export async function GET() {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     await ensureDbSchema();
+    warmerRunner.ensureRunning();
 
     const where: any = {};
     if (isTenantScoped(user)) {

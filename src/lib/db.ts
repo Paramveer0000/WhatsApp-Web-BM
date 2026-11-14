@@ -389,6 +389,15 @@ export async function ensureDbSchema(): Promise<void> {
         }).catch(() => {});
       }
     } catch {}
+
+    // 9. Ensure Number Warmer background runner daemon is active in Node.js runtime
+    try {
+      if (typeof window === 'undefined') {
+        import('@/lib/warmer/warmer-runner')
+          .then(({ warmerRunner }) => warmerRunner.ensureRunning())
+          .catch(() => {});
+      }
+    } catch {}
   })();
 
   return schemaSyncPromise;

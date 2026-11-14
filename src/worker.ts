@@ -1,5 +1,6 @@
 import { db, ensureDbSchema } from './lib/db';
 import { campaignRunner } from './lib/queue/campaign-runner';
+import { warmerRunner } from './lib/warmer/warmer-runner';
 import { logger, recordSystemLog } from './lib/logger';
 
 console.log('=== WhatsApp Campaign Background Worker v2 Started ===');
@@ -101,6 +102,9 @@ async function checkAndRunScheduledCampaigns() {
         });
       }
     }
+
+    // Advance and monitor active peer-to-peer Number Warmer sessions
+    await warmerRunner.checkAndRunSessions();
   } catch (err: any) {
     logger.error({ err: err.message }, 'Worker poll check error');
     recordSystemLog('error', 'worker', `Worker poll check error: ${err.message}`, {

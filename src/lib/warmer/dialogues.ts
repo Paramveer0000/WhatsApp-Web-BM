@@ -101,6 +101,7 @@ export const SCRIPTED_DIALOGUES: DialogueScript[] = [
       { sender: 'A', text: 'Hi! Just wanted to confirm if the vendor invoice from yesterday was approved?' },
       { sender: 'B', text: 'Yes, finance team processed it this morning. Reference number should arrive by 5 PM.' },
       { sender: 'A', text: 'Awesome, thanks for the swift update!' },
+      { sender: 'B', text: 'You are welcome! Ping me if you need the PDF copy 👍' },
     ],
   },
 

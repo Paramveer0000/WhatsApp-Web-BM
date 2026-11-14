@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { db, ensureDbSchema } from '@/lib/db';
-import { executeWarmerTurn } from '@/lib/warmer/warmer-engine';
+import { warmerRunner } from '@/lib/warmer/warmer-runner';
 
 export async function POST(
   req: NextRequest,
@@ -19,8 +19,8 @@ export async function POST(
       data: { status: 'RUNNING' },
     });
 
-    // Fire first exchange turn immediately so user sees real-time progress
-    executeWarmerTurn(session.id).catch(() => {});
+    // Fire first exchange turn immediately and ensure background runner daemon is running
+    warmerRunner.startSession(session.id).catch(() => {});
 
     return NextResponse.json({ success: true, message: 'Warmer session started', session });
   } catch (err: any) {

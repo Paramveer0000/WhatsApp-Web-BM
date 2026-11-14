@@ -28,6 +28,14 @@ interface ConnectedInstance {
   profileName?: string;
 }
 
+interface WarmerMessageLogItem {
+  sender: 'A' | 'B';
+  instance: string;
+  phone: string;
+  text: string;
+  timestamp: string;
+}
+
 interface WarmerLog {
   id: string;
   timestamp: string;
@@ -38,6 +46,7 @@ interface WarmerLog {
   phoneB: string;
   messageA: string;
   messageB: string;
+  messages?: WarmerMessageLogItem[];
   delaySeconds: number;
   status: 'DELIVERED' | 'FAILED';
   source?: string;
@@ -87,6 +96,7 @@ export function NumberWarmerView() {
     topicTitle: string;
     source: string;
   } | null>(null);
+  const [secondsUntilNext, setSecondsUntilNext] = useState<number | null>(null);
 
   // Parse Live Logs
   const liveLogs: WarmerLog[] = React.useMemo(() => {
@@ -130,12 +140,37 @@ export function NumberWarmerView() {
 
   useEffect(() => {
     fetchWarmerData();
-    // Auto-poll status every 10s if running
+    // Fast polling every 4s to track continuous dialogue progress
     const interval = setInterval(() => {
       fetchWarmerData();
-    }, 10000);
+    }, 4000);
     return () => clearInterval(interval);
   }, []);
+
+  // Live countdown to next scheduled continuous conversation
+  useEffect(() => {
+    if (!session || session.status !== 'RUNNING' || !session.nextScheduledAt) {
+      setSecondsUntilNext(null);
+      return;
+    }
+
+    const timer = setInterval(() => {
+      const now = Date.now();
+      const target = new Date(session.nextScheduledAt!).getTime();
+      const diffSec = Math.round((target - now) / 1000);
+
+      // Client safety heartbeat: trigger backup tick if server runner experienced delay
+      if (diffSec <= -25 && !actionLoading) {
+        fetch(`/api/warmer/${session.id}/tick`, { method: 'POST' })
+          .then(() => fetchWarmerData())
+          .catch(() => {});
+      }
+
+      setSecondsUntilNext(diffSec > 0 ? diffSec : 0);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [session?.status, session?.nextScheduledAt, session?.id, actionLoading]);
 
   const handleSaveConfig = async () => {
     if (!instanceA || !instanceB) {
@@ -351,14 +386,22 @@ export function NumberWarmerView() {
           </div>
         </div>
 
-        {/* Metric 3: Safe Pacing Interval */}
+        {/* Metric 3: Safe Pacing Interval & Live Countdown */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg flex items-center gap-3.5">
           <div className="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0">
-            <Clock className="w-5 h-5" />
+            <Clock className={`w-5 h-5 ${isRunning ? 'animate-pulse' : ''}`} />
           </div>
           <div>
-            <p className="text-[11px] font-medium text-slate-400 uppercase">Jitter Delay</p>
-            <p className="text-base font-bold text-white">{minDelay}s - {maxDelay}s</p>
+            <p className="text-[11px] font-medium text-slate-400 uppercase">
+              {isRunning && secondsUntilNext !== null ? 'Next Turn In' : 'Jitter Delay'}
+            </p>
+            <p className="text-base font-bold text-white">
+              {isRunning && secondsUntilNext !== null
+                ? secondsUntilNext > 0
+                  ? `${secondsUntilNext}s`
+                  : 'Exchanging now...'
+                : `${minDelay}s - ${maxDelay}s`}
+            </p>
           </div>
         </div>
 
@@ -660,33 +703,68 @@ export function NumberWarmerView() {
                       </div>
                     </div>
 
-                    {/* Turn 1: From Instance A */}
-                    <div className="flex items-start gap-2">
-                      <div className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 font-bold text-[10px] flex items-center justify-center shrink-0">
-                        A
+                    {/* Continuous Dialogue Thread Messages */}
+                    {log.messages && log.messages.length > 0 ? (
+                      <div className="space-y-2">
+                        {log.messages.map((m, mIdx) => {
+                          const isA = m.sender === 'A';
+                          return (
+                            <div key={mIdx} className="flex items-start gap-2">
+                              <div
+                                className={`w-6 h-6 rounded-lg ${
+                                  isA ? 'bg-emerald-500/20 text-emerald-400' : 'bg-blue-500/20 text-blue-400'
+                                } font-bold text-[10px] flex items-center justify-center shrink-0`}
+                              >
+                                {m.sender}
+                              </div>
+                              <div
+                                className={`flex-1 ${
+                                  isA
+                                    ? 'bg-emerald-950/40 border-emerald-500/20 text-emerald-100'
+                                    : 'bg-blue-950/40 border-blue-500/20 text-blue-100'
+                                } border rounded-2xl rounded-tl-none p-3`}
+                              >
+                                <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1">
+                                  <span className="font-bold">{m.instance}</span>
+                                  <span className="font-mono">+{m.phone}</span>
+                                </div>
+                                <p className="leading-relaxed whitespace-pre-wrap">{m.text}</p>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-                      <div className="flex-1 bg-emerald-950/40 border border-emerald-500/20 rounded-2xl rounded-tl-none p-3 text-emerald-100">
-                        <div className="flex items-center justify-between text-[10px] text-emerald-400/80 mb-1">
-                          <span className="font-bold">{log.instanceA}</span>
-                          <span className="font-mono">+{log.phoneA}</span>
+                    ) : (
+                      <>
+                        {/* Turn 1: From Instance A */}
+                        <div className="flex items-start gap-2">
+                          <div className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 font-bold text-[10px] flex items-center justify-center shrink-0">
+                            A
+                          </div>
+                          <div className="flex-1 bg-emerald-950/40 border border-emerald-500/20 rounded-2xl rounded-tl-none p-3 text-emerald-100">
+                            <div className="flex items-center justify-between text-[10px] text-emerald-400/80 mb-1">
+                              <span className="font-bold">{log.instanceA}</span>
+                              <span className="font-mono">+{log.phoneA}</span>
+                            </div>
+                            <p className="leading-relaxed">{log.messageA}</p>
+                          </div>
                         </div>
-                        <p className="leading-relaxed">{log.messageA}</p>
-                      </div>
-                    </div>
 
-                    {/* Turn 2: From Instance B */}
-                    <div className="flex items-start gap-2">
-                      <div className="w-6 h-6 rounded-lg bg-blue-500/20 text-blue-400 font-bold text-[10px] flex items-center justify-center shrink-0">
-                        B
-                      </div>
-                      <div className="flex-1 bg-blue-950/40 border border-blue-500/20 rounded-2xl rounded-tl-none p-3 text-blue-100">
-                        <div className="flex items-center justify-between text-[10px] text-blue-400/80 mb-1">
-                          <span className="font-bold">{log.instanceB}</span>
-                          <span className="font-mono">+{log.phoneB}</span>
+                        {/* Turn 2: From Instance B */}
+                        <div className="flex items-start gap-2">
+                          <div className="w-6 h-6 rounded-lg bg-blue-500/20 text-blue-400 font-bold text-[10px] flex items-center justify-center shrink-0">
+                            B
+                          </div>
+                          <div className="flex-1 bg-blue-950/40 border border-blue-500/20 rounded-2xl rounded-tl-none p-3 text-blue-100">
+                            <div className="flex items-center justify-between text-[10px] text-blue-400/80 mb-1">
+                              <span className="font-bold">{log.instanceB}</span>
+                              <span className="font-mono">+{log.phoneB}</span>
+                            </div>
+                            <p className="leading-relaxed">{log.messageB}</p>
+                          </div>
                         </div>
-                        <p className="leading-relaxed">{log.messageB}</p>
-                      </div>
-                    </div>
+                      </>
+                    )}
 
                     <div className="flex items-center justify-end gap-1.5 text-[10px] text-slate-500 font-mono pt-1">
                       <CheckCircle2 className="w-3 h-3 text-emerald-400" />
