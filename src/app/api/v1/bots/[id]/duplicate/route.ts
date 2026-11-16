@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSessionUser } from '@/lib/auth';
 import { withApi } from '@/lib/api-wrapper';
+import { isTenantScoped } from '@/lib/tenant';
 
 export const POST = withApi(async function (
   req: NextRequest,
@@ -19,6 +20,10 @@ export const POST = withApi(async function (
     return NextResponse.json({ success: false, error: 'Bot not found' }, { status: 404 });
   }
 
+  if (isTenantScoped(user) && existing.clientId && existing.clientId !== user.clientId) {
+    return NextResponse.json({ success: false, error: 'Forbidden: Access to this bot is denied' }, { status: 403 });
+  }
+
   const duplicated = await db.flow.create({
     data: {
       name: `${existing.name} (Copy)`,
@@ -26,6 +31,7 @@ export const POST = withApi(async function (
       status: 'draft',
       currentDraft: existing.currentDraft,
       createdBy: user.email,
+      clientId: user.clientId || null,
     },
   });
 
@@ -34,4 +40,3 @@ export const POST = withApi(async function (
     bot: duplicated,
   });
 });
-

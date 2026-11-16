@@ -4,6 +4,7 @@ import { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
 import { getSessionUser } from '@/lib/auth';
 import { eventBus } from '@/lib/queue/events';
+import { isTenantScoped } from '@/lib/tenant';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const user = await getSessionUser();
@@ -12,6 +13,19 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   }
 
   const campaignId = params.id;
+
+  if (isTenantScoped(user)) {
+    const checkCampaign = await db.campaign.findUnique({
+      where: { id: campaignId },
+      select: { clientId: true },
+    });
+    if (!checkCampaign) {
+      return new Response('Campaign not found', { status: 404 });
+    }
+    if (checkCampaign.clientId && checkCampaign.clientId !== user.clientId) {
+      return new Response('Forbidden', { status: 403 });
+    }
+  }
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({

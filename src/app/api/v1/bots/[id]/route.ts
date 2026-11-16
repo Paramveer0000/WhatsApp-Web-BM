@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { getSessionUser } from '@/lib/auth';
 import { withApi } from '@/lib/api-wrapper';
 import { validateFlow } from '@/lib/flow/validate';
+import { isTenantScoped } from '@/lib/tenant';
 
 // GET /api/v1/bots/[id] - Retrieve bot flow details and draft
 export const GET = withApi(async function (
@@ -26,6 +27,10 @@ export const GET = withApi(async function (
 
   if (!bot) {
     return NextResponse.json({ success: false, error: 'Bot not found' }, { status: 404 });
+  }
+
+  if (isTenantScoped(user) && bot.clientId && bot.clientId !== user.clientId) {
+    return NextResponse.json({ success: false, error: 'Forbidden: Access to this bot is denied' }, { status: 403 });
   }
 
   let flowData: any = null;
@@ -59,6 +64,15 @@ export const PUT = withApi(async function (
 ) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+
+  const existing = await db.flow.findUnique({ where: { id: params.id } });
+  if (!existing) {
+    return NextResponse.json({ success: false, error: 'Bot not found' }, { status: 404 });
+  }
+
+  if (isTenantScoped(user) && existing.clientId && existing.clientId !== user.clientId) {
+    return NextResponse.json({ success: false, error: 'Forbidden: Access to this bot is denied' }, { status: 403 });
+  }
 
   const body = await req.json();
   const { name, description, flow, status } = body;
@@ -95,6 +109,15 @@ export const DELETE = withApi(async function (
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
 
+  const existing = await db.flow.findUnique({ where: { id: params.id } });
+  if (!existing) {
+    return NextResponse.json({ success: false, error: 'Bot not found' }, { status: 404 });
+  }
+
+  if (isTenantScoped(user) && existing.clientId && existing.clientId !== user.clientId) {
+    return NextResponse.json({ success: false, error: 'Forbidden: Access to this bot is denied' }, { status: 403 });
+  }
+
   await db.flow.delete({
     where: { id: params.id },
   });
@@ -104,4 +127,3 @@ export const DELETE = withApi(async function (
     message: 'Bot deleted successfully',
   });
 });
-

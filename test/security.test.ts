@@ -87,5 +87,51 @@ describe('Security Controls & Hardening', () => {
       expect(verified).toBeNull();
     });
   });
+
+  describe('Cryptographic Storage (AES-256-GCM)', () => {
+    it('encrypts and decrypts sensitive values accurately', async () => {
+      const { encrypt, decrypt } = await import('../src/lib/crypto');
+      const secretValue = 'sk-or-v1-my-very-confidential-api-key-9988';
+      const encrypted = encrypt(secretValue);
+
+      expect(typeof encrypted).toBe('string');
+      expect(encrypted).not.toBe(secretValue);
+      expect(encrypted.split(':').length).toBe(3); // iv:tag:ciphertext
+
+      const decrypted = decrypt(encrypted);
+      expect(decrypted).toBe(secretValue);
+    });
+
+    it('returns empty string for empty input', async () => {
+      const { encrypt, decrypt } = await import('../src/lib/crypto');
+      expect(encrypt('')).toBe('');
+      expect(decrypt('')).toBe('');
+    });
+  });
+
+  describe('Multi-Tenant Access Isolation (isTenantScoped & getTenantWhere)', () => {
+    it('identifies client and impersonating sessions as tenant-scoped', async () => {
+      const { isTenantScoped, getActiveTenantId, getTenantWhere } = await import('../src/lib/tenant');
+
+      const clientSession = {
+        id: 'client-1',
+        email: 'client@clinic.com',
+        role: 'CLIENT' as const,
+        clientId: 'tenant-metro-1',
+      };
+      expect(isTenantScoped(clientSession)).toBe(true);
+      expect(getActiveTenantId(clientSession)).toBe('tenant-metro-1');
+      expect(getTenantWhere(clientSession)).toEqual({ clientId: 'tenant-metro-1' });
+
+      const adminSession = {
+        id: 'admin-1',
+        email: 'admin@example.com',
+        role: 'ADMIN' as const,
+      };
+      expect(isTenantScoped(adminSession)).toBe(false);
+      expect(getActiveTenantId(adminSession)).toBeNull();
+      expect(getTenantWhere(adminSession)).toEqual({});
+    });
+  });
 });
 

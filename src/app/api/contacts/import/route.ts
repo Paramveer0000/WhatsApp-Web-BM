@@ -137,6 +137,7 @@ export const POST = withApi(async function (req: NextRequest) {
       create: {
         name: listName.trim(),
         description: `Imported on ${new Date().toLocaleDateString()}`,
+        clientId: user.clientId || null,
       },
     });
     targetListId = list.id;
@@ -238,6 +239,7 @@ export const POST = withApi(async function (req: NextRequest) {
         customFields: JSON.stringify(c.customFields),
         tags: JSON.stringify(['import']),
         optInStatus: true,
+        clientId: user.clientId || null,
       },
     });
 

@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { getSessionUser } from '@/lib/auth';
 import { campaignRunner } from '@/lib/queue/campaign-runner';
 import { logger } from '@/lib/logger';
+import { isTenantScoped } from '@/lib/tenant';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -21,6 +22,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
     if (!campaign) {
       return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+    }
+
+    if (isTenantScoped(user) && campaign.clientId && campaign.clientId !== user.clientId) {
+      return NextResponse.json({ error: 'Forbidden: Access to this campaign is denied' }, { status: 403 });
     }
 
     const counts = await db.campaignRecipient.groupBy({
@@ -199,6 +204,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const campaignId = params.id;
+    const existing = await db.campaign.findUnique({ where: { id: campaignId } });
+    if (!existing) {
+      return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+    }
+    if (isTenantScoped(user) && existing.clientId && existing.clientId !== user.clientId) {
+      return NextResponse.json({ error: 'Forbidden: Access to this campaign is denied' }, { status: 403 });
+    }
+
     const body = await req.json();
 
     const updated = await db.campaign.update({

@@ -5,6 +5,7 @@ import { getSessionUser } from '@/lib/auth';
 import { EvolutionClient } from '@/lib/evolution';
 import { logger } from '@/lib/logger';
 import { withApi } from '@/lib/api-wrapper';
+import { getTenantAllowedInstanceNames } from '@/lib/tenant';
 
 export const POST = withApi(async function (
   req: NextRequest,
@@ -28,15 +29,35 @@ export const POST = withApi(async function (
     return NextResponse.json({ success: false, error: 'Reply text cannot be empty' }, { status: 400 });
   }
 
-  // Find active instance if not specified
-  if (!instanceName) {
-    const activeInst = await db.instance.findFirst({
-      where: { status: 'OPEN' },
-    });
-    if (!activeInst) {
-      return NextResponse.json({ success: false, error: 'No active WhatsApp instance available to send reply' }, { status: 400 });
+  // Enforce tenant authorization for instances
+  const allowedInstances = await getTenantAllowedInstanceNames(user);
+  if (allowedInstances !== null) {
+    if (allowedInstances.length === 0) {
+      return NextResponse.json({ success: false, error: 'Forbidden: No WhatsApp instances assigned to your workspace' }, { status: 403 });
     }
-    instanceName = activeInst.name;
+    if (instanceName && !allowedInstances.includes(instanceName)) {
+      return NextResponse.json({ success: false, error: 'Forbidden: You do not have permission to send through this WhatsApp instance' }, { status: 403 });
+    }
+    if (!instanceName) {
+      const activeInst = await db.instance.findFirst({
+        where: { name: { in: allowedInstances }, status: 'OPEN' },
+      });
+      if (!activeInst) {
+        return NextResponse.json({ success: false, error: 'No active WhatsApp instance available to send reply' }, { status: 400 });
+      }
+      instanceName = activeInst.name;
+    }
+  } else {
+    // Admin user: find active instance if not specified
+    if (!instanceName) {
+      const activeInst = await db.instance.findFirst({
+        where: { status: 'OPEN' },
+      });
+      if (!activeInst) {
+        return NextResponse.json({ success: false, error: 'No active WhatsApp instance available to send reply' }, { status: 400 });
+      }
+      instanceName = activeInst.name;
+    }
   }
 
   const client = await EvolutionClient.fromDatabase();

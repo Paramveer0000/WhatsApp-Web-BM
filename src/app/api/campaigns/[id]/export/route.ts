@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSessionUser } from '@/lib/auth';
 import { sanitizeCsvCell } from '@/lib/security';
+import { isTenantScoped } from '@/lib/tenant';
 import * as XLSX from 'xlsx';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
@@ -17,6 +18,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
     const campaign = await db.campaign.findUnique({ where: { id: campaignId } });
     if (!campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+
+    if (isTenantScoped(user) && campaign.clientId && campaign.clientId !== user.clientId) {
+      return NextResponse.json({ error: 'Forbidden: Access to this campaign is denied' }, { status: 403 });
+    }
 
     const where: any = { campaignId };
     if (filter === 'failed_only') {

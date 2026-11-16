@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSessionUser } from '@/lib/auth';
 import { logger } from '@/lib/logger';
+import { isTenantScoped } from '@/lib/tenant';
 
 export async function PUT(
   req: NextRequest,
@@ -19,6 +20,10 @@ export async function PUT(
 
     if (!existing) {
       return NextResponse.json({ error: 'Contact list not found' }, { status: 404 });
+    }
+
+    if (isTenantScoped(user) && existing.clientId && existing.clientId !== user.clientId) {
+      return NextResponse.json({ error: 'Forbidden: Access to this list is denied' }, { status: 403 });
     }
 
     const updated = await db.contactList.update({
@@ -55,6 +60,10 @@ export async function DELETE(
 
     if (!existing) {
       return NextResponse.json({ error: 'Contact list not found' }, { status: 404 });
+    }
+
+    if (isTenantScoped(user) && existing.clientId && existing.clientId !== user.clientId) {
+      return NextResponse.json({ error: 'Forbidden: Access to this list is denied' }, { status: 403 });
     }
 
     const { searchParams } = new URL(req.url);

@@ -8,8 +8,8 @@ import { logger } from '@/lib/logger';
 export async function GET() {
   try {
     const user = await getSessionUser();
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!user || user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Forbidden: Admin only' }, { status: 403 });
     }
 
     const settings = await db.aiSettings.findFirst();

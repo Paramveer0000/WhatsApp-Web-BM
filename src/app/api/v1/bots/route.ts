@@ -5,14 +5,20 @@ import { getSessionUser } from '@/lib/auth';
 import { withApi } from '@/lib/api-wrapper';
 import { logger } from '@/lib/logger';
 import { PREBUILT_TEMPLATES } from '@/lib/flow/templates';
+import { isTenantScoped } from '@/lib/tenant';
 
 // GET /api/v1/bots - List all bots with live status and assigned numbers
 export const GET = withApi(async function (req: NextRequest) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
 
+  const where: any = { status: { not: 'archived' } };
+  if (isTenantScoped(user)) {
+    where.clientId = user.clientId;
+  }
+
   const bots = await db.flow.findMany({
-    where: { status: { not: 'archived' } },
+    where,
     include: {
       assignments: true,
       versions: {
@@ -164,6 +170,7 @@ export const POST = withApi(async function (req: NextRequest) {
       status: 'draft',
       currentDraft: JSON.stringify(initialFlow),
       createdBy: user.email,
+      clientId: user.clientId || null,
     },
   });
 

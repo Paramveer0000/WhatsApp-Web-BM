@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { getSessionUser } from '@/lib/auth';
 import { normalizePhone } from '@/lib/phone';
 import { logger } from '@/lib/logger';
+import { isTenantScoped } from '@/lib/tenant';
 
 export async function GET(
   req: NextRequest,
@@ -24,6 +25,10 @@ export async function GET(
 
     if (!contact) {
       return NextResponse.json({ error: 'Contact not found' }, { status: 404 });
+    }
+
+    if (isTenantScoped(user) && contact.clientId && contact.clientId !== user.clientId) {
+      return NextResponse.json({ error: 'Forbidden: Access to this contact is denied' }, { status: 403 });
     }
 
     return NextResponse.json({ success: true, contact });
@@ -49,6 +54,10 @@ export async function PUT(
 
     if (!existing) {
       return NextResponse.json({ error: 'Contact not found' }, { status: 404 });
+    }
+
+    if (isTenantScoped(user) && existing.clientId && existing.clientId !== user.clientId) {
+      return NextResponse.json({ error: 'Forbidden: Access to this contact is denied' }, { status: 403 });
     }
 
     let formattedPhone = existing.phone;
@@ -133,6 +142,10 @@ export async function DELETE(
 
     if (!contact) {
       return NextResponse.json({ error: 'Contact not found' }, { status: 404 });
+    }
+
+    if (isTenantScoped(user) && contact.clientId && contact.clientId !== user.clientId) {
+      return NextResponse.json({ error: 'Forbidden: Access to this contact is denied' }, { status: 403 });
     }
 
     // Delete relationships first

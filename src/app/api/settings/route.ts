@@ -8,8 +8,8 @@ import { logger } from '@/lib/logger';
 export async function GET() {
   try {
     const user = await getSessionUser();
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!user || user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Forbidden: Admin access required' }, { status: 403 });
     }
 
     const settingsRows = await db.setting.findMany();
@@ -17,7 +17,7 @@ export async function GET() {
 
     for (const s of settingsRows) {
       if (s.isEncrypted && s.value) {
-        settings[s.key] = user.role === 'ADMIN' ? decrypt(s.value) : 'ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢';
+        settings[s.key] = decrypt(s.value);
       } else {
         settings[s.key] = s.value;
       }

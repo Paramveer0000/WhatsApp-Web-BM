@@ -63,7 +63,9 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   try {
     const user = await getSessionUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!user || user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Forbidden: Admin access required to remove from blacklist' }, { status: 403 });
+    }
 
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');

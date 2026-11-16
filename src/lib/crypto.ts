@@ -1,11 +1,38 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12; // 96 bits for GCM
 const TAG_LENGTH = 16;
 
+function resolveAppSecret(): string {
+  if (process.env.APP_SECRET && process.env.APP_SECRET.trim().length > 0) {
+    return process.env.APP_SECRET.trim();
+  }
+  if (process.env.JWT_SECRET && process.env.JWT_SECRET.trim().length > 0) {
+    return process.env.JWT_SECRET.trim();
+  }
+  try {
+    const prismaDir = path.join(process.cwd(), 'prisma');
+    const secretFile = path.join(prismaDir, '.app_secret');
+    if (fs.existsSync(secretFile)) {
+      const saved = fs.readFileSync(secretFile, 'utf8').trim();
+      if (saved) return saved;
+    }
+    const generated = crypto.randomBytes(32).toString('hex');
+    try {
+      if (!fs.existsSync(prismaDir)) fs.mkdirSync(prismaDir, { recursive: true });
+      fs.writeFileSync(secretFile, generated, 'utf8');
+    } catch {}
+    return generated;
+  } catch {
+    return 'default-fallback-app-secret-32ch';
+  }
+}
+
 function getKey(): Buffer {
-  const secret = process.env.APP_SECRET || 'default-fallback-app-secret-32ch';
+  const secret = resolveAppSecret();
   return crypto.createHash('sha256').update(secret).digest();
 }
 

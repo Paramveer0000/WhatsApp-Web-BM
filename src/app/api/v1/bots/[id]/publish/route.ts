@@ -5,6 +5,7 @@ import { getSessionUser } from '@/lib/auth';
 import { withApi } from '@/lib/api-wrapper';
 import { validateFlow } from '@/lib/flow/validate';
 import { FlowDefinition } from '@/lib/flow/schema';
+import { isTenantScoped } from '@/lib/tenant';
 
 export const POST = withApi(async function (
   req: NextRequest,
@@ -28,6 +29,10 @@ export const POST = withApi(async function (
 
   if (!bot) {
     return NextResponse.json({ success: false, error: 'Bot not found' }, { status: 404 });
+  }
+
+  if (isTenantScoped(user) && bot.clientId && bot.clientId !== user.clientId) {
+    return NextResponse.json({ success: false, error: 'Forbidden: Access to this bot is denied' }, { status: 403 });
   }
 
   let flow: FlowDefinition;

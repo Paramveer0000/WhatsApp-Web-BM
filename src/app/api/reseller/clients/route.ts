@@ -17,7 +17,9 @@ function generateSlug(text: string): string {
 export async function GET(req: NextRequest) {
   try {
     const user = await getSessionUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!user || (user.role !== 'ADMIN' && user.role !== 'RESELLER')) {
+      return NextResponse.json({ error: 'Forbidden: Admin or Reseller access required' }, { status: 403 });
+    }
 
     await ensureDbSchema();
 
@@ -114,7 +116,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const user = await getSessionUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!user || (user.role !== 'ADMIN' && user.role !== 'RESELLER')) {
+      return NextResponse.json({ error: 'Forbidden: Admin or Reseller access required' }, { status: 403 });
+    }
 
     await ensureDbSchema();
 
@@ -215,7 +219,9 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     const user = await getSessionUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!user || (user.role !== 'ADMIN' && user.role !== 'RESELLER')) {
+      return NextResponse.json({ error: 'Forbidden: Admin or Reseller access required' }, { status: 403 });
+    }
 
     await ensureDbSchema();
 
@@ -276,7 +282,9 @@ export async function PUT(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   try {
     const user = await getSessionUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!user || (user.role !== 'ADMIN' && user.role !== 'RESELLER')) {
+      return NextResponse.json({ error: 'Forbidden: Admin or Reseller access required' }, { status: 403 });
+    }
 
     await ensureDbSchema();
 

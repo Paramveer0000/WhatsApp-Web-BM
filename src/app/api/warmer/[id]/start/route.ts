@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { db, ensureDbSchema } from '@/lib/db';
 import { warmerRunner } from '@/lib/warmer/warmer-runner';
+import { isTenantScoped } from '@/lib/tenant';
 
 export async function POST(
   req: NextRequest,
@@ -13,6 +14,18 @@ export async function POST(
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     await ensureDbSchema();
+
+    const existing = await db.numberWarmerSession.findUnique({
+      where: { id: params.id },
+    });
+
+    if (!existing) {
+      return NextResponse.json({ error: 'Warmer session not found' }, { status: 404 });
+    }
+
+    if (isTenantScoped(user) && existing.clientId && existing.clientId !== user.clientId) {
+      return NextResponse.json({ error: 'Forbidden: Access to this warmer session is denied' }, { status: 403 });
+    }
 
     const session = await db.numberWarmerSession.update({
       where: { id: params.id },
@@ -27,4 +40,3 @@ export async function POST(
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
-

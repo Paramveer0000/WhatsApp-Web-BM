@@ -625,6 +625,7 @@ export default function AppDashboard() {
   };
 
   const loadSettings = async () => {
+    if (currentUser?.role === 'CLIENT') return;
     try {
       const res = await fetch('/api/settings');
       const data = await res.json();

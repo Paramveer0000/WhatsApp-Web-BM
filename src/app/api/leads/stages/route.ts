@@ -60,7 +60,9 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const user = await getSessionUser();
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!user || user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Forbidden: Admin access required to update sales pipeline stages' }, { status: 403 });
+    }
 
     await ensureDbSchema();
 

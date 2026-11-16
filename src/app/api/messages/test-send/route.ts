@@ -5,6 +5,7 @@ import { renderMessage } from '@/lib/spintax';
 import { normalizePhone } from '@/lib/phone';
 import { getSessionUser } from '@/lib/auth';
 import { logger } from '@/lib/logger';
+import { getTenantAllowedInstanceNames } from '@/lib/tenant';
 
 export async function POST(req: NextRequest) {
   try {
@@ -26,6 +27,15 @@ export async function POST(req: NextRequest) {
 
     if (!instanceName || !phone || !content) {
       return NextResponse.json({ error: 'instanceName, phone, and content are required' }, { status: 400 });
+    }
+
+    // Verify tenant authorization for requested WhatsApp instance
+    const allowedInstances = await getTenantAllowedInstanceNames(user);
+    if (allowedInstances !== null && !allowedInstances.includes(instanceName)) {
+      return NextResponse.json(
+        { error: 'Forbidden: You do not have permission to send through this WhatsApp instance' },
+        { status: 403 }
+      );
     }
 
     const normPhone = normalizePhone(phone);
@@ -61,4 +71,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
-

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getSessionUser } from '@/lib/auth';
 import { redistributeRemainingRecipients, DistributionMode } from '@/lib/rotation';
+import { isTenantScoped } from '@/lib/tenant';
 
 export async function POST(
   req: NextRequest,
@@ -21,6 +22,10 @@ export async function POST(
 
     if (!campaign) {
       return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+    }
+
+    if (isTenantScoped(user) && campaign.clientId && campaign.clientId !== user.clientId) {
+      return NextResponse.json({ error: 'Forbidden: Access to this campaign is denied' }, { status: 403 });
     }
 
     const targetVariant = campaign.variants.find((v) => v.id === variantId);

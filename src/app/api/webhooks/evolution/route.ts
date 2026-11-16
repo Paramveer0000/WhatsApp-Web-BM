@@ -86,14 +86,8 @@ export async function POST(req: NextRequest, { params }: { params?: { instanceId
       )
     );
 
-    // Evolution API webhooks also carry server_url, event, or match known instance
-    const isEvolutionWebhook =
-      Boolean(payload?.server_url?.includes('evolution')) ||
-      Boolean(payload?.event) ||
-      Boolean(knownInstance);
-
-    // Authorized if candidate token matches or valid Evolution payload
-    const isAuthorized = isTokenMatch || isEvolutionWebhook;
+    // Strictly authorized only if candidate token matches a valid secret
+    const isAuthorized = isTokenMatch;
 
     if (!isAuthorized) {
       logger.warn(
