@@ -1,10 +1,10 @@
-import { db } from '@/lib/db';
-import { logger } from '@/lib/logger';
-import { EvolutionClient } from '@/lib/evolution';
-import { step } from '@/lib/flow/engine';
-import { FlowDefinition, EngineSession, InboundEvent, EngineAction } from '@/lib/flow/schema';
-import { isSafeUrl } from '@/lib/security';
-import { isWarmerOrInternalMessage } from '@/lib/warmer/warmer-engine';
+import { db } from './db';
+import { logger } from './logger';
+import { EvolutionClient } from './evolution';
+import { step } from './flow/engine';
+import { FlowDefinition, EngineSession, InboundEvent, EngineAction } from './flow/schema';
+import { isSafeUrl } from './security';
+import { isWarmerOrInternalMessage } from './warmer/warmer-engine';
 
 // In-memory rate limiting to prevent bot ping-pong loops
 const contactReplyTracker = new Map<string, number[]>();

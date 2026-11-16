@@ -1,5 +1,5 @@
-import { db } from '@/lib/db';
-import { logger } from '@/lib/logger';
+import { db } from '../db';
+import { logger } from '../logger';
 import { resolveSpintax, SCRIPTED_DIALOGUES, DialogueScript } from './dialogues';
 
 export interface WarmerHistoryTurn {

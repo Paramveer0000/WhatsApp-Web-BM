@@ -1,4 +1,4 @@
-import { parseSpintax } from '@/lib/spintax';
+import { parseSpintax } from '../spintax';
 
 /**
  * Sandboxed Expression & Variable Interpolation Engine

@@ -1,6 +1,6 @@
-import { db, ensureDbSchema } from '@/lib/db';
-import { EvolutionClient } from '@/lib/evolution';
-import { logger } from '@/lib/logger';
+import { db, ensureDbSchema } from '../db';
+import { EvolutionClient } from '../evolution';
+import { logger } from '../logger';
 import { getRandomDialogue, resolveSpintax } from './dialogues';
 import { generateDynamicWarmerTurn } from './dynamic-generator';
 

@@ -1,5 +1,5 @@
-import { db, ensureDbSchema } from '@/lib/db';
-import { logger } from '@/lib/logger';
+import { db, ensureDbSchema } from '../db';
+import { logger } from '../logger';
 import { executeWarmerTurn } from './warmer-engine';
 
 /**
