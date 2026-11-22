@@ -86,6 +86,73 @@ describe('Security Controls & Hardening', () => {
       const verified = verifyToken(tampered);
       expect(verified).toBeNull();
     });
+
+    it('verifies JWT using Edge-compatible Web Crypto API (verifyTokenEdge)', async () => {
+      const { signToken, verifyTokenEdge } = await import('../src/lib/auth');
+      const secret = process.env.JWT_SECRET || 'wa-bulk-campaign-secret-key-super-secure-jwt-token-2026';
+      const token = signToken({
+        id: 'usr_edge_789',
+        email: 'edge@example.com',
+        role: 'ADMIN' as const,
+      });
+
+      const payload = await verifyTokenEdge(token, secret);
+      expect(payload).not.toBeNull();
+      expect(payload?.id).toBe('usr_edge_789');
+      expect(payload?.email).toBe('edge@example.com');
+      expect(payload?.role).toBe('ADMIN');
+
+      // Invalid secret fails
+      const failed = await verifyTokenEdge(token, 'wrong-secret-key-1234567890123456');
+      expect(failed).toBeNull();
+    });
+
+    it('hashes passwords with bcryptjs salt 10 and validates comparisons', async () => {
+      const { hashPassword, verifyPassword } = await import('../src/lib/auth');
+      const plain = 'StrongPass@2026!';
+      const hash = await hashPassword(plain);
+
+      expect(typeof hash).toBe('string');
+      expect(hash.startsWith('$2a$') || hash.startsWith('$2b$')).toBe(true);
+      expect(hash).not.toBe(plain);
+
+      const isValid = await verifyPassword(plain, hash);
+      expect(isValid).toBe(true);
+
+      const isInvalid = await verifyPassword('WrongPassword123', hash);
+      expect(isInvalid).toBe(false);
+    });
+
+    it('authenticates bearer token via authenticateJWT', async () => {
+      const { signToken, authenticateJWT } = await import('../src/lib/auth');
+      const token = signToken({
+        id: 'usr_auth_jwt',
+        email: 'bearer@example.com',
+        role: 'ADMIN' as const,
+      });
+
+      // Bearer header
+      const mockReq = {
+        headers: {
+          get: (name: string) => (name.toLowerCase() === 'authorization' ? `Bearer ${token}` : null),
+        },
+      } as any;
+
+      const { user, errorResponse } = await authenticateJWT(mockReq);
+      expect(user).not.toBeNull();
+      expect(user?.email).toBe('bearer@example.com');
+      expect(errorResponse).toBeUndefined();
+
+      // Missing header
+      const unauthReq = {
+        headers: {
+          get: () => null,
+        },
+      } as any;
+      const unauthResult = await authenticateJWT(unauthReq);
+      expect(unauthResult.user).toBeNull();
+      expect(unauthResult.errorResponse).toBeDefined();
+    });
   });
 
   describe('Cryptographic Storage (AES-256-GCM)', () => {

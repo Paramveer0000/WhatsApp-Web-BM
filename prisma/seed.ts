@@ -9,16 +9,18 @@ async function main() {
   // 1. Create Default Admin if no users
   const userCount = await prisma.user.count();
   if (userCount === 0) {
-    const passwordHash = await bcrypt.hash('Admin@123', 10);
+    const adminEmail = (process.env.ADMIN_EMAIL || 'admin@example.com').toLowerCase().trim();
+    const adminPassword = process.env.ADMIN_PASSWORD || 'Admin@123';
+    const passwordHash = await bcrypt.hash(adminPassword, 10);
     const admin = await prisma.user.create({
       data: {
-        email: 'admin@example.com',
+        email: adminEmail,
         passwordHash,
         name: 'System Administrator',
         role: 'ADMIN',
       },
     });
-    console.log(`Created default admin user: ${admin.email} (Password: Admin@123)`);
+    console.log(`Created default admin user: ${admin.email}`);
   }
 
   // 2. Initial Settings

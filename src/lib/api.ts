@@ -64,6 +64,11 @@ export async function request<T = any>(url: string, options: RequestOptions = {}
     const parsed = await safeParseJson(res);
 
     if (!res.ok) {
+      // Global 401 Unauthorized interceptor: redirect to /login
+      if (res.status === 401 && typeof window !== 'undefined' && window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+
       let errorMessage = 'An unexpected error occurred';
       let errorCode = `HTTP_${res.status}`;
       let errorDetails: any = null;

@@ -8,30 +8,86 @@ import { logger } from '@/lib/logger';
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
+  rememberMe: z.boolean().optional(),
 });
 
-// Simple in-memory rate limiter for auth
-const rateLimitMap = new Map<string, { count: number; expiresAt: number }>();
+// Brute-force protection: max 5 failed attempts per 15 minutes per IP
+const FAILED_ATTEMPTS_LIMIT = 5;
+const LOCKOUT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 
-function checkRateLimit(ip: string): boolean {
+interface FailedAttemptRecord {
+  failedCount: number;
+  firstFailedAt: number;
+  lockedUntil: number;
+}
+
+const failedAttemptsMap = new Map<string, FailedAttemptRecord>();
+
+function getClientIp(req: NextRequest): string {
+  const forwarded = req.headers.get('x-forwarded-for');
+  if (forwarded) {
+    return forwarded.split(',')[0].trim();
+  }
+  return req.headers.get('x-real-ip') || '127.0.0.1';
+}
+
+function checkRateLimit(ip: string): { allowed: boolean; remainingLockoutSec?: number } {
   const now = Date.now();
-  const entry = rateLimitMap.get(ip);
-  if (!entry || entry.expiresAt < now) {
-    rateLimitMap.set(ip, { count: 1, expiresAt: now + 60000 }); // 1 minute window
-    return true;
+  const record = failedAttemptsMap.get(ip);
+  if (!record) return { allowed: true };
+
+  // If locked out
+  if (record.lockedUntil > now) {
+    const remainingSec = Math.ceil((record.lockedUntil - now) / 1000);
+    return { allowed: false, remainingLockoutSec: remainingSec };
   }
-  if (entry.count >= 10) {
-    return false; // Exceeded 10 requests per minute
+
+  // If lockout expired or window passed, reset
+  if (now - record.firstFailedAt > LOCKOUT_WINDOW_MS) {
+    failedAttemptsMap.delete(ip);
+    return { allowed: true };
   }
-  entry.count++;
-  return true;
+
+  return { allowed: true };
+}
+
+function recordFailedAttempt(ip: string): void {
+  const now = Date.now();
+  const record = failedAttemptsMap.get(ip);
+
+  if (!record || now - record.firstFailedAt > LOCKOUT_WINDOW_MS) {
+    failedAttemptsMap.set(ip, {
+      failedCount: 1,
+      firstFailedAt: now,
+      lockedUntil: 0,
+    });
+    return;
+  }
+
+  record.failedCount += 1;
+  if (record.failedCount >= FAILED_ATTEMPTS_LIMIT) {
+    record.lockedUntil = now + LOCKOUT_WINDOW_MS;
+    logger.warn({ ip, attempts: record.failedCount }, 'IP locked out due to excessive failed login attempts');
+  }
+}
+
+function resetFailedAttempts(ip: string): void {
+  failedAttemptsMap.delete(ip);
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const ip = req.headers.get('x-forwarded-for') || '127.0.0.1';
-    if (!checkRateLimit(ip)) {
-      return NextResponse.json({ error: 'Too many login attempts. Please wait a minute.' }, { status: 429 });
+    const ip = getClientIp(req);
+    const rateCheck = checkRateLimit(ip);
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        {
+          error: `Too many failed login attempts. Please try again after ${Math.ceil(
+            (rateCheck.remainingLockoutSec || 900) / 60
+          )} minutes.`,
+        },
+        { status: 429 }
+      );
     }
 
     const body = await req.json();
@@ -40,7 +96,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid email or password format.' }, { status: 400 });
     }
 
-    const { email, password } = parsed.data;
+    const { email, password, rememberMe = true } = parsed.data;
     const normalizedEmail = email.toLowerCase().trim();
 
     await ensureDbSchema();
@@ -65,12 +121,15 @@ export async function POST(req: NextRequest) {
         role: 'ADMIN',
       });
 
+      resetFailedAttempts(ip);
+
       const res = NextResponse.json({
         success: true,
         user: { id: newAdmin.id, email: newAdmin.email, name: newAdmin.name, role: newAdmin.role },
+        token,
         message: 'Initial administrator account created successfully.',
       });
-      setSessionCookie(res, token);
+      setSessionCookie(res, token, rememberMe);
       return res;
     }
 
@@ -82,8 +141,11 @@ export async function POST(req: NextRequest) {
     if (user) {
       const isMatch = await verifyPassword(password, user.passwordHash);
       if (!isMatch) {
+        recordFailedAttempt(ip);
         return NextResponse.json({ error: 'Invalid email or password.' }, { status: 401 });
       }
+
+      resetFailedAttempts(ip);
 
       const token = signToken({
         id: user.id,
@@ -95,8 +157,9 @@ export async function POST(req: NextRequest) {
       const res = NextResponse.json({
         success: true,
         user: { id: user.id, email: user.email, name: user.name, role: user.role },
+        token,
       });
-      setSessionCookie(res, token);
+      setSessionCookie(res, token, rememberMe);
 
       logger.info({ userId: user.id, email: user.email, role: user.role }, 'User logged in');
       return res;
@@ -117,8 +180,11 @@ export async function POST(req: NextRequest) {
 
       const isMatch = await verifyPassword(password, client.passwordHash);
       if (!isMatch) {
+        recordFailedAttempt(ip);
         return NextResponse.json({ error: 'Invalid email or password.' }, { status: 401 });
       }
+
+      resetFailedAttempts(ip);
 
       const token = signToken({
         id: client.id,
@@ -149,13 +215,15 @@ export async function POST(req: NextRequest) {
           maxInstances: client.maxInstances,
           monthlyMsgCap: client.monthlyMsgCap,
         },
+        token,
       });
-      setSessionCookie(res, token);
+      setSessionCookie(res, token, rememberMe);
 
       logger.info({ clientId: client.id, email: client.ownerEmail, company: client.companyName }, 'Client logged in');
       return res;
     }
 
+    recordFailedAttempt(ip);
     return NextResponse.json({ error: 'Invalid email or password.' }, { status: 401 });
   } catch (err: any) {
     logger.error({ err }, 'Login error');

@@ -21,13 +21,16 @@ export default function ClientSafetyProvider({ children }: { children: React.Rea
 
       // Filter out third-party browser extensions errors (e.g. Chrome extensions searching for M_ID, injecting scripts)
       const stack = String(reason?.stack || '');
+      const rawText = `${message} ${stack} ${String(reason)}`.toLowerCase();
       if (
-        message.includes('M_ID') ||
-        message.includes('chrome-extension://') ||
-        message.includes('moz-extension://') ||
-        stack.includes('chrome-extension://') ||
-        stack.includes('moz-extension://') ||
-        message.includes('ResizeObserver loop')
+        rawText.includes('m_id') ||
+        rawText.includes('chrome-extension') ||
+        rawText.includes('moz-extension') ||
+        rawText.includes('safari-extension') ||
+        rawText.includes('wpp') ||
+        (rawText.includes('whatsapp') && rawText.includes('extension')) ||
+        rawText.includes('resizeobserver loop') ||
+        rawText.includes('script error')
       ) {
         console.warn('[Ignored Browser Extension Rejection]', message);
         return;
@@ -54,13 +57,14 @@ export default function ClientSafetyProvider({ children }: { children: React.Rea
       const filename = String(event.filename || '');
 
       // Ignore third-party extension errors
+      const stack = String(event.error?.stack || '');
+      const rawText = `${message} ${filename} ${stack}`.toLowerCase();
       if (
-        message.includes('M_ID') ||
-        message.includes('Script error.') ||
-        filename.includes('extension') ||
-        filename.includes('chrome-extension://') ||
-        filename.includes('moz-extension://') ||
-        message.includes('ResizeObserver loop')
+        rawText.includes('m_id') ||
+        rawText.includes('script error') ||
+        rawText.includes('extension') ||
+        rawText.includes('wpp') ||
+        rawText.includes('resizeobserver loop')
       ) {
         console.warn('[Ignored Browser Extension Error]', message);
         return;

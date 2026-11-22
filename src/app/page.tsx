@@ -117,6 +117,7 @@ import { IndustryTemplatesView } from '@/components/templates/IndustryTemplatesV
 import { ResellerClientsView } from '@/components/reseller/ResellerClientsView';
 import { NumberWarmerView } from '@/components/warmer/NumberWarmerView';
 import { ClientSettingsView } from '@/components/settings/ClientSettingsView';
+import { TeamAccountsView } from '@/components/settings/TeamAccountsView';
 import { CrmTagsView } from '@/components/crm/CrmTagsView';
 import { SmartColumnsView } from '@/components/crm/SmartColumnsView';
 import { EnhancedContactsView } from '@/components/crm/EnhancedContactsView';
@@ -1899,13 +1900,17 @@ export default function AppDashboard() {
               const nameStr = currentUser?.companyName || currentUser?.name || currentUser?.email || 'Admin';
               const initials = nameStr.split(/[\s@._]+/).filter(Boolean).slice(0, 2).map((s: string) => s[0].toUpperCase()).join('') || 'AD';
               return (
-                <div className="flex items-center gap-2">
-                  {isClient && currentUser?.companyName && (
-                    <div className="hidden xl:flex flex-col text-right leading-tight">
-                      <span className="text-[11px] font-bold text-white truncate max-w-[130px]">{currentUser.companyName}</span>
-                      <span className="text-[9px] font-mono text-blue-400 font-semibold">{currentUser.planName || 'Client'} Plan</span>
-                    </div>
-                  )}
+                <div className="flex items-center gap-2.5">
+                  <div className="hidden lg:flex flex-col text-right leading-tight">
+                    <span className="text-[11px] font-bold text-white truncate max-w-[140px]">
+                      {currentUser?.name || currentUser?.companyName || currentUser?.email}
+                    </span>
+                    <span className="text-[9px] font-mono font-semibold uppercase tracking-wider text-emerald-400">
+                      {currentUser?.role === 'CLIENT'
+                        ? `${currentUser?.planName || 'Client'} Plan`
+                        : currentUser?.role || 'Admin'}
+                    </span>
+                  </div>
                   <div
                     onClick={() => {
                       if (!isClient) setCurrentTab('settings');
@@ -1927,6 +1932,14 @@ export default function AppDashboard() {
                   >
                     {initials}
                   </div>
+                  <button
+                    onClick={handleLogout}
+                    className="p-1.5 rounded-xl bg-slate-950/60 hover:bg-rose-950/40 border border-slate-800 text-slate-400 hover:text-rose-400 transition cursor-pointer flex items-center gap-1.5 text-xs"
+                    title="Sign Out / Logout"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span className="hidden xl:inline text-[11px] font-medium">Logout</span>
+                  </button>
                 </div>
               );
             })()}
@@ -5121,6 +5134,11 @@ export default function AppDashboard() {
                   </button>
                 </div>
               </form>
+
+              {/* Team Accounts & User Management (Admins Only) */}
+              {currentUser?.role === 'ADMIN' && (
+                <TeamAccountsView currentUserId={currentUser?.id} />
+              )}
             </div>
             )
           )}

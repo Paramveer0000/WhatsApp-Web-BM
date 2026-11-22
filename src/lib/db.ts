@@ -34,6 +34,28 @@ export async function ensureDbSchema(): Promise<void> {
   if (schemaSyncPromise) return schemaSyncPromise;
 
   schemaSyncPromise = (async () => {
+    // 0. Auto-seed primary admin user if no users exist yet (Admin-Only Seeding from ADMIN_EMAIL / ADMIN_PASSWORD)
+    try {
+      const userCount = await db.user.count();
+      if (userCount === 0) {
+        const adminEmail = (process.env.ADMIN_EMAIL || 'admin@example.com').toLowerCase().trim();
+        const adminPassword = process.env.ADMIN_PASSWORD || 'Admin@123';
+        const bcrypt = (await import('bcryptjs')).default;
+        const passwordHash = await bcrypt.hash(adminPassword, 10);
+        await db.user.create({
+          data: {
+            email: adminEmail,
+            passwordHash,
+            name: 'System Administrator',
+            role: 'ADMIN',
+          },
+        });
+        console.log(`[Startup Seeder] Primary admin seeded: ${adminEmail}`);
+      }
+    } catch (seedErr) {
+      console.warn('[Startup Seeder] Admin check skipped:', seedErr);
+    }
+
     // 1. Diagnostics, Log tables & Feature tables
     const tableStatements = [
       "CREATE TABLE IF NOT EXISTS SystemLog (id TEXT PRIMARY KEY, level TEXT DEFAULT 'info', source TEXT DEFAULT 'worker', message TEXT NOT NULL, details TEXT, createdAt DATETIME DEFAULT CURRENT_TIMESTAMP)",
