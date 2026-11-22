@@ -104,46 +104,7 @@ export function verifyToken(token: string): UserSession | null {
   }
 }
 
-/**
- * Edge-compatible JWT verification using Web Crypto API.
- * Works seamlessly in Next.js middleware and Edge runtime environments.
- */
-export async function verifyTokenEdge(token: string, secret: string = JWT_SECRET): Promise<UserSession | null> {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-    const [headerB64, payloadB64, sigB64] = parts;
-
-    const enc = new TextEncoder();
-    const key = await crypto.subtle.importKey(
-      'raw',
-      enc.encode(secret),
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['verify']
-    );
-
-    const data = enc.encode(`${headerB64}.${payloadB64}`);
-    const sigStr = sigB64.replace(/-/g, '+').replace(/_/g, '/');
-    const sigPad = sigStr.padEnd(sigStr.length + ((4 - (sigStr.length % 4)) % 4), '=');
-    const sigBytes = Uint8Array.from(atob(sigPad), (c) => c.charCodeAt(0));
-
-    const isValid = await crypto.subtle.verify('HMAC', key, sigBytes, data);
-    if (!isValid) return null;
-
-    const payloadPad = payloadB64.replace(/-/g, '+').replace(/_/g, '/');
-    const payloadJson = atob(payloadPad.padEnd(payloadPad.length + ((4 - (payloadPad.length % 4)) % 4), '='));
-    const payload = JSON.parse(payloadJson);
-
-    if (payload.exp && Date.now() >= payload.exp * 1000) {
-      return null;
-    }
-
-    return payload as UserSession;
-  } catch {
-    return null;
-  }
-}
+export { verifyTokenEdge } from './auth-edge';
 
 export async function getSessionUser(req?: NextRequest | Request): Promise<UserSession | null> {
   try {

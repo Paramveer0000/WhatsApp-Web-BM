@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyTokenEdge, JWT_SECRET } from './lib/auth';
+import { verifyTokenEdge, getJwtSecretEdge } from './lib/auth-edge';
 
 // Public endpoints that bypass authentication checks
 const PUBLIC_PATHS = [
@@ -42,7 +42,7 @@ export async function middleware(req: NextRequest) {
   // Verify token
   let validUser = null;
   if (token) {
-    validUser = await verifyTokenEdge(token, JWT_SECRET);
+    validUser = await verifyTokenEdge(token, getJwtSecretEdge());
   }
 
   // 3. Handle Login Page
