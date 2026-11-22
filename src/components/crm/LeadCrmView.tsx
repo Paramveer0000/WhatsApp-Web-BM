@@ -77,10 +77,11 @@ export function LeadCrmView({ onLaunchCampaign }: LeadCrmViewProps) {
       if (searchQuery.trim()) params.set('search', searchQuery.trim());
 
       const res = await api.get(`/api/leads?${params.toString()}`);
-      if (res.data?.success) {
-        setLeads(res.data.leads || []);
-        if (res.data.statusCounts) {
-          setStatusCounts(res.data.statusCounts);
+      if (res?.success || res?.data?.success) {
+        setLeads(res.leads || res.data?.leads || []);
+        const counts = res.statusCounts || res.data?.statusCounts;
+        if (counts) {
+          setStatusCounts(counts);
         }
       }
     } catch {
@@ -93,8 +94,8 @@ export function LeadCrmView({ onLaunchCampaign }: LeadCrmViewProps) {
   const fetchForms = async () => {
     try {
       const res = await api.get('/api/forms');
-      if (res.data?.success) {
-        setForms(res.data.forms || []);
+      if (res?.success || res?.data?.success) {
+        setForms(res.forms || res.data?.forms || []);
       }
     } catch {}
   };
@@ -136,7 +137,7 @@ export function LeadCrmView({ onLaunchCampaign }: LeadCrmViewProps) {
   const handleStatusChange = async (leadId: string, newStatus: LeadRecord['status']) => {
     try {
       const res = await api.patch(`/api/leads/${leadId}`, { status: newStatus });
-      if (res.data?.success) {
+      if (res?.success || res?.data?.success) {
         setLeads((prev) =>
           prev.map((l) => (l.id === leadId ? { ...l, status: newStatus } : l))
         );
@@ -154,8 +155,8 @@ export function LeadCrmView({ onLaunchCampaign }: LeadCrmViewProps) {
 
     try {
       const res = await api.delete('/api/leads', { ids: Array.from(selectedIds) });
-      if (res.data?.success) {
-        toast.success(res.data.message || 'Leads deleted');
+      if (res?.success || res?.data?.success) {
+        toast.success(res.message || res.data?.message || 'Leads deleted');
         setSelectedIds(new Set());
         fetchLeads();
       }

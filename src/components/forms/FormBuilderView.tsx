@@ -113,8 +113,8 @@ export function FormBuilderView() {
     try {
       setLoading(true);
       const res = await api.get('/api/forms', { silent: true });
-      if (res.data?.success) {
-        setForms(res.data.forms || []);
+      if (res?.success || res?.data?.success) {
+        setForms(res.forms || res.data?.forms || []);
       }
     } catch {
       // Handled silently to avoid noisy toasts during server restarts
@@ -126,8 +126,8 @@ export function FormBuilderView() {
   const loadInstances = async () => {
     try {
       const res = await api.get('/api/instances', { silent: true });
-      if (res.data?.instances) {
-        setInstances(res.data.instances);
+      if (res?.instances || res?.data?.instances) {
+        setInstances(res.instances || res.data?.instances || []);
       }
     } catch {}
   };
@@ -140,7 +140,7 @@ export function FormBuilderView() {
   // Initialize new form with standard modern lead generation template
   const handleOpenCreate = () => {
     setEditingFormId(null);
-    setTitle('');
+    setTitle('New Lead Inquiry');
     setDescription('Please fill in your requirements below and our team will get in touch.');
     setSlug('');
     setTag('');
@@ -283,7 +283,7 @@ export function FormBuilderView() {
   const handleToggleActive = async (form: FormRecord) => {
     try {
       const res = await api.put(`/api/forms/${form.id}`, { isActive: !form.isActive });
-      if (res.data?.success) {
+      if (res?.success || res?.data?.success) {
         setForms(forms.map((f) => (f.id === form.id ? { ...f, isActive: !form.isActive } : f)));
         toast.success(`Form is now ${!form.isActive ? 'Active' : 'Paused'}`);
       }
@@ -296,7 +296,8 @@ export function FormBuilderView() {
   const handleSaveForm = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
-      toast.error('Form title is required');
+      setActiveTab('fields');
+      toast.error('Please enter a Form Title before publishing');
       return;
     }
 
@@ -316,17 +317,21 @@ export function FormBuilderView() {
 
       if (editingFormId) {
         const res = await api.put(`/api/forms/${editingFormId}`, payload);
-        if (res.data?.success) {
+        if (res?.success || res?.data?.success) {
           toast.success('Form updated successfully');
           setEditModalOpen(false);
           loadForms();
+        } else {
+          toast.error(res?.error || res?.message || 'Failed to update form');
         }
       } else {
         const res = await api.post('/api/forms', payload);
-        if (res.data?.success) {
-          toast.success('New form created successfully');
+        if (res?.success || res?.data?.success) {
+          toast.success('New form published successfully! 🚀');
           setEditModalOpen(false);
           loadForms();
+        } else {
+          toast.error(res?.error || res?.message || 'Failed to create form');
         }
       }
     } catch (err: any) {
@@ -341,7 +346,7 @@ export function FormBuilderView() {
     if (!confirm('Are you sure you want to delete this form? Existing CRM leads will be preserved.')) return;
     try {
       const res = await api.delete(`/api/forms/${id}`);
-      if (res.data?.success) {
+      if (res?.success || res?.data?.success) {
         toast.success('Form deleted successfully');
         setForms(forms.filter((f) => f.id !== id));
       }
