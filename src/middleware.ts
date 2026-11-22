@@ -4,6 +4,8 @@ import { verifyTokenEdge, getJwtSecretEdge } from './lib/auth-edge';
 // Public endpoints that bypass authentication checks
 const PUBLIC_PATHS = [
   '/login',
+  '/f',
+  '/api/public',
   '/api/auth/login',
   '/api/auth/logout',
   '/api/auth/me',
@@ -16,6 +18,25 @@ const PUBLIC_PATHS = [
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  // 0. Security Guard: Immediately block attempts to probe or download environment files, git files, or databases
+  const lowerPath = pathname.toLowerCase();
+  if (
+    lowerPath.includes('.env') ||
+    lowerPath.includes('.git') ||
+    lowerPath.includes('.ssh') ||
+    lowerPath.endsWith('.db') ||
+    lowerPath.endsWith('.sqlite') ||
+    lowerPath.endsWith('.sql') ||
+    lowerPath.endsWith('.key') ||
+    lowerPath.endsWith('.pem') ||
+    lowerPath.endsWith('.yml') ||
+    lowerPath.endsWith('.yaml') ||
+    lowerPath.includes('.secret') ||
+    (lowerPath.endsWith('.json') && !lowerPath.startsWith('/_next') && !lowerPath.startsWith('/api'))
+  ) {
+    return new NextResponse('Forbidden: Access Denied', { status: 403 });
+  }
 
   // 1. Bypass static files and Next.js internal bundles
   if (

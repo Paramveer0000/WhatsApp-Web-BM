@@ -168,8 +168,29 @@ export const api = {
     });
   },
 
-  delete: <T = any>(url: string, options?: RequestOptions) =>
-    request<T>(url, { method: 'DELETE', ...options }),
+  delete: <T = any>(url: string, bodyOrOptions?: any, options?: RequestOptions) => {
+    let body: any = undefined;
+    let opts = options;
+    if (bodyOrOptions && (bodyOrOptions.timeoutMs !== undefined || bodyOrOptions.silent !== undefined)) {
+      opts = bodyOrOptions;
+    } else if (bodyOrOptions !== undefined) {
+      body = bodyOrOptions;
+    }
+
+    const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
+    const headers = isFormData
+      ? { ...opts?.headers }
+      : body !== undefined
+      ? { 'Content-Type': 'application/json', ...opts?.headers }
+      : { ...opts?.headers };
+
+    return request<T>(url, {
+      method: 'DELETE',
+      body: isFormData ? body : (body !== undefined ? JSON.stringify(body) : undefined),
+      headers,
+      ...opts
+    });
+  },
 
   upload: <T = any>(url: string, formData: FormData, options?: RequestOptions) =>
     request<T>(url, {

@@ -774,6 +774,53 @@ model NumberWarmerSession {
   @@index([clientId])
 }
 
+// =========================================================
+// CUSTOM LEAD FORM BUILDER & LEAD CRM MODULES
+// =========================================================
+
+model Form {
+  id                String   @id @default(cuid())
+  title             String
+  description       String?
+  slug              String   @unique
+  fields            String   // JSON array of field definitions
+  tag               String?  // auto-tag for incoming leads
+  isActive          Boolean  @default(true)
+  autoReplyEnabled  Boolean  @default(false)
+  autoReplyInstance String?  // Evolution API instance name
+  autoReplyTemplate String?  // Welcome template supporting {name} and {custom_fields}
+  clientId          String?
+  createdById       String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  leads             Lead[]
+
+  @@index([slug])
+  @@index([clientId])
+}
+
+model Lead {
+  id           String   @id @default(cuid())
+  formId       String?
+  name         String
+  phone        String
+  email        String?
+  customFields String   @default("{}") // JSON key-value pairs
+  tag          String?
+  status       String   @default("new") // "new", "contacted", "qualified", "closed"
+  clientId     String?
+  createdById  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  form         Form?    @relation(fields: [formId], references: [id], onDelete: SetNull)
+
+  @@index([formId])
+  @@index([phone])
+  @@index([status])
+  @@index([clientId])
+}
+
+
 
 
 

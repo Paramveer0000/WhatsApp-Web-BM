@@ -102,6 +102,18 @@ export async function ensureDbSchema(): Promise<void> {
 
       // Pipeline Stage Configuration
       "CREATE TABLE IF NOT EXISTS PipelineStageConfig (id TEXT PRIMARY KEY, pipelineName TEXT DEFAULT 'Falcon', description TEXT, stages TEXT NOT NULL, createdAt DATETIME DEFAULT CURRENT_TIMESTAMP, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP)",
+
+      // Custom Lead Form Builder table
+      "CREATE TABLE IF NOT EXISTS Form (id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT, slug TEXT NOT NULL UNIQUE, fields TEXT NOT NULL, tag TEXT, isActive INTEGER DEFAULT 1, autoReplyEnabled INTEGER DEFAULT 0, autoReplyInstance TEXT, autoReplyTemplate TEXT, clientId TEXT, createdById TEXT, createdAt DATETIME DEFAULT CURRENT_TIMESTAMP, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP)",
+      "CREATE INDEX IF NOT EXISTS idx_form_slug ON Form(slug)",
+      "CREATE INDEX IF NOT EXISTS idx_form_client ON Form(clientId)",
+
+      // Lead CRM Contacts table
+      "CREATE TABLE IF NOT EXISTS Lead (id TEXT PRIMARY KEY, formId TEXT, name TEXT NOT NULL, phone TEXT NOT NULL, email TEXT, customFields TEXT DEFAULT '{}', tag TEXT, status TEXT DEFAULT 'new', clientId TEXT, createdById TEXT, createdAt DATETIME DEFAULT CURRENT_TIMESTAMP, updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP)",
+      "CREATE INDEX IF NOT EXISTS idx_lead_form ON Lead(formId)",
+      "CREATE INDEX IF NOT EXISTS idx_lead_phone ON Lead(phone)",
+      "CREATE INDEX IF NOT EXISTS idx_lead_status ON Lead(status)",
+      "CREATE INDEX IF NOT EXISTS idx_lead_client ON Lead(clientId)",
     ];
 
     for (const sql of tableStatements) {

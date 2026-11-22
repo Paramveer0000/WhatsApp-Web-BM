@@ -26,8 +26,17 @@ export async function GET() {
     if (!settings.EVOLUTION_API_URL || settings.EVOLUTION_API_URL === 'http://localhost:8080') {
       settings.EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'http://evolution:8080';
     }
-    if (!settings.GLOBAL_API_KEY || settings.GLOBAL_API_KEY.includes('•')) {
-      settings.GLOBAL_API_KEY = process.env.GLOBAL_API_KEY || '9CD9DAF1-6D64-4E23-B722-FDA179D1E8F6';
+    
+    // Mask sensitive API key so it is never exposed in plaintext
+    const resolvedApiKey = settings.GLOBAL_API_KEY || process.env.GLOBAL_API_KEY || '';
+    if (resolvedApiKey) {
+      settings.GLOBAL_API_KEY = resolvedApiKey.length > 8 
+        ? `${resolvedApiKey.slice(0, 4)}••••••••${resolvedApiKey.slice(-4)}` 
+        : '••••••••••••';
+      settings.GLOBAL_API_KEY_SET = 'true';
+    } else {
+      settings.GLOBAL_API_KEY = '';
+      settings.GLOBAL_API_KEY_SET = 'false';
     }
 
     return NextResponse.json({ success: true, settings });

@@ -125,6 +125,8 @@ import { SystemLogsConsole } from '@/components/SystemLogsConsole';
 import { ManualAddContactModal } from '@/components/ManualAddContactModal';
 import { EditContactModal } from '@/components/EditContactModal';
 import { CreateTemplateModal } from '@/components/CreateTemplateModal';
+import { FormBuilderView } from '@/components/forms/FormBuilderView';
+import { LeadCrmView } from '@/components/crm/LeadCrmView';
 import InfoButton from '@/components/InfoButton';
 import HelpGuideModal from '@/components/HelpGuideModal';
 import { toast } from '@/lib/toast';
@@ -140,6 +142,8 @@ type TabType =
   | 'tasks'
   | 'crm-tags'
   | 'crm-columns'
+  | 'forms'
+  | 'leads'
   | 'templates'
   | 'replies'
   | 'media'
@@ -183,7 +187,7 @@ export default function AppDashboard() {
       setOpenSections((prev) => ({ ...prev, communication: true }));
     } else if (['campaigns', 'live', 'wizard', 'templates'].includes(currentTab)) {
       setOpenSections((prev) => ({ ...prev, campaigns: true }));
-    } else if (['pipeline', 'contacts', 'tasks', 'crm-tags', 'crm-columns'].includes(currentTab)) {
+    } else if (['pipeline', 'contacts', 'tasks', 'crm-tags', 'crm-columns', 'forms', 'leads'].includes(currentTab)) {
       setOpenSections((prev) => ({ ...prev, crm: true }));
     } else if (['reseller-clients'].includes(currentTab)) {
       setOpenSections((prev) => ({ ...prev, reseller: true }));
@@ -1525,6 +1529,48 @@ export default function AppDashboard() {
                     {!sidebarCollapsed && <span>Columns</span>}
                   </div>
                 </button>
+
+                {/* Lead Forms (Custom Builder & Public Links) */}
+                <button
+                  onClick={() => setCurrentTab('forms')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
+                    currentTab === 'forms'
+                      ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                  }`}
+                  title="Lead Forms (Custom Form Builder & QR Links)"
+                >
+                  <div className="flex items-center gap-3">
+                    <FileText className="w-4 h-4 shrink-0 text-emerald-400" />
+                    {!sidebarCollapsed && <span>Lead Forms</span>}
+                  </div>
+                  {!sidebarCollapsed && (
+                    <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                      Forms
+                    </span>
+                  )}
+                </button>
+
+                {/* Lead CRM (Integrated Leads & Direct Campaign Dispatch) */}
+                <button
+                  onClick={() => setCurrentTab('leads')}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
+                    currentTab === 'leads'
+                      ? 'bg-[#0c57e4] text-white font-semibold shadow-md shadow-blue-900/40'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-850'
+                  }`}
+                  title="Lead CRM (Inquiries & Direct Campaign Dispatch)"
+                >
+                  <div className="flex items-center gap-3">
+                    <Target className="w-4 h-4 shrink-0 text-sky-400" />
+                    {!sidebarCollapsed && <span>Lead CRM</span>}
+                  </div>
+                  {!sidebarCollapsed && (
+                    <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20">
+                      CRM
+                    </span>
+                  )}
+                </button>
               </div>
             )}
           </div>
@@ -1796,6 +1842,8 @@ export default function AppDashboard() {
               {currentTab === 'pipeline' && 'Lead Sales Pipeline (CRM)'}
               {currentTab === 'contacts' && 'Contacts & CRM Database'}
               {currentTab === 'tasks' && 'Task & Follow-up Management'}
+              {currentTab === 'forms' && 'Custom Lead Forms & Public Share Links'}
+              {currentTab === 'leads' && 'Lead CRM & Direct Broadcasts'}
               {currentTab === 'crm-tags' && 'CRM Tags & Segmentation'}
               {currentTab === 'crm-columns' && 'Smart Columns & Dynamic Fields'}
               {currentTab === 'templates' && 'Message Templates'}
@@ -4194,6 +4242,26 @@ export default function AppDashboard() {
           {/* VIEW: SMART COLUMNS & DYNAMIC FIELDS (ZOLO SUIT)           */}
           {/* ========================================================= */}
           {currentTab === 'crm-columns' && <SmartColumnsView />}
+
+          {/* ========================================================= */}
+          {/* VIEW: CUSTOM LEAD FORM BUILDER                            */}
+          {/* ========================================================= */}
+          {currentTab === 'forms' && <FormBuilderView />}
+
+          {/* ========================================================= */}
+          {/* VIEW: LEAD CRM & DIRECT CAMPAIGN DISPATCH                 */}
+          {/* ========================================================= */}
+          {currentTab === 'leads' && (
+            <LeadCrmView
+              onLaunchCampaign={(selectedLeads) => {
+                setWizManualNumbers(selectedLeads.map((l) => l.phone).join('\n'));
+                setWizAudienceMode('manual');
+                setWizName(`CRM Campaign - ${new Date().toLocaleDateString('en-IN')}`);
+                setCurrentTab('wizard');
+                toast.success(`Loaded ${selectedLeads.length} leads into Campaign Wizard!`);
+              }}
+            />
+          )}
 
           {/* ========================================================= */}
           {/* 8. VIEW: TEMPLATES LIBRARY (INDUSTRY-WISE & CUSTOM)       */}
