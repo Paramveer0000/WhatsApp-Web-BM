@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db, ensureDbSchema } from '@/lib/db';
-import { checkFormRateLimit, normalizeLeadPhone, renderWelcomeMessage } from '@/lib/forms';
+import { checkFormRateLimit, normalizeLeadPhone, renderWelcomeMessage, isFieldVisible } from '@/lib/forms';
 import { EvolutionClient } from '@/lib/evolution';
 import { logger } from '@/lib/logger';
 
@@ -69,11 +69,30 @@ export async function POST(
     let leadEmail: string | null = null;
 
     for (const field of fieldDefinitions) {
+      if (field.type === 'section_header') continue;
+
+      // Skip validation if field is hidden by conditional logic
+      if (!isFieldVisible(field, body)) {
+        continue;
+      }
+
       const val = body[field.id];
 
       // Check required fields
       if (field.required) {
-        if (val === undefined || val === null || String(val).trim() === '') {
+        if (field.type === 'checkbox') {
+          if (!val) {
+            return NextResponse.json(
+              { success: false, error: `${field.label} is required.` },
+              { status: 400 }
+            );
+          }
+        } else if (
+          val === undefined ||
+          val === null ||
+          (typeof val === 'string' && val.trim() === '') ||
+          (Array.isArray(val) && val.length === 0)
+        ) {
           return NextResponse.json(
             { success: false, error: `Field '${field.label}' is required.` },
             { status: 400 }

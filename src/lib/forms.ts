@@ -1,5 +1,5 @@
 /**
- * Custom Lead Form Builder and CRM Helper Functions.
+ * Custom Lead Form Builder, Schema Engine and CRM Helper Functions.
  */
 
 // In-memory sliding rate limiter for public form submissions (10 submits per 15 min per IP)
@@ -78,7 +78,11 @@ export function renderWelcomeMessage(
 
   if (lead.customFields && typeof lead.customFields === 'object') {
     for (const [key, val] of Object.entries(lead.customFields)) {
-      const stringVal = val === null || val === undefined ? '' : String(val);
+      const stringVal = val === null || val === undefined 
+        ? '' 
+        : Array.isArray(val) 
+        ? val.join(', ') 
+        : String(val);
       const regex = new RegExp(`\\{${key}\\}`, 'gi');
       rendered = rendered.replace(regex, stringVal);
     }
@@ -87,12 +91,83 @@ export function renderWelcomeMessage(
   return rendered.trim();
 }
 
+export type FormFieldType =
+  | 'text'           // Short Answer text input
+  | 'phone'          // WhatsApp / Phone with international formatting
+  | 'email'          // Email with validation
+  | 'number'         // Numeric input
+  | 'textarea'       // Multi-line detailed response
+  | 'select'         // Dropdown single select
+  | 'radio'          // Visual choice cards / radio pills
+  | 'checkbox_group' // Multi-select checkbox options
+  | 'date'           // Calendar date picker
+  | 'rating'         // 1-5 Star rating widget
+  | 'section_header' // Visual divider with section title
+  | 'checkbox';      // Single consent or agreement toggle
+
+export interface ConditionalRule {
+  dependsOn: string; // ID of the parent field
+  operator: 'equals' | 'not_equals' | 'contains' | 'is_filled';
+  value?: string;
+}
+
 export interface FormFieldDefinition {
   id: string;
   label: string;
-  type: 'text' | 'phone' | 'email' | 'number' | 'select' | 'textarea' | 'checkbox';
+  type: FormFieldType;
   required: boolean;
   placeholder?: string;
-  options?: string[]; // For select dropdowns
-  isSystem?: boolean; // Core locked fields (Name, WhatsApp Number)
+  helpText?: string;
+  width?: 'full' | 'half';
+  options?: string[];
+  defaultValue?: any;
+  isSystem?: boolean;
+  conditional?: ConditionalRule | null;
+}
+
+/**
+ * Evaluates whether a field should be visible based on its conditional rule.
+ */
+export function isFieldVisible(
+  field: FormFieldDefinition,
+  formData: Record<string, any>
+): boolean {
+  if (!field.conditional || !field.conditional.dependsOn) {
+    return true;
+  }
+
+  const { dependsOn, operator, value } = field.conditional;
+  const parentValue = formData[dependsOn];
+
+  if (operator === 'is_filled') {
+    return parentValue !== undefined && parentValue !== null && String(parentValue).trim().length > 0;
+  }
+
+  if (parentValue === undefined || parentValue === null) {
+    return false;
+  }
+
+  if (Array.isArray(parentValue)) {
+    if (operator === 'contains' || operator === 'equals') {
+      return parentValue.some((v) => String(v).toLowerCase() === String(value || '').toLowerCase());
+    }
+    if (operator === 'not_equals') {
+      return !parentValue.some((v) => String(v).toLowerCase() === String(value || '').toLowerCase());
+    }
+    return false;
+  }
+
+  const strParent = String(parentValue).toLowerCase().trim();
+  const strExpected = String(value || '').toLowerCase().trim();
+
+  switch (operator) {
+    case 'equals':
+      return strParent === strExpected;
+    case 'not_equals':
+      return strParent !== strExpected;
+    case 'contains':
+      return strParent.includes(strExpected);
+    default:
+      return true;
+  }
 }

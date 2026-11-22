@@ -30,6 +30,9 @@ export async function DELETE(
       where: { id: params.id },
     });
 
+    const { warmerRunner } = await import('@/lib/warmer/warmer-runner');
+    warmerRunner.pauseSession(params.id);
+
     return NextResponse.json({ success: true, message: 'Warmer session deleted' });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

@@ -129,6 +129,14 @@ class WarmerRunner {
   }
 
   /**
+   * Emergency unregisters all sessions and halts in-flight runner tracking.
+   */
+  pauseAll(): void {
+    this.inFlightSessions.clear();
+    logger.warn('WarmerRunner: All sessions marked PAUSED / cleared');
+  }
+
+  /**
    * Explicitly triggers an immediate turn when a session is activated by user.
    */
   async startSession(sessionId: string): Promise<void> {

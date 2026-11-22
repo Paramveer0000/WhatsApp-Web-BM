@@ -16,7 +16,10 @@ import {
   Activity,
   Send,
   Zap,
+  Square,
+  ShieldAlert,
 } from 'lucide-react';
+import { api } from '@/lib/api';
 import { toast } from '@/lib/toast';
 import InfoButton from '@/components/InfoButton';
 import { WARMER_TOPICS } from '@/lib/warmer/dialogues';
@@ -110,9 +113,7 @@ export function NumberWarmerView() {
 
   const fetchWarmerData = async () => {
     try {
-      const res = await fetch('/api/warmer');
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to fetch warmer');
+      const data = await api.get('/api/warmer', { silent: true });
 
       setInstances(data.instances || []);
 
@@ -132,7 +133,7 @@ export function NumberWarmerView() {
         setInstanceB(data.instances[1].name);
       }
     } catch (err: any) {
-      toast.error(err.message || 'Error loading warmer state');
+      // Suppress toast on background poll
     } finally {
       setLoading(false);
     }
@@ -178,22 +179,16 @@ export function NumberWarmerView() {
 
     try {
       setActionLoading(true);
-      const res = await fetch('/api/warmer', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          instanceA,
-          instanceB,
-          topic,
-          dailyCap,
-          minDelaySeconds: minDelay,
-          maxDelaySeconds: maxDelay,
-          useAi,
-          aiPrompt,
-        }),
+      const data = await api.post('/api/warmer', {
+        instanceA,
+        instanceB,
+        topic,
+        dailyCap,
+        minDelaySeconds: minDelay,
+        maxDelaySeconds: maxDelay,
+        useAi,
+        aiPrompt,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to save configuration');
       setSession(data.session);
       toast.success('Warmer configuration saved!');
     } catch (err: any) {
@@ -206,17 +201,11 @@ export function NumberWarmerView() {
   const handlePreviewDialogue = async () => {
     setPreviewing(true);
     try {
-      const res = await fetch('/api/warmer/preview', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          topic,
-          useAi,
-          aiPrompt,
-        }),
+      const data = await api.post('/api/warmer/preview', {
+        topic,
+        useAi,
+        aiPrompt,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to preview dialogue');
       setPreviewPair(data.preview);
       toast.success('Generated dynamic dialogue preview!');
     } catch (err: any) {
@@ -235,9 +224,7 @@ export function NumberWarmerView() {
       const currentId = session?.id;
       if (!currentId) return;
 
-      const res = await fetch(`/api/warmer/${currentId}/start`, { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to start warmer');
+      const data = await api.post(`/api/warmer/${currentId}/start`);
       setSession(data.session);
       toast.success('Number Warmer activated! Automated dialogue exchanges initiated 🚀');
     } catch (err: any) {
@@ -251,13 +238,27 @@ export function NumberWarmerView() {
     if (!session?.id) return;
     try {
       setActionLoading(true);
-      const res = await fetch(`/api/warmer/${session.id}/pause`, { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to pause warmer');
+      const data = await api.post(`/api/warmer/${session.id}/pause`);
       setSession(data.session);
       toast.info('Number Warmer paused.');
     } catch (err: any) {
       toast.error(err.message || 'Failed to pause warmer');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleEmergencyStopAll = async () => {
+    try {
+      setActionLoading(true);
+      const data = await api.post('/api/warmer/stop-all');
+      if (session) {
+        setSession({ ...session, status: 'PAUSED', nextScheduledAt: null });
+      }
+      toast.success(data.message || 'All warmer sessions stopped immediately.');
+      fetchWarmerData();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to emergency stop warmer sessions');
     } finally {
       setActionLoading(false);
     }
@@ -271,9 +272,7 @@ export function NumberWarmerView() {
     try {
       setActionLoading(true);
       toast.info('Exchanging dialogue turn between accounts...');
-      const res = await fetch(`/api/warmer/${session.id}/tick`, { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Test turn failed');
+      const data = await api.post(`/api/warmer/${session.id}/tick`);
       toast.success('Dialogue exchange completed & logged!');
       fetchWarmerData();
     } catch (err: any) {
@@ -308,7 +307,7 @@ export function NumberWarmerView() {
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {isRunning ? (
             <button
               onClick={handlePause}
@@ -328,6 +327,17 @@ export function NumberWarmerView() {
               <span>Start Warmer</span>
             </button>
           )}
+
+          {/* Emergency Stop All Button */}
+          <button
+            onClick={handleEmergencyStopAll}
+            disabled={actionLoading}
+            className="flex items-center gap-1.5 px-3 py-2 bg-rose-950/60 hover:bg-rose-900 border border-rose-800 text-rose-300 rounded-xl text-xs font-bold transition cursor-pointer disabled:opacity-50"
+            title="Immediately pause all running warmer sessions and cancel pending schedules"
+          >
+            <ShieldAlert className="w-3.5 h-3.5 text-rose-400" />
+            <span>Emergency Stop</span>
+          </button>
 
           <button
             onClick={handleTestTurnNow}

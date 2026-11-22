@@ -86,9 +86,18 @@ export async function request<T = any>(url: string, options: RequestOptions = {}
           errorMessage = parsed.data.message;
         }
       } else if (parsed.rawText) {
-        // Strip HTML if server returned an HTML error page (e.g. 502/504 gateway)
-        const stripped = parsed.rawText.replace(/<[^>]*>?/gm, '').trim();
-        errorMessage = stripped.length > 200 ? `${stripped.slice(0, 197)}...` : (stripped || `Server error (${res.status})`);
+        // Strip scripts, styles, then HTML tags cleanly
+        let cleanText = parsed.rawText
+          .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+          .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+          .replace(/<[^>]*>?/gm, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+
+        if (res.status === 404) {
+          cleanText = 'Requested resource not found. If a deployment is in progress, please refresh in a moment.';
+        }
+        errorMessage = cleanText.length > 150 ? `${cleanText.slice(0, 147)}...` : (cleanText || `Server error (${res.status})`);
       } else {
         errorMessage = `Request failed with status ${res.status}`;
       }
