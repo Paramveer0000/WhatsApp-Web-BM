@@ -6,14 +6,20 @@ import { Send, Shield, Lock, Mail, Loader2, AlertCircle, Check } from 'lucide-re
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('admin@example.com');
-  const [password, setPassword] = useState('Admin@123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   const [isFirstRun, setIsFirstRun] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
+    // If the user explicitly logged out, skip auto-redirect check
+    if (typeof window !== 'undefined' && window.location.search.includes('logout=true')) {
+      window.history.replaceState({}, '', '/login');
+      return;
+    }
+
     fetch('/api/auth/me')
       .then((res) => {
         if (res.ok) {

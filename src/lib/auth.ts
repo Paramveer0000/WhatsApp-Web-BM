@@ -172,8 +172,9 @@ export async function hasAnyUsers(): Promise<boolean> {
 }
 
 export function setSessionCookie(response: NextResponse, token: string, rememberMe: boolean = true) {
-  const isProd = process.env.NODE_ENV === 'production';
-  const isSecure = process.env.COOKIE_SECURE === 'true' || isProd;
+  // Only enforce secure if explicitly set via COOKIE_SECURE=true.
+  // This ensures cookies work reliably across both plain HTTP (e.g. http://zolosuit.org) and HTTPS.
+  const isSecure = process.env.COOKIE_SECURE === 'true';
   const maxAge = rememberMe ? 60 * 60 * 24 * 30 : 60 * 60 * 24 * 7; // 30d if rememberMe, else 7d
 
   // Set primary 'auth_token' cookie as per specification
@@ -200,18 +201,20 @@ export function setSessionCookie(response: NextResponse, token: string, remember
 }
 
 export function clearSessionCookie(response: NextResponse) {
-  const isProd = process.env.NODE_ENV === 'production';
-  const isSecure = process.env.COOKIE_SECURE === 'true' || isProd;
-
-  for (const name of ['auth_token', COOKIE_NAME, LEGACY_COOKIE_NAME]) {
+  const cookieNames = ['auth_token', COOKIE_NAME, LEGACY_COOKIE_NAME];
+  for (const name of cookieNames) {
+    try {
+      response.cookies.delete(name);
+    } catch {}
     response.cookies.set({
       name,
       value: '',
       httpOnly: true,
-      secure: isSecure,
+      secure: false, // Ensure deletion succeeds over both plain HTTP and HTTPS
       sameSite: 'lax',
       path: '/',
       maxAge: 0,
+      expires: new Date(0),
     });
   }
 }

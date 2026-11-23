@@ -1171,8 +1171,11 @@ export default function AppDashboard() {
   };
 
   const handleLogout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    router.push('/login');
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {}
+    // Complete hard redirect ensures cookies, client memory, and active sessions are fully reset
+    window.location.href = '/login?logout=true';
   };
 
   const handleExitImpersonation = async () => {

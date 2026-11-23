@@ -68,6 +68,16 @@ export async function middleware(req: NextRequest) {
 
   // 3. Handle Login Page
   if (pathname === '/login') {
+    // If logging out explicitly, clear cookies and allow rendering /login
+    if (req.nextUrl.searchParams.get('logout') === 'true') {
+      const res = NextResponse.next();
+      res.cookies.delete('auth_token');
+      res.cookies.delete('wa_bulk_session');
+      res.cookies.set('auth_token', '', { path: '/', maxAge: 0, expires: new Date(0) });
+      res.cookies.set('wa_bulk_session', '', { path: '/', maxAge: 0, expires: new Date(0) });
+      return res;
+    }
+
     // If already authenticated, redirect straight to dashboard
     if (validUser) {
       return NextResponse.redirect(new URL('/', req.url));
